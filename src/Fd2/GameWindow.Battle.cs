@@ -417,6 +417,14 @@ internal sealed partial class GameWindow
                 if (_actor == null || !_attackTiles.Contains((tx, ty))) return;
                 var a = _actor;
                 int spell = _pendingSpell;
+                if (_pendingItem >= 0 && _tables != null && _pendingItem < a.Bag.Count && _tables.Items[a.Bag[_pendingItem].Item].Use == 23)
+                {
+                    // 전송법장 — 고른 우리 편을 갈 칸으로(전송술과 같은 2단계, MP 없이)
+                    if (_scene.UnitAt(tx, ty) is not { Team: 2 } who) return;
+                    BeginTeleportDest(a, who);
+                    _teleportByItem = true;
+                    return;
+                }
                 if (_pendingItem >= 0)
                 {
                     int slot = _pendingItem;
@@ -627,6 +635,7 @@ internal sealed partial class GameWindow
                 _pendingSpell = -1;
                 _pendingItem = -1;
                 _teleportWho = null;
+                _teleportByItem = false;
                 BackTo(_targetFrom);
                 break;
             case BattleState.Select when _choosingMove && _actor != null:

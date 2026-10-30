@@ -12,7 +12,7 @@ internal sealed partial class GameWindow
     private int _pendingItem = -1;
     private MenuStage _itemFrom = MenuStage.AfterMove;
 
-    private static bool UsableItem(ItemInfo it) => it.Use is >= 5 and <= 22 and not 23 or 24;
+    private static bool UsableItem(ItemInfo it) => it.Use is >= 5 and <= 24;
 
     private static bool ConsumedItem(int use) => use is 5 or 6 or 7 or (>= 8 and <= 11) or (>= 17 and <= 19);
 
@@ -136,6 +136,9 @@ internal sealed partial class GameWindow
 {
     private Unit? _teleportWho;
 
+    /// <summary>전송법장(물건 쓰임 23)으로 옮기는 중 — MP 를 내지 않는다.</summary>
+    private bool _teleportByItem;
+
     private void BeginTeleportDest(Unit caster, Unit who)
     {
         var cells = new List<(int X, int Y)>();
@@ -149,7 +152,8 @@ internal sealed partial class GameWindow
     private void Teleport(Unit caster, Unit who, (int X, int Y) to, Action after)
     {
         _teleportWho = null;
-        _battle.PayMp(caster, 23);
+        if (!_teleportByItem) _battle.PayMp(caster, 23);
+        _teleportByItem = false;
         PlaySpellFx(23, [(who.X, who.Y)], () =>
         {
             (who.X, who.Y, who.FromX, who.FromY) = (to.X, to.Y, to.X, to.Y);
