@@ -9,6 +9,7 @@ namespace Fd2.Check;
 internal static class Program
 {
     private static int _fail, _pass;
+    private static string _dir = "";
 
     private static int Main(string[] args)
     {
@@ -19,6 +20,7 @@ internal static class Program
         var t = GameTables.Load(dir);
         if (t == null) { Console.WriteLine($"FD2.EXE 가 없거나 크기가 {GameTables.ExeSize} 가 아닙니다: {dir}"); return 2; }
         Console.WriteLine($"게임 폴더: {dir}");
+        _dir = dir;
 
         Files(dir);
         Tables(t);
@@ -149,6 +151,31 @@ internal static class Program
         Same("31 번 마법 이름은 빈 줄", n.Spell(31).Length, 0);
     }
 
+    /// <summary>
+    /// 장면 scene 의 유닛 표 자리에서 대본들을 걸린 뒤 칸을 본다 — 음수 -n 은 유닛 2 를 n 칸 위로(sub_13185).
+    /// stopBefore 대본은 걸지 않는다.
+    /// </summary>
+    private static void Prologue(GameTables t, string dir, int scene, int[] scripts, Dictionary<int, (int, int)> want, string what, int stopBefore = -1)
+    {
+        var field = Path.Combine(dir, "FDFIELD.DAT");
+        var info = Dat.Load(field, 3 * scene + 1);
+        var pos = Dat.Load(field, 3 * scene + 2);
+        var at = new Dictionary<int, (int X, int Y)>();
+        for (int i = 0; i < info[2]; i++) at[i] = (pos[2 + 6 * i], pos[4 + 6 * i]);
+        foreach (int k in scripts)
+        {
+            if (k == stopBefore) break;
+            var steps = k < 0 ? [new MoveStep(-k, false, [(2, Dir.Up)])] : t.MoveScript(k);
+            foreach (var st in steps.Where(st => !st.Wait))
+                foreach (var (unit, d) in st.Units)
+                {
+                    var (dx, dy) = d switch { Dir.Down => (0, 1), Dir.Left => (-1, 0), Dir.Up => (0, -1), _ => (1, 0) };
+                    at[unit] = (at[unit].X + dx * st.Count, at[unit].Y + dy * st.Count);
+                }
+        }
+        Same(what, string.Join(" ", want.Keys.Select(u => $"{u}:{at[u]}")), string.Join(" ", want.Select(kv => $"{kv.Key}:{kv.Value}")));
+    }
+
     /// <summary>이동 대본 — 분석-장면 6.1 프롤로그.</summary>
     private static void Scripts(GameTables t)
     {
@@ -161,5 +188,14 @@ internal static class Program
         Same("90 숲 들어옴", Show(90), "x1[0<] x1[0<,1^] x4[0<,1<] W8[0<,1<] W8[0>,1<]");
         Same("0 1장 넷이 위로 6", Show(0), "x6[0^,1^,2^,3^] W8[0<] W8[0>] W8[0<] W4[0v]");
         Same("106 은 표 끝", t.MoveScript(106).Count, 0);
+
+        // 프롤로그를 대본대로 걸려 본다 — 분석-장면 6.1 의 칸
+        Prologue(t, _dir, 32, [99, -15, -13, 100], new() { [2] = (8, 8) }, "1막 사울 옥좌 앞(대사 1 앞)", stopBefore: 100);
+        Prologue(t, _dir, 32, [101], new() { [4] = (10, 47) }, "2막 아래스 첫 멈춤(대사 2) — (10,46) 이 아니다");
+        Prologue(t, _dir, 32, [101, 102], new() { [4] = (7, 46) }, "2막 아래스 사울 쪽(대사 3)");
+        Prologue(t, _dir, 32, [101, 102, 103, 104, 105], new() { [3] = (12, 47), [4] = (11, 47) }, "2막 끝 오른쪽 퇴장");
+        Prologue(t, _dir, 31, [90], new() { [0] = (13, 46), [1] = (15, 46) }, "3막 숲 들어옴(대사 0)");
+        Prologue(t, _dir, 31, [90, 91, 92, 93], new() { [0] = (8, 44), [1] = (9, 44), [3] = (7, 44) }, "3막 유니 앞(대사 4)");
+        Prologue(t, _dir, 31, [90, 91, 92, 93, 94, 95, 96, 97, 98], new() { [0] = (15, 46) }, "3막 끝 사울");
     }
 }
