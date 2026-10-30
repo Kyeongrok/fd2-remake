@@ -18,7 +18,7 @@ internal sealed partial class GameWindow
 {
     private enum BattleState { None, Select, Moving, Menu, Target, CutIn, Enemy, Banner, Over, Talk, Script, Fx }
 
-    private const uint ReachColor = 0x5A3C78FF, AttackColor = 0x5AFF4646, TargetColor = 0x80FF3030;
+    private const uint ReachLight = 0x58FFFFFF, ReachColor = 0x5A3C78FF, AttackColor = 0x5AFF4646, TargetColor = 0x80FF3030;
     private const double FigTick = 0.055;
 
     private BattleState _bs = BattleState.None;
@@ -91,7 +91,7 @@ internal sealed partial class GameWindow
     private readonly Dictionary<int, Motion?> _motions = new(), _stands = new();
 
     /// <summary>지금 메뉴가 어느 단계인가 — 취소할 때 어디로 돌아갈지.</summary>
-    private enum MenuStage { System, Unit, AfterMove, Spell, Over, Ask, Deploy, Town, Item }
+    private enum MenuStage { System, AfterMove, Spell, Over, Ask, Deploy, Town, Item }
     private MenuStage _stage;
 
     /// <summary>이동할 칸을 고르는 중인가(메뉴에서 「이동」을 고른 뒤).</summary>
@@ -410,15 +410,6 @@ internal sealed partial class GameWindow
                         item.Do();
                         return;
                     }
-                // 메뉴 밖 — 걷기 전 메뉴에서 파란 칸을 누르면 바로 그리로(마우스로 빠르게)
-                if (mx >= 0 && _stage == MenuStage.Unit && _actor != null && _reach != null && _reach.ContainsKey((tx, ty))
-                    && _scene.UnitAt(tx, ty) is null)
-                {
-                    _menu.Clear();
-                    _choosingMove = true;
-                    _bs = BattleState.Select;
-                    BattleClick(tx, ty, mx, my);
-                }
                 return;
             case BattleState.Target:
             {
@@ -476,6 +467,7 @@ internal sealed partial class GameWindow
                 var who = _scene.UnitAt(tx, ty);
                 if (_choosingMove && _actor != null && _reach != null && _reach.ContainsKey((tx, ty)) && (who == null || who == _actor))
                 {
+                    if (who == _actor) { OpenMenu(); return; }   // 제자리를 한 번 더 — 걷지 않고 메뉴
                     // 파란 칸 — 그리로 걷고 다 걸으면 메뉴
                     foreach (var p in Scene.PathTo(_reach, (tx, ty))) _actor.Path.Enqueue(p);
                     _reach = null;
@@ -484,6 +476,7 @@ internal sealed partial class GameWindow
                     _bs = BattleState.Moving;
                     return;
                 }
+                if (_choosingMove && who != null && who != _actor && Ready(who)) { _selected = who; BeginMove(who); return; }   // 다른 아군으로 바꿔 고름
                 if (_choosingMove) return;   // 범위 밖 — 무시(취소는 Esc · 오른쪽 단추)
                 if (who == null)
                 {
@@ -492,7 +485,7 @@ internal sealed partial class GameWindow
                     else ClearSelection();
                     return;
                 }
-                if (Ready(who)) { _selected = who; OpenUnitMenu(who); return; }
+                if (Ready(who)) { _selected = who; BeginMove(who); return; }
                 // 적이나 행동을 마친 아군 — 범위만 보여 준다
                 Select(who);
                 _actor = null;
@@ -517,7 +510,7 @@ internal sealed partial class GameWindow
         // 단축 동작 — 메뉴에 그 줄이 있으면 바로 고르고, 걷기 전이면 제자리에서
         if (action is KeyAction.Attack or KeyAction.Wait && _bs is BattleState.Menu or BattleState.Select && _actor is { Acted: false } who && who.Side == Side.Player)
         {
-            if (_bs == BattleState.Select) OpenUnitMenu(who);
+            if (_bs == BattleState.Select) OpenMenu();
             string label = action == KeyAction.Attack ? "공격" : "대기";
             int i = _menu.FindIndex(m => m.Label == label);
             if (i >= 0) _menu[i].Do();
@@ -538,7 +531,7 @@ internal sealed partial class GameWindow
                 var next = ready[(at + 1) % ready.Count];
                 _cursor = (next.X, next.Y);
                 _centerCursor = true;
-                OpenUnitMenu(next);
+                BeginMove(next);
             }
             return true;
         }
@@ -580,11 +573,23 @@ internal sealed partial class GameWindow
         if (confirm) { BattleClick(_cursor.X, _cursor.Y, -1, -1); return true; }
         if (cancel)
         {
-            if (_actor == null && _reach == null && _bs == BattleState.Select) { OpenSystemMenu(); return true; }   // 고른 것이 없으면 시스템 메뉴
+            if (_actor == null && _reach == null && _bs == BattleState.Select) { CursorToNextReady(); return true; }   // 고른 것이 없으면 다음 안 움직인 아군으로(원작)
             BattleCancel();
             return true;
         }
         return false;
+    }
+
+    /// <summary>Esc 를 거듭 누르면 — 커서가 아직 행동하지 않은 아군을 차례로 옮겨 다닌다(지금 커서 칸 다음 사람부터).</summary>
+    private void CursorToNextReady()
+    {
+        var ready = Controlled.Where(Ready).OrderBy(u => u.Slot).ToList();
+        if (ready.Count == 0) return;
+        int at = ready.FindIndex(u => (u.X, u.Y) == _cursor);
+        var next = ready[(at + 1) % ready.Count];
+        _cursor = (next.X, next.Y);
+        _centerCursor = true;
+        PlaySfx(Sound.UiBank, Sound.Cursor);
     }
 
     /// <summary>커서가 화면 가장자리 두 칸 안으로 들어오면 지도를 민다(마우스로 고를 때는 안 민다).</summary>
@@ -629,14 +634,10 @@ internal sealed partial class GameWindow
                 _menu.Clear();
                 _bs = BattleState.Select;
                 break;
-            case BattleState.Menu when _stage == MenuStage.Unit:
-                ClearSelection();
-                _bs = BattleState.Select;
-                break;
             case BattleState.Menu when _stage == MenuStage.Spell:
                 BackTo(_targetFrom);
                 break;
-            case BattleState.Menu:   // 걸은 뒤 메뉴 — 제자리로 돌아가 처음 메뉴
+            case BattleState.Menu:   // 걸은 뒤 메뉴 — 제자리로 돌아가 다시 갈 칸 고르기
                 ReturnToOrigin();
                 break;
             case BattleState.Target:
@@ -645,10 +646,6 @@ internal sealed partial class GameWindow
                 _teleportWho = null;
                 _teleportByItem = false;
                 BackTo(_targetFrom);
-                break;
-            case BattleState.Select when _choosingMove && _actor != null:
-                _choosingMove = false;
-                OpenUnitMenu(_actor);
                 break;
             case BattleState.Select:
                 ClearSelection();
@@ -664,31 +661,26 @@ internal sealed partial class GameWindow
         u.Path.Clear();
         u.Step = 1;
         _cursor = (u.X, u.Y);
-        OpenUnitMenu(u);
+        BeginMove(u);
     }
 
     private void BackTo(MenuStage stage)
     {
         if (_actor is not { } u) { ClearSelection(); _bs = BattleState.Select; return; }
-        if (stage == MenuStage.AfterMove) OpenMenu();
-        else OpenUnitMenu(u);
+        OpenMenu();
     }
 
     /// <summary>
-    /// 아군을 고르면 — 이동 · 공격 · 마법 · 대기. 이동 범위(파랑) · 공격 범위(빨강)를 함께 보인다.
+    /// 아군을 처음 고르면 이동 범위(파랑) · 공격 범위(빨강)만 보인다 — 메뉴는 갈 칸을 한 번 더 눌러야 뜬다(원작: 고르고 → 제자리 결정이면 그 자리 메뉴).
     /// </summary>
-    private void OpenUnitMenu(Unit u)
+    private void BeginMove(Unit u)
     {
-        PlaySfx(Sound.UiBank, Sound.Menu);
+        PlaySfx(Sound.UiBank, Sound.Cursor);
         Select(u);
-        _choosingMove = false;
+        _choosingMove = true;
         _pendingSpell = -1;
         _menu.Clear();
-        _menu.Add(("이동", () => { _menu.Clear(); _choosingMove = true; _bs = BattleState.Select; }, default));
-        AddActionItems(u, MenuStage.Unit);
-        _stage = MenuStage.Unit;
-        _menuIndex = 0;
-        _bs = BattleState.Menu;
+        _bs = BattleState.Select;
     }
 
     /// <summary>
@@ -702,10 +694,10 @@ internal sealed partial class GameWindow
         // 걸은 뒤에도 마법을 연다 — 원작 메뉴(sub_18D8C)가 움직인 뒤 마법을 막는지는 아직 안 봤다(짐작)
         if (!u.Sealed && CastableSpells(u).Count > 0)
             _menu.Add(("마법", () => OpenSpellMenu(u, stage), default));
-        if (stage == MenuStage.AfterMove && u.Bag.Count > 0) _menu.Add(("물건", () => { _itemFrom = stage; OpenItemMenu(u, stage); }, default));
+        if (u.Bag.Count > 0) _menu.Add(("물건", () => { _itemFrom = stage; OpenItemMenu(u, stage); }, default));
         _menu.Add(("대기", () =>
         {
-            if (stage == MenuStage.Unit) { _battle.Rest(u); PlaySfx(Sound.UiBank, Sound.Rest); }
+            if ((u.X, u.Y) == _origin) { _battle.Rest(u); PlaySfx(Sound.UiBank, Sound.Rest); }   // 안 걸었으면 쉬어 회복
             u.Acted = true;
             if (_battle.ChestAt(u) is { } chest) { AskChest(u, chest.Index, chest.Hidden); return; }
             ClearSelection();
@@ -803,10 +795,12 @@ internal sealed partial class GameWindow
         _bs = BattleState.Menu;
     }
 
-    /// <summary>걸은 뒤 메뉴 — 공격 · 마법 · 대기(취소하면 제자리로).</summary>
+    /// <summary>갈 칸(제자리도)을 정한 뒤 메뉴 — 공격 · 마법 · 물건 · 쉬기(취소하면 제자리로 돌아가 다시 갈 칸 고르기).</summary>
     private void OpenMenu()
     {
         var u = _actor!;
+        PlaySfx(Sound.UiBank, Sound.Menu);
+        _choosingMove = false;
         _menu.Clear();
         _reach = null;
         _attackTiles.Clear();
@@ -1164,10 +1158,11 @@ internal sealed partial class GameWindow
             foreach (var t in _freeAttack) FillTile(t, AttackColor);
             return;
         }
-        if (_reach != null && _actor != null) foreach (var t in _scene.Stops(_reach, _actor)) FillTile(t, _bs == BattleState.Menu ? (ReachColor & 0x00FFFFFF) | 0x30000000 : ReachColor);   // 메뉴가 떠 있으면 흐리게
-        else if (_reach != null && _rangeOf != null) foreach (var t in _scene.Stops(_reach, _rangeOf)) FillTile(t, ReachColor);
+        // 처음 고르면 원작처럼 갈 수 있는 칸만 밝게(공격 범위는 대상 고를 때만)
+        if (_reach != null && (_actor ?? _rangeOf) is { } who) foreach (var t in _scene.Stops(_reach, who)) FillTile(t, ReachLight);
+        if (_bs != BattleState.Target) return;
         uint target = _pendingSpell >= 0 && _battle.SpellOf(_pendingSpell) is { Side: not 0 } ? 0x8040E060u : TargetColor;
-        foreach (var t in _attackTiles) FillTile(t, _bs == BattleState.Target ? target : AttackColor);
+        foreach (var t in _attackTiles) FillTile(t, target);
     }
 
     private (Unit?, int, int) _freeReachFor;
@@ -1181,8 +1176,8 @@ internal sealed partial class GameWindow
     private void FillTile((int X, int Y) t, uint argb)
     {
         var (sx, sy) = TileScreen(t.X, t.Y);
-        int cell = T * _zoom;
-        FillRect(sx + 1, sy + 1, cell - 2, cell - 2, argb);
+        int cell = T * _zoom, gap = argb == ReachLight ? 0 : 1;   // 밝히기는 칸 사이 틈 없이(원작)
+        FillRect(sx + gap, sy + gap, cell - 2 * gap, cell - 2 * gap, argb);
     }
 
     /// <summary>사람 위에 — 체력 막대, 정보 창, 메뉴, 턴 알림, 컷인.</summary>
@@ -1239,8 +1234,11 @@ internal sealed partial class GameWindow
         DrawGoals(fs, 12 + title.H + 12);
 
         // 왼쪽 아래 — 마우스 밑 사람(없으면 고른 사람)
+        DrawChestList(fs);
+        DrawMinimap();
+        int tileH = DrawTileInfo(fs);
         var hover = HoverUnit() ?? _actor;
-        if (hover is { MaxHp: > 0 }) DrawInfo(hover, fs);
+        if (hover is { MaxHp: > 0 }) DrawInfo(hover, fs, tileH);
 
         if (_bs is BattleState.Select or BattleState.Target or BattleState.Moving && !_mouseMoved) DrawCursor();   // 마우스를 쓰는 동안에는 커서를 숨긴다
         if (_bs == BattleState.Menu) DrawMenu(fs);
@@ -1287,7 +1285,7 @@ internal sealed partial class GameWindow
     }
 
     /// <summary>정보 창 — 이름(몬스터는 원본 글꼴 이름) · 레벨 · 경험, HP · MP, 공격 · 방어 · 명중 · 회피, 이동 · 사거리, 상태.</summary>
-    private void DrawInfo(Unit u, int fs)
+    private void DrawInfo(Unit u, int fs, int below = 0)
     {
         string range = u.RangeMax == 0 ? "-" : u.RangeMax >= 16 ? $"직선 {u.RangeMax - 16}" : u.RangeMin == u.RangeMax ? $"{u.RangeMax}" : $"{u.RangeMin}~{u.RangeMax}";
         string status = string.Join(" ", Enumerable.Range(0, 6).Where(k => u.Status[k] > 0).Select(k => $"{Battle.StatusNames[k]}({u.Status[k]})"));
@@ -1313,22 +1311,140 @@ internal sealed partial class GameWindow
             imgs[0] = new Text.Image(px, w0, h0);
         }
         int w = imgs.Max(i => i.W) + 24, h = imgs.Sum(i => i.H + 2) + 16;
-        int x = 12, y = _clientH - h - 12;
+        int x = 12, y = _clientH - h - 12 - below;
         FillRect(x, y, w, h, 0xC0101020);
         int cy = y + 8;
         foreach (var img in imgs) { DrawText(img, x + 12, cy); cy += img.H + 2; }
     }
 
+    /// <summary>
+    /// 왼쪽 위 보물 목록(창세기전3 처럼) — 이 장의 안 연 보석상자(칸 속성 0x20)마다 든 것: 물건은 원본 글꼴 이름, 돈은 액수, 사건 상자는 「?」.
+    /// 숨은 보물(0x40)은 찾는 재미를 남기려고 넣지 않는다. 커서가 그 상자 칸이면 노랗게.
+    /// </summary>
+    private void DrawChestList(int fs)
+    {
+        if (!_settings.ShowChests || _scene.Index >= 30 || _bs is BattleState.CutIn or BattleState.Talk) return;
+        if (_chestCellsFor != _scene)
+        {
+            _chestCellsFor = _scene;
+            _chestCells.Clear();
+            for (int y = 0; y < _scene.Height; y++)
+                for (int x = 0; x < _scene.Width; x++)
+                    if ((_scene.TileFlags(x, y) & 0x60) == 0x20 && _scene.Mark(x, y) is var k && k < _scene.Chests.Count) _chestCells.Add((x, y, k));
+        }
+        var rows = new List<Text.Image>();
+        int g = Math.Max(1, fs / Font16.Size);
+        foreach (var (x, y, k) in _chestCells)
+        {
+            if (_battle.OpenedChests.Contains(k)) continue;
+            uint c = _cursor == (x, y) ? 0xFFFFE070 : 0xFFFFFFFF;
+            var (kind, value) = _scene.Chests[k];
+            var head = Text.Render($"({x},{y}) ", fs, c);
+            var what = kind == 0 ? NameImage(181 + value, g, c) ?? Text.Render($"물건 {value}", fs, c)
+                     : kind == 1 ? Text.Render(value == 0 ? "빈 상자" : $"{value} 골드", fs, c)
+                     : Text.Render("?", fs, c);
+            rows.Add(Join(head, what));
+        }
+        if (rows.Count == 0) return;
+        var title = Text.Render("보물상자", fs, 0xFFA8C8FF);
+        int w = Math.Max(title.W, rows.Max(r => r.W)) + 20, h = title.H + rows.Sum(r => r.H + 2) + 14;
+        int bx = 12, by = 12;
+        FillRect(bx, by, w, h, 0xC0101020);
+        DrawText(title, bx + 10, by + 6);
+        int cy = by + 8 + title.H;
+        foreach (var r in rows) { DrawText(r, bx + 10, cy); cy += r.H + 2; }
+
+        static Text.Image Join(Text.Image a, Text.Image b)
+        {
+            int w0 = a.W + b.W, h0 = Math.Max(a.H, b.H);
+            var px = new uint[w0 * h0];
+            for (int r = 0; r < a.H; r++) Array.Copy(a.Px, r * a.W, px, (r + (h0 - a.H) / 2) * w0, a.W);
+            for (int r = 0; r < b.H; r++) Array.Copy(b.Px, r * b.W, px, (r + (h0 - b.H) / 2) * w0 + a.W, b.W);
+            return new Text.Image(px, w0, h0);
+        }
+    }
+
+    private Scene? _chestCellsFor;
+    private readonly List<(int X, int Y, int K)> _chestCells = new();
+
+    /// <summary>
+    /// 오른쪽 위 미니맵 — 칸마다 타일 평균 색, 우리 편 초록 · 컴퓨터 아군 노랑 · 적 빨강 점, 지금 보이는 곳은 흰 테두리.
+    /// </summary>
+    private void DrawMinimap()
+    {
+        if (!_settings.ShowMinimap || _bs is BattleState.CutIn or BattleState.Talk) return;
+        if (_miniFor != _scene)
+        {
+            _miniFor = _scene;
+            _mini = new uint[_scene.Width * _scene.Height];
+            for (int y = 0; y < _scene.Height; y++)
+                for (int x = 0; x < _scene.Width; x++)
+                {
+                    long r = 0, gg = 0, b = 0;
+                    int n = 0;
+                    foreach (uint c in _scene.TileAt(x, y)) { if (c == 0) continue; r += c >> 16 & 255; gg += c >> 8 & 255; b += c & 255; n++; }
+                    _mini[y * _scene.Width + x] = n == 0 ? 0xFF000000 : 0xFF000000 | (uint)(r / n) << 16 | (uint)(gg / n) << 8 | (uint)(b / n);
+                }
+        }
+        int m = Math.Max(2, Math.Min(260 / _scene.Width, 200 / _scene.Height) * Math.Max(1, _clientW / 1280));
+        int mw = _scene.Width * m, mh = _scene.Height * m, mx = _clientW - mw - 14, my = 12;
+        FillRect(mx - 3, my - 3, mw + 6, mh + 6, 0xC0101020);
+        for (int y = 0; y < _scene.Height; y++)
+            for (int x = 0; x < _scene.Width; x++) FillRect(mx + x * m, my + y * m, m, m, _mini![y * _scene.Width + x]);
+        foreach (var u in _scene.Units.Where(u => u.Alive && u.Hp > 0))
+        {
+            uint c = u.Ai ? 0xFFF0D040 : u.Side == Side.Player ? 0xFF40F070 : 0xFFFF4040;
+            FillRect(mx + u.X * m, my + u.Y * m, m, m, 0xFF000000);
+            FillRect(mx + u.X * m + 1, my + u.Y * m + 1, m - 2, m - 2, c);
+        }
+        int vx = mx + _camX * m / T, vy = my + _camY * m / T;
+        int vw = Math.Min(mw, _boardW * m / T), vh = Math.Min(mh, _boardH * m / T);
+        FillRect(vx, vy, vw, 1, 0xFFFFFFFF); FillRect(vx, vy + vh - 1, vw, 1, 0xFFFFFFFF);
+        FillRect(vx, vy, 1, vh, 0xFFFFFFFF); FillRect(vx + vw - 1, vy, 1, vh, 0xFFFFFFFF);
+    }
+
+    private Scene? _miniFor;
+    private uint[]? _mini;
+
+    /// <summary>
+    /// 왼쪽 아래 칸 정보 창(원작) — 커서 칸 그림(사람이 있으면 그 사람, 아래에 HP 세 자리)과 그 칸 지형의 공격 · 방어 보정(A ±% · D ±%).
+    /// 창 높이(위 여백 포함)를 돌려준다 — 사람 정보 창은 그 위에.
+    /// </summary>
+    private int DrawTileInfo(int fs)
+    {
+        if (!_scene.Inside(_cursor.X, _cursor.Y) || _bs is BattleState.CutIn or BattleState.Talk) return 0;
+        int g = Math.Max(2, _zoom), pad = 4 * g, img = T * g;
+        var (ta, td) = _battle.TerrainPercent(_cursor.X, _cursor.Y);
+        var la = Text.Render($"A {(ta < 0 ? "-" : "+")}{Math.Abs(ta):00}", fs * 3 / 2, 0xFFD8E4FF);
+        var ld = Text.Render($"D {(td < 0 ? "-" : "+")}{Math.Abs(td):00}", fs * 3 / 2, 0xFFD8E4FF);
+        int w = pad * 3 + img + Math.Max(la.W, ld.W) + pad, h = pad * 2 + img;
+        int x = 12, y = _clientH - h - 12;
+        FillRect(x, y, w, h, 0xFFA8B8E8);
+        FillRect(x + g, y + g, w - 2 * g, h - 2 * g, 0xFF2C4C9C);
+        int ix = x + pad, iy = y + pad;
+        BlitScaled(_scene.TileAt(_cursor.X, _cursor.Y), T, T, ix, iy, g, 0, 0, _fbW, _fbH);
+        if (_scene.UnitAt(_cursor.X, _cursor.Y) is { } u)
+        {
+            BlitScaled(_icons.Frame(u.Icon, (int)Dir.Down * 3), T, T, ix, iy, g, 0, 0, _fbW, _fbH);
+            var hp = Text.Render($"{Math.Clamp(u.Hp, 0, 999):000}", fs, 0xFFFFFFFF);
+            FillRect(ix + (img - hp.W) / 2 - 2, iy + img - hp.H, hp.W + 4, hp.H, 0x80000000);
+            DrawText(hp, ix + (img - hp.W) / 2, iy + img - hp.H);
+        }
+        int tx = ix + img + pad * 2;
+        DrawText(la, tx, y + h / 2 - la.H - g);
+        DrawText(ld, tx, y + h / 2 + g);
+        return h + 8;
+    }
+
     /// <summary>원작처럼 사람 둘레 네모 단추로 보이는 메뉴인가 — 고른 뒤 · 걸은 뒤의 행동 메뉴.</summary>
-    private bool CrossMenu => _stage is MenuStage.Unit or MenuStage.AfterMove;
+    private bool CrossMenu => _stage == MenuStage.AfterMove;
 
     /// <summary>
     /// 십자 메뉴의 자리 — 원작(sub_18D8C · sub_179D5): 위 공격, 왼쪽 마법, 오른쪽 물건, 아래 쉬기.
-    /// 이 게임은 우리 편 물건이 없어 고른 뒤(걷기 전)에는 오른쪽에 이동을 둔다.
     /// </summary>
     private static Dir SlotOf(string label) => label switch
     {
-        "공격" => Dir.Up, "마법" => Dir.Left, "이동" or "물건" => Dir.Right, _ => Dir.Down,
+        "공격" => Dir.Up, "마법" => Dir.Left, "물건" => Dir.Right, _ => Dir.Down,
     };
 
     private Buttons? _buttons;
@@ -1362,15 +1478,10 @@ internal sealed partial class GameWindow
                 BlitScaled(rp, rw, rh, x, y, s, 0, 0, _fbW, _fbH);
                 continue;
             }
-            var (px, w, h) = _menu[i].Label == "이동" ? bank.Blank(button, red: false) : bank.Frame(button, red: false, i == _menuIndex ? blink : 0);
+            var (px, w, h) = bank.Frame(button, red: false, i == _menuIndex ? blink : 0);
             var rect = (X: x, Y: y, W: w * s, H: h * s);
             if (_mouseMoved && _mouseX >= rect.X && _mouseY >= rect.Y && _mouseX < rect.X + rect.W && _mouseY < rect.Y + rect.H) _menuIndex = i;
             BlitScaled(px, w, h, x, y, s, 0, 0, _fbW, _fbH);
-            if (_menu[i].Label == "이동")
-            {
-                var label = Text.Render(_menu[i].Label, Math.Max(12, rect.H * 2 / 5), i == _menuIndex && blink == 1 ? 0xFFFFFFFF : 0xFFF0B020);
-                DrawText(label, x + (rect.W - label.W) / 2, y + (rect.H - label.H) / 2);
-            }
             _menu[i] = (_menu[i].Label, _menu[i].Do, rect);
         }
     }
@@ -1503,12 +1614,10 @@ internal sealed partial class GameWindow
         var who = Text.Render($"{CharacterNames.Of(a.Icon)}  →  {CharacterNames.Of(d.Icon)}{what}", fs, 0xFFFFFFFF);
         DrawText(who, _clientW / 2 - who.W / 2, by - who.H - 8);
 
-        // 맞는 쪽 체력
-        int hpW = bw / 2, hpH = Math.Max(8, fs / 2);
-        FillRect(bx + bw / 4, by + bh + 10, hpW, hpH, 0xFF000000);
-        FillRect(bx + bw / 4, by + bh + 10, hpW * d.Hp / Math.Max(1, d.MaxHp), hpH, d.Side == Side.Player ? 0xFF40D060 : 0xFFE04040);
-        var hp = Text.Render($"HP {d.Hp} / {d.MaxHp}", fs, 0xFFFFFFFF);
-        DrawText(hp, _clientW / 2 - hp.W / 2, by + bh + 14 + hpH);
+        // 두 사람 정보 창(원작) — 오른쪽에 선 사람은 위 오른쪽, 왼쪽 사람은 아래 왼쪽
+        int aSide = _strikeMotion != null ? SideOf(_strikeMotion) : a.Side == Side.Player ? 1 : 0;
+        DrawStrikePanel(a, aSide, bx, by, s);
+        if (a != d) DrawStrikePanel(d, 1 - aSide, bx, by, s);
         if (hit)
         {
             var dmg = heal ? Text.Render($"+{_strikeDamage}", fs * 3, 0xFF60FF80)
@@ -1516,6 +1625,38 @@ internal sealed partial class GameWindow
                     : Text.Render((_strikeCrit ? "필살! " : "") + (d.Hp == 0 ? $"-{_strikeDamage}  쓰러짐!" : $"-{_strikeDamage}"), fs * 3, 0xFFFF5050);
             DrawText(dmg, bx + bw * (defenderSide == 1 ? 3 : 1) / 4 - dmg.W / 2, by + bh / 6);
         }
+    }
+
+    /// <summary>
+    /// 컷인 정보 창 — 파란 바탕에 이름(원본 글꼴) · LV, HP(노랑) · MP(초록) 막대와 숫자, 줄어든 몫은 빨강.
+    /// side 1 이면 위 오른쪽(320x200 화면의 172~316, 4~46), 0 이면 아래 왼쪽(4~148, 154~196).
+    /// </summary>
+    private void DrawStrikePanel(Unit u, int side, int bx, int by, int s)
+    {
+        const int W = 144, H = 42;
+        int x = bx + (side == 1 ? 172 : 4) * s, y = by + (side == 1 ? 4 : 154) * s;
+        FillRect(x, y, W * s, H * s, 0xFFA8B8E8);
+        FillRect(x + s, y + s, (W - 2) * s, (H - 2) * s, 0xFF2C4C9C);
+        int fs = 9 * s;
+        var name = NameImage(Battle.NameLine(u), s, 0xFFFFFFFF) ?? Text.Render(CharacterNames.Of(u.Icon), 14 * s, 0xFFFFFFFF);
+        DrawText(name, x + 6 * s, y + 3 * s);
+        var lv = Text.Render($"LV·{u.Level}", fs, 0xFFFFFFFF);
+        DrawText(lv, x + (W - 6) * s - lv.W, y + 3 * s);
+        void Bar(string label, int row, int now, int max, uint color)
+        {
+            int ry = y + row * s;
+            var l = Text.Render(label, fs, 0xFFFFFFFF);
+            DrawText(l, x + 6 * s, ry + (8 * s - l.H) / 2);
+            var n = Text.Render($"{now}", fs, 0xFFFFFFFF);
+            DrawText(n, x + (W - 6) * s - n.W, ry + (8 * s - n.H) / 2);
+            int barX = x + 24 * s, barW = (W - 30) * s - Math.Max(n.W, 22 * s), barH = 6 * s;
+            FillRect(barX, ry + s, barW, barH, 0xFF000000);
+            if (max <= 0) return;
+            FillRect(barX + s, ry + 2 * s, barW - 2 * s, barH - 2 * s, 0xFFC02020);
+            FillRect(barX + s, ry + 2 * s, (barW - 2 * s) * Math.Clamp(now, 0, max) / max, barH - 2 * s, color);
+        }
+        Bar("HP", 21, u.Hp, u.MaxHp, 0xFFF0C030);
+        Bar("MP", 31, u.Mp, u.MaxMp, 0xFF58A030);
     }
 
     private readonly Dictionary<(int, int, uint), Text.Image?> _nameImages = new();

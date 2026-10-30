@@ -219,6 +219,8 @@ internal sealed partial class GameWindow
             case KeyAction.MoveRight: vk = Win32.VK_RIGHT; break;
             case KeyAction.KeyHelp: _helpOpen = true; return;
             case KeyAction.Gauges: _showGauges = !_showGauges; return;
+            case KeyAction.Minimap: _settings.ShowMinimap = !_settings.ShowMinimap; _settings.Save(); return;
+            case KeyAction.Chests: _settings.ShowChests = !_settings.ShowChests; _settings.Save(); return;
         }
         if (!InBattle && vk is Win32.VK_UP or Win32.VK_DOWN or Win32.VK_LEFT or Win32.VK_RIGHT && _selected is { Moving: false } walker && walker.Path.Count == 0)
         {
@@ -328,20 +330,49 @@ internal sealed partial class GameWindow
     /// <summary>걷는 사람들을 한 걸음씩 — 칸 사이를 나아가고, 다 오면 다음 칸으로.</summary>
     private void MoveUnits(double dt)
     {
+        Unit? lead = null;
         foreach (var u in _scene.Units)
         {
             if (u.Moving)
             {
+                int before = (int)(u.Step * 6);
                 u.Step = Math.Min(1, u.Step + dt * StepsPerSecond);
+                if ((lead ??= u) == u)
+                    for (int k = before; k < (int)(u.Step * 6); k++) StepSound(u);
                 if (u.Moving) continue;
                 (u.FromX, u.FromY) = (u.X, u.Y);
             }
             if (u.Path.TryDequeue(out var next))
             {
                 int dx = next.X - u.X, dy = next.Y - u.Y;
-                if (!TryStep(u, dx, dy, DirOf(dx, dy))) u.Path.Clear();
+                // 같은 편 칸은 지나가기만 한다(이동 범위가 그렇게 셈) — 멈출 칸이 아니면 사람이 있어도 걷는다
+                if (u.Path.Count > 0 && _scene.Walkable(next.X, next.Y) && _scene.Units.Any(o => o != u && o.Alive && (o.X, o.Y) == next && (o.Team == 0) == (u.Team == 0)))
+                {
+                    u.Facing = DirOf(dx, dy);
+                    (u.FromX, u.FromY) = (u.X, u.Y);
+                    (u.X, u.Y) = next;
+                    u.Step = 0;
+                }
+                else if (!TryStep(u, dx, dy, DirOf(dx, dy))) u.Path.Clear();
             }
         }
+    }
+
+    /// <summary>발소리 표(EXE 0x52725, 직업 − 1) — 0 은 6토막, 1 은 4토막마다 9번, 그 밖(무거운 · 나는)은 9토막마다 11번.</summary>
+    private static readonly byte[] StepSoundKind = [1, 1, 2, 1, 0, 0, 1, 1, 1, 1, 2, 1, 0, 0, 3, 1, 1, 1, 3, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1];
+
+    private int _stepTick;
+
+    /// <summary>
+    /// 발소리(sub_32230) — 한 칸을 여섯 토막으로 걸을 때 토막마다 셈을 하나 올리고, 나는 유닛은 6토막마다 묶음 31 의 10번,
+    /// 그 밖은 직업 표로 9번(6 · 4토막) · 11번(9토막). 함께 걷는 무리는 첫 사람 것만.
+    /// </summary>
+    private void StepSound(Unit u)
+    {
+        var (every, index) = Battle.IsFlyer(u) ? (6, 10)
+            : (u.Class is >= 1 and <= 29 ? StepSoundKind[u.Class - 1] : 0) switch { 0 => (6, 9), 1 => (4, 9), _ => (9, 11) };
+        if (_stepTick % every == 0) PlaySfx(Sound.UiBank, index);
+        _stepTick = (_stepTick + 1) & 0xFF;   // 원작 셈은 한 바이트(byte_54132)
     }
 
     private static Dir DirOf(int dx, int dy) =>

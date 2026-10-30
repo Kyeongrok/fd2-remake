@@ -4,7 +4,7 @@ using Fd2.Native;
 namespace Fd2;
 
 /// <summary>단축키로 바꿀 수 있는 동작.</summary>
-internal enum KeyAction { MoveUp, MoveDown, MoveLeft, MoveRight, Attack, Wait, System, NextUnit, Gauges, KeyHelp }
+internal enum KeyAction { MoveUp, MoveDown, MoveLeft, MoveRight, Attack, Wait, System, NextUnit, Gauges, KeyHelp, Minimap, Chests }
 
 /// <summary>
 /// 동작 ↔ 가상 키 표(창세기전3 의 KeyBindings 와 같은 꼴). %LOCALAPPDATA%\Fd2\keys.json 에 저장한다.
@@ -24,6 +24,8 @@ internal sealed class KeyBindings
         (KeyAction.NextUnit, "다음 아군으로", Win32.VK_TAB),
         (KeyAction.Gauges, "체력바 켜기·끄기", 'H'),
         (KeyAction.KeyHelp, "단축키 목록", 'J'),
+        (KeyAction.Minimap, "미니맵 켜기·끄기", 'M'),
+        (KeyAction.Chests, "보물 목록 켜기·끄기", 'T'),
     ];
 
     private readonly Dictionary<KeyAction, int> _keys = [];

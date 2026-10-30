@@ -217,10 +217,13 @@ public sealed partial class Battle
     }
 
     /// <summary>지형 종류(0~5) 의 공격 · 방어 %. 표 밖이면 0.</summary>
-    private (int Atk, int Def) TerrainPercent(Unit u)
+    private (int Atk, int Def) TerrainPercent(Unit u) => TerrainPercent(u.X, u.Y);
+
+    /// <summary>칸 (x, y) 지형의 공격 · 방어 % — 왼쪽 아래 칸 정보 창도 쓴다.</summary>
+    public (int Atk, int Def) TerrainPercent(int x, int y)
     {
         if (Tables == null) return (0, 0);
-        int g = Scene.Ground(u.X, u.Y);
+        int g = Scene.Ground(x, y);
         return g >= 0 && g < 6 ? (Tables.TerrainAttack[g], Tables.TerrainDefense[g]) : (0, 0);
     }
 
