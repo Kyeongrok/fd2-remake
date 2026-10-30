@@ -90,7 +90,7 @@ internal sealed partial class GameWindow
             _sfxTick++;
             // 소리 — 첫 입자가 소리 컷에 닿을 때
             if (_sfxParts.Count > 0 && Frame(_sfxParts[0].Start) == spec.SoundAt && (_sfxTick - _sfxParts[0].Start) % spec.Rate == 0)
-                PlaySfx(SpellSoundBank(_sfxSpell), 1);
+                PlaySfx2(SpellSoundBank(_sfxSpell), 1);   // 입자 소리는 둘째 갈래 — 맞는 컷 소리를 끊지 않게
             for (int i = 0; i < _sfxParts.Count; i++)
             {
                 var p = _sfxParts[i];

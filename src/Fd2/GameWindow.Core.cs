@@ -86,6 +86,9 @@ internal sealed partial class GameWindow
 
     /// <summary>효과음 — FDOTHER 소리 묶음 entry 의 index 번(<see cref="Sound"/>). 안드로이드는 아직 소리를 내지 않는다.</summary>
     partial void PlaySfx(int entry, int index);
+
+    /// <summary>둘째 소리 갈래(원작 sub_25B45) — 첫 갈래(<see cref="PlaySfx"/>)를 끊지 않고 겹쳐 난다.</summary>
+    partial void PlaySfx2(int entry, int index);
     partial void StopSfx();
 
     /// <summary>음악이 끝났으면 처음부터 다시(윈도우 MCI 는 스스로 되풀이하지 않는다).</summary>

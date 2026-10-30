@@ -26,8 +26,32 @@ internal sealed partial class GameWindow
         if (old.IsAllocated) old.Free();
     }
 
+    private const string SfxAlias2 = "fd2sfxb";
+
+    /// <summary>둘째 갈래 — MCI waveaudio 로(PlaySound 와 따로 섞여 난다). WAV 는 %LOCALAPPDATA%\Fd2\sfx 에 만들어 둔다.</summary>
+    partial void PlaySfx2(int entry, int index)
+    {
+        if (!_settings.Sound) return;
+        string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fd2", "sfx");
+        string path = Path.Combine(dir, $"e{entry}_{index}.wav");
+        try
+        {
+            if (!File.Exists(path))
+            {
+                var bank = Sound.Bank(_dir, entry);
+                if (index < 0 || index >= bank.Count || bank[index].Length == 0) return;
+                Directory.CreateDirectory(dir);
+                File.WriteAllBytes(path, Sound.Wav(bank[index]));
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return; }
+        Mci($"close {SfxAlias2}");
+        if (Mci($"open \"{path}\" type waveaudio alias {SfxAlias2}") == 0) Mci($"play {SfxAlias2}");
+    }
+
     partial void StopSfx()
     {
+        Mci($"close {SfxAlias2}");
         PlaySoundMem(IntPtr.Zero, IntPtr.Zero, 0);
         if (_sfxPin.IsAllocated) _sfxPin.Free();
     }
