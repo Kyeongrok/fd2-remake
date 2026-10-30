@@ -35,23 +35,29 @@ jobs:
           $version = $parts -join '.'
           echo "version=$version" >> $env:GITHUB_OUTPUT
 
-      # 설치 없이 도는 단일 exe 로 낸다. 원본 게임 자료는 넣지 않는다 — exe 가 게임 폴더를 그 자리에서 읽는다.
-      # IncludeNativeLibrariesForSelfExtract — Vortice 가 싣는 네이티브 dll 까지 exe 안에 묶는다.
-      - name: Publish
+      # 게임(Fd2.exe)과 편집기(Fd2.Editor.exe)를 각각 설치 없이 도는 단일 exe 로 낸다.
+      # 원본 게임 자료는 넣지 않는다 — 둘 다 게임 폴더를 그 자리에서 읽는다.
+      # IncludeNativeLibrariesForSelfExtract — Vortice · WPF 가 싣는 네이티브 dll 까지 exe 안에 묶는다.
+      - name: Publish (game, editor)
         shell: pwsh
         run: |
           $v = "${{ steps.version.outputs.version }}"
-          dotnet publish src/Fd2/Fd2.csproj -c Release -r win-x64 --self-contained true -o publish `
-            -p:PublishSingleFile=true `
-            -p:IncludeNativeLibrariesForSelfExtract=true `
-            -p:EnableCompressionInSingleFile=true `
-            -p:DebugType=none `
-            -p:Version=$v -p:AssemblyVersion=$v -p:FileVersion=$v -p:InformationalVersion=$v
-          if ($LASTEXITCODE -ne 0) { throw "Fd2 publish 실패" }
-          if (-not (Test-Path publish/Fd2.exe)) { throw "publish 에 Fd2.exe 가 없습니다" }
-          # zip 으로도 묶는다 — exe 를 막는 메일·보안 프로그램을 거칠 때.
+          foreach ($proj in 'src/Fd2/Fd2.csproj', 'src/Fd2.Editor/Fd2.Editor.csproj') {
+            dotnet publish $proj -c Release -r win-x64 --self-contained true -o publish `
+              -p:PublishSingleFile=true `
+              -p:IncludeNativeLibrariesForSelfExtract=true `
+              -p:EnableCompressionInSingleFile=true `
+              -p:DebugType=none `
+              -p:Version=$v -p:AssemblyVersion=$v -p:FileVersion=$v -p:InformationalVersion=$v
+            if ($LASTEXITCODE -ne 0) { throw "$proj publish 실패" }
+          }
+          foreach ($exe in 'Fd2.exe', 'Fd2.Editor.exe') {
+            if (-not (Test-Path "publish/$exe")) { throw "publish 에 $exe 가 없습니다" }
+          }
+          # 두 exe 를 zip 하나로도 묶는다 — exe 를 막는 메일·보안 프로그램을 거치거나 한 번에 받을 때.
+          # 게임의 도구 > 편집기 열기는 같은 폴더의 Fd2.Editor.exe 를 띄운다.
           New-Item -ItemType Directory -Force dist | Out-Null
-          Compress-Archive -Path publish/Fd2.exe -DestinationPath "dist/Fd2-v$v.zip" -Force
+          Compress-Archive -Path publish/Fd2.exe, publish/Fd2.Editor.exe -DestinationPath "dist/Fd2-v$v.zip" -Force
           Get-ChildItem publish, dist | Select-Object Name, Length | Format-Table -AutoSize
 
       - name: Upload artifact
@@ -59,7 +65,7 @@ jobs:
         with:
           name: fd2-${{ steps.version.outputs.version }}
           path: |
-            publish/Fd2.exe
+            publish/*.exe
             dist/*.zip
 
       - name: Upload to GitHub Releases
@@ -72,7 +78,7 @@ jobs:
             gh release create $tag --title "용의기사2 $tag" --generate-notes
           }
           # 업로드가 GitHub 쪽 500·504 로 가끔 끊긴다 — 파일마다 몇 번 다시 시도한다.
-          foreach ($file in "publish/Fd2.exe", "dist/Fd2-v${{ steps.version.outputs.version }}.zip") {
+          foreach ($file in "publish/Fd2.exe", "publish/Fd2.Editor.exe", "dist/Fd2-v${{ steps.version.outputs.version }}.zip") {
             for ($try = 1; $try -le 4; $try++) {
               gh release upload $tag $file --clobber
               if ($LASTEXITCODE -eq 0) { break }

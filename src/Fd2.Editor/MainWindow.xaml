@@ -1,0 +1,151 @@
+<Window x:Class="Fd2.Editor.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="용의기사2 편집기" Width="1180" Height="760"
+        WindowStartupLocation="CenterScreen" PreviewKeyDown="OnPreviewKeyDown">
+    <Window.Resources>
+        <!-- 원본 그림은 작은 도트라 점 그대로 키운다 -->
+        <Style TargetType="Image">
+            <Setter Property="RenderOptions.BitmapScalingMode" Value="NearestNeighbor" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+        </Style>
+        <DrawingBrush x:Key="Checker" TileMode="Tile" Viewport="0,0,16,16" ViewportUnits="Absolute">
+            <DrawingBrush.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="#2A2A2A" Geometry="M0,0 L2,0 2,2 0,2Z" />
+                    <GeometryDrawing Brush="#333333" Geometry="M0,0 L1,0 1,1 0,1Z M1,1 L2,1 2,2 1,2Z" />
+                </DrawingGroup>
+            </DrawingBrush.Drawing>
+        </DrawingBrush>
+    </Window.Resources>
+
+    <DockPanel>
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="파일(_F)">
+                <MenuItem Header="게임 폴더 열기(_O)..." Click="OnOpenFolder" />
+                <Separator />
+                <MenuItem Header="끝내기(_X)" Click="OnExit" />
+            </MenuItem>
+        </Menu>
+        <StatusBar DockPanel.Dock="Bottom">
+            <TextBlock x:Name="Status" />
+        </StatusBar>
+
+        <TabControl x:Name="Tabs" Margin="4">
+            <!-- 맵 캐릭터: FDICON.B24 의 12장(아래 · 왼쪽 · 위 · 오른쪽 × 걸음 3장) -->
+            <TabItem Header="맵 캐릭터 (앞 · 뒤 · 옆)">
+                <DockPanel>
+                    <ListBox x:Name="IconList" DockPanel.Dock="Left" Width="190" SelectionChanged="OnIconSelected">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <Image Source="{Binding Thumb}" Width="48" Height="48" />
+                                    <TextBlock Text="{Binding Label}" VerticalAlignment="Center" Margin="8,0,0,0" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <StackPanel Margin="16,8">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <CheckBox x:Name="WalkAnim" Content="걷기 움직임" IsChecked="True" VerticalAlignment="Center" />
+                            <TextBlock Text="  배율" VerticalAlignment="Center" Margin="16,0,4,0" />
+                            <ComboBox x:Name="IconZoom" Width="70" SelectedIndex="2" SelectionChanged="OnIconZoomChanged">
+                                <ComboBoxItem>2배</ComboBoxItem>
+                                <ComboBoxItem>3배</ComboBoxItem>
+                                <ComboBoxItem>4배</ComboBoxItem>
+                                <ComboBoxItem>6배</ComboBoxItem>
+                            </ComboBox>
+                        </StackPanel>
+                        <!-- 네 방향을 나란히 — 앞(아래) · 뒤(위) · 왼옆 · 오른옆 -->
+                        <ItemsControl x:Name="Facings">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,0,16,0">
+                                        <Border Background="{StaticResource Checker}" BorderBrush="#555" BorderThickness="1">
+                                            <Image Source="{Binding Image}" Width="{Binding Size}" Height="{Binding Size}" />
+                                        </Border>
+                                        <TextBlock Text="{Binding Label}" HorizontalAlignment="Center" Margin="0,4,0,0" FontSize="14" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="12장 전부 (번호 = FDICON 안의 차례)" Margin="0,20,0,4" Foreground="Gray" />
+                        <ItemsControl x:Name="AllFrames">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,0,6,6">
+                                        <Border Background="{StaticResource Checker}">
+                                            <Image Source="{Binding Image}" Width="72" Height="72" />
+                                        </Border>
+                                        <TextBlock Text="{Binding Label}" HorizontalAlignment="Center" FontSize="11" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </DockPanel>
+            </TabItem>
+
+            <!-- 전투 모션: FIGANI.DAT 3c(서기) · 3c+1(공격) — 한 컷씩 넘겨 본다 -->
+            <TabItem Header="전투 모션 (한 컷씩)">
+                <DockPanel>
+                    <ListBox x:Name="MotionList" DockPanel.Dock="Left" Width="190" SelectionChanged="OnMotionCharSelected">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <Image Source="{Binding Thumb}" Width="48" Height="48" />
+                                    <TextBlock Text="{Binding Label}" VerticalAlignment="Center" Margin="8,0,0,0" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="12,8">
+                        <RadioButton x:Name="KindStand" Content="서기" GroupName="kind" Checked="OnKindChanged" VerticalAlignment="Center" />
+                        <RadioButton x:Name="KindAttack" Content="공격" GroupName="kind" IsChecked="True" Checked="OnKindChanged" Margin="12,0,0,0" VerticalAlignment="Center" />
+                        <Button Content="◀ 이전 컷" Click="OnPrevFrame" Margin="24,0,0,0" Padding="10,2" />
+                        <Button x:Name="PlayButton" Content="▶ 재생" Click="OnPlay" Margin="6,0,0,0" Padding="10,2" />
+                        <Button Content="다음 컷 ▶" Click="OnNextFrame" Margin="6,0,0,0" Padding="10,2" />
+                        <TextBlock Text="틱(ms)" VerticalAlignment="Center" Margin="16,0,4,0" />
+                        <TextBox x:Name="TickMs" Text="55" Width="40" VerticalContentAlignment="Center" />
+                        <CheckBox x:Name="Onion" Content="앞 컷 겹쳐 보기" Margin="16,0,0,0" VerticalAlignment="Center" Checked="OnOnionChanged" Unchecked="OnOnionChanged" />
+                        <CheckBox x:Name="ShowBox" Content="그림 테두리" Margin="12,0,0,0" VerticalAlignment="Center" Checked="OnOnionChanged" Unchecked="OnOnionChanged" />
+                    </StackPanel>
+                    <Slider x:Name="FrameSlider" DockPanel.Dock="Top" Margin="12,0" Minimum="0" IsSnapToTickEnabled="True"
+                            TickFrequency="1" TickPlacement="BottomRight" ValueChanged="OnFrameSlider" />
+                    <TextBlock x:Name="FrameInfo" DockPanel.Dock="Top" Margin="12,6" FontFamily="Consolas" FontSize="14" />
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <Border Background="{StaticResource Checker}" HorizontalAlignment="Left" Margin="12,0">
+                                <Image x:Name="MotionImage" Width="640" Height="400" />
+                            </Border>
+                            <TextBlock Text="모든 컷 (누르면 그 컷으로)" Margin="12,12,0,4" Foreground="Gray" />
+                            <ItemsControl x:Name="MotionStrip" Margin="12,0">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Tag="{Binding Index}" Click="OnStripClick" Margin="0,0,4,4" Padding="0" Background="Transparent">
+                                            <StackPanel>
+                                                <Border Background="{StaticResource Checker}">
+                                                    <Image Source="{Binding Image}" Width="160" Height="100" />
+                                                </Border>
+                                                <TextBlock Text="{Binding Label}" HorizontalAlignment="Center" FontSize="11" />
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </DockPanel>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

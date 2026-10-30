@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Fd2.Data;
 using Fd2.Native;
 using Vortice.D3DCompiler;
 using Vortice.Direct3D;
@@ -11,15 +12,14 @@ namespace Fd2;
 /// 장면 지도 위에서 우리 편을 걸려 보는 창. 순수 Win32 + D3D11.
 /// </summary>
 /// <remarks>
-/// 매 틱 CPU 에서 BGRA 한 장(<c>_fb</c>)에 타일·사람을 찍고 동적 텍스처에 얹어
-/// 화면 가득 삼각형 한 장으로 찍는다. 창 크기에 맞는 가장 큰 정수 배율로 가운데에(점 샘플링).
+/// 매 틱 CPU 에서 BGRA 한 장(<c>_fb</c>, 보이는 판 = 창 ÷ 배율)에 타일·사람을 찍고 동적 텍스처에 얹어
+/// 화면 가득 삼각형 한 장으로 찍는다(점 샘플링). 해상도·배율·전체화면은 설정 메뉴(GameWindow.Menu.cs).
 /// <para>방향키: 고른 사람 한 칸씩 · 마우스 왼쪽: 그 칸까지 걸어감 · Tab: 다음 우리 편 ·
-/// PageUp/PageDown: 앞뒤 장면 · ESC: 끝.</para>
+/// PageUp/PageDown: 앞뒤 장면 · F11: 전체화면 · ESC: 끝.</para>
 /// </remarks>
-internal sealed unsafe class GameWindow : IDisposable
+internal sealed unsafe partial class GameWindow : IDisposable
 {
-    private const int BoardWidth = 480, BoardHeight = 312, Zoom = 2;
-    private const int T = Rle24.Size;
+    private const int T = Rle.Tile;
 
     private const double StepsPerSecond = 7;
     private const double WalkFps = 8, IdleFps = 3;
@@ -28,7 +28,9 @@ internal sealed unsafe class GameWindow : IDisposable
     private const uint BgColor = 0xFF000000;
     private const uint CursorColor = 0xFFFFE040;
 
-    private readonly uint[] _fb = new uint[BoardWidth * BoardHeight];
+    /// <summary>보이는 판(게임 픽셀) — <see cref="Layout"/> 이 창 크기와 배율로 정한다.</summary>
+    private int _boardW = 480, _boardH = 312;
+    private uint[] _fb = new uint[480 * 312];
 
     private readonly string _dir;
     private readonly uint[] _pal;
@@ -53,8 +55,6 @@ internal sealed unsafe class GameWindow : IDisposable
     private IDXGISwapChain1 _swapChain = null!;
     private ID3D11RenderTargetView _backBufferRtv = null!;
     private ID3D11Texture2D _boardTex = null!;
-    private int _clientW = BoardWidth * Zoom, _clientH = BoardHeight * Zoom;
-    private int _scale = Zoom, _offX, _offY;
     private ID3D11ShaderResourceView _boardSrv = null!;
     private ID3D11Buffer _viewCb = null!;
     private ID3D11VertexShader _vs = null!;
@@ -63,7 +63,7 @@ internal sealed unsafe class GameWindow : IDisposable
     public GameWindow(string dir)
     {
         _dir = dir;
-        _pal = Palette.FromVga(Dat.Load(Path.Combine(dir, "FDOTHER.DAT"), 0));
+        _pal = GameFolder.Palette(dir);
         _icons = new IconBank(Path.Combine(dir, "FDICON.B24"), _pal);
         _sceneCount = Dat.Count(Path.Combine(dir, "FDFIELD.DAT")) / 3;
     }
@@ -77,6 +77,7 @@ internal sealed unsafe class GameWindow : IDisposable
         CreateNativeWindow();
         CreateSwapChain();
         LoadScene(0);
+        ApplyWindow();
 
         Win32.ShowWindow(_hwnd, 5);
         Win32.UpdateWindow(_hwnd);
@@ -114,6 +115,7 @@ internal sealed unsafe class GameWindow : IDisposable
             WindowProc = StaticWndProcDelegate,
             Instance = Win32.GetModuleHandleW(null),
             Cursor = Win32.LoadCursorW(IntPtr.Zero, (IntPtr)Win32.IDC_ARROW),
+            Icon = Win32.LoadIconW(Win32.GetModuleHandleW(null), (IntPtr)Win32.IDI_APPLICATION),
             ClassName = ClassName,
         };
         _classAtom = Win32.RegisterClassExW(ref wc);
@@ -125,19 +127,18 @@ internal sealed unsafe class GameWindow : IDisposable
 
     private void CreateNativeWindow()
     {
-        int pixelW = BoardWidth * Zoom, pixelH = BoardHeight * Zoom;
-
-        // WS_OVERLAPPEDWINDOW 는 창틀을 포함한 크기다 — 클라이언트가 정확히
-        // pixelW x pixelH 가 되도록 미리 바깥 크기를 셈해 둔다.
-        var rect = new Win32.Rect { Left = 0, Top = 0, Right = pixelW, Bottom = pixelH };
-        Win32.AdjustWindowRect(ref rect, Win32.WS_OVERLAPPEDWINDOW, false);
+        _menuBar = CreateMenuBar();
+        var rect = new Win32.Rect { Left = 0, Top = 0, Right = _settings.ViewW, Bottom = _settings.ViewH };
+        Win32.AdjustWindowRect(ref rect, Win32.WS_OVERLAPPEDWINDOW, true);
 
         _active = this;
         _hwnd = Win32.CreateWindowExW(0, ClassName, "용의기사2",
             Win32.WS_OVERLAPPEDWINDOW, Win32.CW_USEDEFAULT, Win32.CW_USEDEFAULT,
             rect.Width, rect.Height,
-            IntPtr.Zero, IntPtr.Zero, Win32.GetModuleHandleW(null), IntPtr.Zero);
+            IntPtr.Zero, _menuBar, Win32.GetModuleHandleW(null), IntPtr.Zero);
         if (_hwnd == IntPtr.Zero) throw new InvalidOperationException("창을 만들지 못했습니다.");
+        if (Win32.GetClientRect(_hwnd, out var client)) (_clientW, _clientH) = (client.Width, client.Height);
+        UpdateMenuChecks();
     }
 
     private IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
@@ -149,6 +150,12 @@ internal sealed unsafe class GameWindow : IDisposable
                 return IntPtr.Zero;
             case Win32.WM_ERASEBKGND:
                 return (IntPtr)1;
+            case Win32.WM_SIZE:
+                Resize(Win32.LowWord(lParam) & 0xFFFF, Win32.HighWord(lParam) & 0xFFFF);
+                return IntPtr.Zero;
+            case Win32.WM_COMMAND:
+                OnMenuCommand((int)((long)wParam & 0xFFFF));
+                return IntPtr.Zero;
             case Win32.WM_KEYDOWN:
                 OnKeyDown((int)wParam);
                 return IntPtr.Zero;
@@ -158,11 +165,9 @@ internal sealed unsafe class GameWindow : IDisposable
             case Win32.WM_KILLFOCUS:
                 _keys.Clear();
                 break;
-            case Win32.WM_SIZE:
-                Resize(Win32.LowWord(lParam), Win32.HighWord(lParam));
-                return IntPtr.Zero;
             case Win32.WM_LBUTTONDOWN:
-                OnClick((Win32.LowWord(lParam) - _offX) / _scale, (Win32.HighWord(lParam) - _offY) / _scale);
+                OnClick((int)Math.Floor((Win32.LowWord(lParam) - _offX) / (double)_zoom),
+                        (int)Math.Floor((Win32.HighWord(lParam) - _offY) / (double)_zoom));
                 return IntPtr.Zero;
         }
         return Win32.DefWindowProcW(hWnd, msg, wParam, lParam);
@@ -173,7 +178,11 @@ internal sealed unsafe class GameWindow : IDisposable
         _keys.Add(vk);
         switch (vk)
         {
-            case Win32.VK_ESCAPE: _running = false; break;
+            case Win32.VK_ESCAPE:
+                if (_settings.Fullscreen) OnMenuCommand(MenuFullscreen);
+                else _running = false;
+                break;
+            case Win32.VK_F11: OnMenuCommand(MenuFullscreen); break;
             case Win32.VK_TAB: SelectNext(); break;
             case Win32.VK_PRIOR: LoadScene((_scene.Index + _sceneCount - 1) % _sceneCount); break;
             case Win32.VK_NEXT: LoadScene((_scene.Index + 1) % _sceneCount); break;
@@ -183,8 +192,9 @@ internal sealed unsafe class GameWindow : IDisposable
     /// <summary>우리 편을 누르면 고르고, 빈 칸을 누르면 고른 사람이 그리로 걷는다.</summary>
     private void OnClick(int sx, int sy)
     {
-        int tx = (sx + _camX) / T, ty = (sy + _camY) / T;
-        if (sx < 0 || sy < 0 || sx >= BoardWidth || sy >= BoardHeight || !_scene.Inside(tx, ty)) return;
+        if (sx < 0 || sy < 0 || sx >= _boardW || sy >= _boardH) return;
+        int tx = (int)Math.Floor((sx + _camX) / (double)T), ty = (int)Math.Floor((sy + _camY) / (double)T);
+        if (!_scene.Inside(tx, ty)) return;
         var hit = _scene.UnitAt(tx, ty);
         if (hit is { Side: Side.Player }) { _selected = hit; return; }
         if (_selected == null || _selected.Moving) return;
@@ -203,7 +213,8 @@ internal sealed unsafe class GameWindow : IDisposable
         _keys.Clear();
         Follow();
         Win32.SetWindowTextW(_hwnd, $"용의기사2 — 장면 {index + 1}/{_sceneCount}  " +
-                                    "(방향키·클릭 이동, Tab 다음 사람, PgUp/PgDn 장면)");
+                                    "(방향키·클릭 이동, Tab 다음 사람, PgUp/PgDn 장면, F11 전체화면)");
+        UpdateMenuChecks();
     }
 
     private void SelectNext()
@@ -268,8 +279,8 @@ internal sealed unsafe class GameWindow : IDisposable
         double cy = _selected != null ? _selected.DrawY * T + T / 2 : mapH / 2;
         int want(double c, int map, int view) =>
             map <= view ? (map - view) / 2 : (int)Math.Clamp(c - view / 2, 0, map - view);
-        _camX = want(cx, mapW, BoardWidth);
-        _camY = want(cy, mapH, BoardHeight);
+        _camX = want(cx, mapW, _boardW);
+        _camY = want(cy, mapH, _boardH);
     }
 
     private void Render()
@@ -284,8 +295,8 @@ internal sealed unsafe class GameWindow : IDisposable
         Array.Fill(_fb, BgColor);
 
         int x0 = Math.Max(0, _camX / T), y0 = Math.Max(0, _camY / T);
-        int x1 = Math.Min(_scene.Width, (_camX + BoardWidth) / T + 1);
-        int y1 = Math.Min(_scene.Height, (_camY + BoardHeight) / T + 1);
+        int x1 = Math.Min(_scene.Width, (_camX + _boardW) / T + 1);
+        int y1 = Math.Min(_scene.Height, (_camY + _boardH) / T + 1);
         for (int ty = y0; ty < y1; ty++)
             for (int tx = x0; tx < x1; tx++)
                 Blit(_scene.TileAt(tx, ty), tx * T - _camX, ty * T - _camY, opaque: true);
@@ -307,13 +318,13 @@ internal sealed unsafe class GameWindow : IDisposable
         for (int yy = 0; yy < T; yy++)
         {
             int sy = y + yy;
-            if ((uint)sy >= BoardHeight) continue;
+            if ((uint)sy >= (uint)_boardH) continue;
             for (int xx = 0; xx < T; xx++)
             {
                 int sx = x + xx;
-                if ((uint)sx >= BoardWidth) continue;
+                if ((uint)sx >= (uint)_boardW) continue;
                 uint c = px[yy * T + xx];
-                if (c != 0 || opaque) _fb[sy * BoardWidth + sx] = c | 0xFF000000;
+                if (c != 0 || opaque) _fb[sy * _boardW + sx] = c | 0xFF000000;
             }
         }
     }
@@ -326,7 +337,7 @@ internal sealed unsafe class GameWindow : IDisposable
 
     private void Dot(int x, int y, uint color)
     {
-        if ((uint)x < BoardWidth && (uint)y < BoardHeight) _fb[y * BoardWidth + x] = color;
+        if ((uint)x < (uint)_boardW && (uint)y < (uint)_boardH) _fb[y * _boardW + x] = color;
     }
 
     // ── D3D11 / DXGI ─────────────────────────────────────────────────────────
@@ -340,10 +351,11 @@ internal sealed unsafe class GameWindow : IDisposable
         _device = dev;
         _ctx = ctx;
 
-        // view = (배율, 왼쪽 여백, 위 여백). 셰이더 글에는 한글을 넣지 않는다 — 컴파일러가 바이트 수로 읽어 끝이 잘린다.
-        string shader = $$"""
+        // view = (배율, 왼쪽 여백, 위 여백, 0), board = (판 너비, 판 높이, 0, 0).
+        // 셰이더 글에는 한글을 넣지 않는다 — 컴파일러가 바이트 수로 읽어 끝이 잘린다.
+        const string shader = """
             Texture2D<float4> Board : register(t0);
-            cbuffer View : register(b0) { float4 view; };
+            cbuffer View : register(b0) { float4 view; float4 board; };
             struct VSOut { float4 pos : SV_Position; };
             VSOut VS(uint id : SV_VertexID)
             {
@@ -354,8 +366,8 @@ internal sealed unsafe class GameWindow : IDisposable
             }
             float4 PS(VSOut i) : SV_Target
             {
-                float2 p = (i.pos.xy - view.yz) / view.x;
-                if (p.x < 0 || p.y < 0 || p.x >= {{BoardWidth}} || p.y >= {{BoardHeight}}) return float4(0, 0, 0, 1);
+                float2 p = floor((i.pos.xy - view.yz) / view.x);
+                if (p.x < 0 || p.y < 0 || p.x >= board.x || p.y >= board.y) return float4(0, 0, 0, 1);
                 return Board.Load(int3(int2(p), 0));
             }
             """;
@@ -363,11 +375,19 @@ internal sealed unsafe class GameWindow : IDisposable
         var psBlob = Compiler.Compile(shader, "PS", "board.hlsl", "ps_4_0");
         _vs = _device.CreateVertexShader(vsBlob.Span);
         _ps = _device.CreatePixelShader(psBlob.Span);
+        _viewCb = _device.CreateBuffer(new BufferDescription(32, BindFlags.ConstantBuffer,
+                                                             ResourceUsage.Dynamic, CpuAccessFlags.Write));
+        CreateBoardTexture();
+    }
 
+    private void CreateBoardTexture()
+    {
+        _boardSrv?.Dispose();
+        _boardTex?.Dispose();
         _boardTex = _device.CreateTexture2D(new Texture2DDescription
         {
-            Width = BoardWidth,
-            Height = BoardHeight,
+            Width = (uint)_boardW,
+            Height = (uint)_boardH,
             MipLevels = 1,
             ArraySize = 1,
             Format = Format.B8G8R8A8_UNorm,
@@ -377,20 +397,17 @@ internal sealed unsafe class GameWindow : IDisposable
             CPUAccessFlags = CpuAccessFlags.Write,
         });
         _boardSrv = _device.CreateShaderResourceView(_boardTex);
-        _viewCb = _device.CreateBuffer(new BufferDescription(16, BindFlags.ConstantBuffer,
-                                                             ResourceUsage.Dynamic, CpuAccessFlags.Write));
     }
 
     private void CreateSwapChain()
     {
-        int w = _clientW, h = _clientH;
         using var dxgiDevice = _device.QueryInterface<IDXGIDevice>();
         using var adapter = dxgiDevice.GetAdapter();
         using var factory = adapter.GetParent<IDXGIFactory2>();
         var desc = new SwapChainDescription1
         {
-            Width = (uint)w,
-            Height = (uint)h,
+            Width = (uint)Math.Max(1, _clientW),
+            Height = (uint)Math.Max(1, _clientH),
             Format = Format.B8G8R8A8_UNorm,
             BufferCount = 2,
             BufferUsage = Usage.RenderTargetOutput,
@@ -404,10 +421,11 @@ internal sealed unsafe class GameWindow : IDisposable
         Layout();
     }
 
-    /// <summary>창 크기가 바뀌면 백버퍼를 맞추고 배율·여백을 다시 셈한다.</summary>
+    /// <summary>창 크기가 바뀌면 백버퍼를 맞추고 배율·판 크기를 다시 셈한다.</summary>
     private void Resize(int w, int h)
     {
         if (w <= 0 || h <= 0 || _swapChain == null) return;
+        if (w == _clientW && h == _clientH) return;
         _clientW = w;
         _clientH = h;
         _ctx.OMSetRenderTargets((ID3D11RenderTargetView)null!);
@@ -418,27 +436,21 @@ internal sealed unsafe class GameWindow : IDisposable
         Layout();
     }
 
-    private void Layout()
-    {
-        _scale = Math.Max(1, Math.Min(_clientW / BoardWidth, _clientH / BoardHeight));
-        _offX = (_clientW - BoardWidth * _scale) / 2;
-        _offY = (_clientH - BoardHeight * _scale) / 2;
-    }
-
     private void Upload()
     {
-        var map = _ctx.Map(_boardTex, 0, MapMode.WriteDiscard);
         var cb = _ctx.Map(_viewCb, 0, MapMode.WriteDiscard);
         var v = (float*)cb.DataPointer;
-        v[0] = _scale; v[1] = _offX; v[2] = _offY; v[3] = 0;
+        v[0] = _zoom; v[1] = _offX; v[2] = _offY; v[3] = 0;
+        v[4] = _boardW; v[5] = _boardH; v[6] = 0; v[7] = 0;
         _ctx.Unmap(_viewCb, 0);
 
+        var map = _ctx.Map(_boardTex, 0, MapMode.WriteDiscard);
         try
         {
-            for (int y = 0; y < BoardHeight; y++)
+            for (int y = 0; y < _boardH; y++)
             {
-                var dst = new Span<uint>((void*)(map.DataPointer + y * map.RowPitch), BoardWidth);
-                _fb.AsSpan(y * BoardWidth, BoardWidth).CopyTo(dst);
+                var dst = new Span<uint>((void*)(map.DataPointer + y * map.RowPitch), _boardW);
+                _fb.AsSpan(y * _boardW, _boardW).CopyTo(dst);
             }
         }
         finally { _ctx.Unmap(_boardTex, 0); }

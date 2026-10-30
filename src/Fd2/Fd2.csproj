@@ -8,11 +8,17 @@
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <RootNamespace>Fd2</RootNamespace>
+        <!-- 실행 파일 · 창 아이콘: 게임 속 사울(FDICON 0번 앞모습) -->
+        <ApplicationIcon>..\..\assets\icons\game.ico</ApplicationIcon>
     </PropertyGroup>
 
     <ItemGroup>
         <PackageReference Include="Vortice.D3DCompiler" Version="3.8.3" />
         <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Fd2.Data\Fd2.Data.csproj" />
     </ItemGroup>
 
 </Project>

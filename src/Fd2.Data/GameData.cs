@@ -1,6 +1,6 @@
 using System.Buffers.Binary;
 
-namespace Fd2;
+namespace Fd2.Data;
 
 /// <summary>
 /// 용의기사2(FD2) 자료 파일 읽개. 설치 폴더의 파일을 그 자리에서 읽는다.
@@ -11,7 +11,7 @@ namespace Fd2;
 /// <para>장면 n 은 FDFIELD 3n(지도) · 3n+1(장면 정보·유닛 표) · 3n+2(좌표),
 /// 타일은 FDSHAP 2t(그림) · 2t+1(타일 속성, 4바이트씩). t 는 장면 정보 첫 바이트.</para>
 /// </remarks>
-internal static class Dat
+public static class Dat
 {
     public static byte[] Load(string path, int index)
     {
@@ -40,7 +40,7 @@ internal static class Dat
 }
 
 /// <summary>VGA 6비트 팔레트 256색을 BGRA 로.</summary>
-internal static class Palette
+public static class Palette
 {
     public static uint[] FromVga(byte[] raw)
     {
@@ -57,24 +57,28 @@ internal static class Palette
 }
 
 /// <summary>
-/// 24x24 조각 RLE(원본 sub_4E22A). 지도 타일과 FDICON.B24 의 캐릭터 그림이 같은 꼴이다.
+/// 원본 RLE(sub_4E98D · 24x24 조각은 sub_4E22A). 지도 타일 · FDICON.B24 캐릭터 · FIGANI 전투 모션이 같은 꼴이다.
 /// </summary>
 /// <remarks>
 /// 코드 바이트 <c>ttnnnnnn</c>, 개수 n+1. <c>11</c> 건너뜀(투명), <c>10</c> 그대로 복사,
 /// <c>00</c> 다음 바이트로 채움, <c>01</c> 다음 바이트를 한 칸 걸러(홀수 자리에) 찍고 2n 칸 나아감.
 /// 결과는 BGRA, 투명은 0.
 /// </remarks>
-internal static class Rle24
+public static class Rle
 {
-    public const int Size = 24;
+    public const int Tile = 24;
 
-    public static uint[] Decode(byte[] src, int p, uint[] pal)
+    /// <summary>머리 없는 24x24 조각.</summary>
+    public static uint[] DecodeTile(byte[] src, int p, uint[] pal) => Decode(src, p, Tile, Tile, pal);
+
+    /// <summary>w x h 그림을 풀어 BGRA 로.</summary>
+    public static uint[] Decode(byte[] src, int p, int w, int h, uint[] pal)
     {
-        var dst = new uint[Size * Size];
-        for (int y = 0; y < Size; y++)
+        var dst = new uint[w * h];
+        for (int y = 0; y < h; y++)
         {
-            int row = y * Size, x = 0;
-            while (x < Size)
+            int row = y * w, x = 0;
+            while (x < w)
             {
                 int v = src[p++], n = (v & 0x3F) + 1;
                 switch (v >> 6)
@@ -83,17 +87,17 @@ internal static class Rle24
                         x += n;
                         break;
                     case 2:
-                        for (int k = 0; k < n; k++) Put(dst, row, x + k, pal[src[p++]]);
+                        for (int k = 0; k < n; k++) Put(dst, w, row, x + k, pal[src[p++]]);
                         x += n;
                         break;
                     case 0:
                         uint c = pal[src[p++]];
-                        for (int k = 0; k < n; k++) Put(dst, row, x + k, c);
+                        for (int k = 0; k < n; k++) Put(dst, w, row, x + k, c);
                         x += n;
                         break;
                     default:
                         uint a = pal[src[p++]];
-                        for (int k = 0; k < n; k++) Put(dst, row, x + 1 + 2 * k, a);
+                        for (int k = 0; k < n; k++) Put(dst, w, row, x + 1 + 2 * k, a);
                         x += 2 * n;
                         break;
                 }
@@ -102,14 +106,14 @@ internal static class Rle24
         return dst;
     }
 
-    private static void Put(uint[] dst, int row, int x, uint c)
+    private static void Put(uint[] dst, int w, int row, int x, uint c)
     {
-        if (x < Size) dst[row + x] = c;
+        if (x < w) dst[row + x] = c;
     }
 }
 
 /// <summary>캐릭터 그림 FDICON.B24 — 캐릭터마다 12장(아래·왼쪽·위·오른쪽 × 걸음 3장).</summary>
-internal sealed class IconBank
+public sealed class IconBank
 {
     public const int FramesPerChar = 12;
 
@@ -130,15 +134,15 @@ internal sealed class IconBank
     {
         int i = character * FramesPerChar + frame;
         if (!_cache.TryGetValue(i, out var px))
-            _cache[i] = px = Rle24.Decode(_file, Dat.U32(_file, 6 + 4 * i), _pal);
+            _cache[i] = px = Rle.DecodeTile(_file, Dat.U32(_file, 6 + 4 * i), _pal);
         return px;
     }
 }
 
-internal enum Side { Player, Other }
+public enum Side { Player, Other }
 
 /// <summary>지도 위의 한 사람.</summary>
-internal sealed class Unit
+public sealed class Unit
 {
     public required int Icon;
     public required Side Side;
@@ -155,10 +159,10 @@ internal sealed class Unit
     public double DrawY => FromY + (Y - FromY) * Step;
 }
 
-internal enum Dir { Down = 0, Left = 1, Up = 2, Right = 3 }
+public enum Dir { Down = 0, Left = 1, Up = 2, Right = 3 }
 
 /// <summary>장면 하나 — 지도·타일·속성·처음 배치.</summary>
-internal sealed class Scene
+public sealed class Scene
 {
     public int Index { get; }
     public int Width { get; }
@@ -188,7 +192,7 @@ internal sealed class Scene
         var tiles = Dat.Load(shap, 2 * TileSet);
         _attr = Dat.Load(shap, 2 * TileSet + 1);
         _tiles = new uint[Dat.U16(tiles, 4)][];
-        for (int i = 0; i < _tiles.Length; i++) _tiles[i] = Rle24.Decode(tiles, Dat.U32(tiles, 6 + 4 * i), pal);
+        for (int i = 0; i < _tiles.Length; i++) _tiles[i] = Rle.DecodeTile(tiles, Dat.U32(tiles, 6 + 4 * i), pal);
 
         // 장면 정보: [1] 우리 편 자리 수, [2] 그 밖의 유닛 수, 131 부터 유닛마다 26바이트
         // (+1 그림 번호, +21 등장 차례 — 0 이 처음부터 나와 있는 것).
