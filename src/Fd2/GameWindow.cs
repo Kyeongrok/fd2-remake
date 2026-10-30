@@ -434,6 +434,7 @@ internal sealed unsafe partial class GameWindow : IDisposable
     public void Dispose()
     {
         StopMusic();
+        StopSfx();
         if (_active == this) _active = null;
         _backBufferRtv?.Dispose();
         _swapChain?.Dispose();

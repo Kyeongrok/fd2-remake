@@ -532,7 +532,7 @@ internal sealed partial class GameWindow
         if (dx != 0 || dy != 0)
         {
             var next = (_cursor.X + dx, _cursor.Y + dy);
-            if (_scene.Inside(next.Item1, next.Item2)) { _cursor = next; KeepCursorInView(); }
+            if (_scene.Inside(next.Item1, next.Item2)) { _cursor = next; KeepCursorInView(); PlaySfx(Sound.UiBank, Sound.Cursor); }
             return true;
         }
         if (confirm) { BattleClick(_cursor.X, _cursor.Y, -1, -1); return true; }
@@ -625,6 +625,7 @@ internal sealed partial class GameWindow
     /// </summary>
     private void OpenUnitMenu(Unit u)
     {
+        PlaySfx(Sound.UiBank, Sound.Menu);
         Select(u);
         _choosingMove = false;
         _pendingSpell = -1;
@@ -649,7 +650,7 @@ internal sealed partial class GameWindow
             _menu.Add(("마법", () => OpenSpellMenu(u, stage), default));
         _menu.Add(("대기", () =>
         {
-            if (stage == MenuStage.Unit) _battle.Rest(u);
+            if (stage == MenuStage.Unit) { _battle.Rest(u); PlaySfx(Sound.UiBank, Sound.Rest); }
             u.Acted = true;
             if (_battle.ChestAt(u) is { } chest) { AskChest(u, chest.Index, chest.Hidden); return; }
             ClearSelection();
@@ -660,6 +661,7 @@ internal sealed partial class GameWindow
     /// <summary>쉬고 나서 상자 칸이면 묻는다(sub_190AC) — 「예」면 열고, 아니면 그냥 쉰다. 상자가 사건이면 그 사건을 건다.</summary>
     private void AskChest(Unit u, int k, bool hidden)
     {
+        PlaySfx(Sound.UiBank, Sound.Chest);
         _stage = MenuStage.Ask;
         _menu.Clear();
         _menu.Add((hidden ? "보물상자 발견 — 꺼낸다" : "보석상자 — 연다", () =>
@@ -860,11 +862,23 @@ internal sealed partial class GameWindow
         _strikeFriendly = _strike.Heal > 0
                           || _strike.Spell >= 0 && _battle.SpellOf(_strike.Spell) is { Side: not 0 };
         _strikeFrame = _strikeHeld = 0;
+        _strikeSounded = -1;
+        FrameSound();
         _strikeClock = 0;
         _strikeTail = 0;
         _strikeDamage = -1;
         _strikeMiss = _strikeCrit = false;
         _bs = BattleState.CutIn;
+    }
+
+    private int _strikeSounded = -1;
+
+    /// <summary>모션 컷이 바뀌면 그 컷의 소리(컷 +5, 머리 [4] 의 묶음 FDOTHER 48~53)를 한 번.</summary>
+    private void FrameSound()
+    {
+        if (_strikeMotion is not { SoundEntry: >= 0 } m || _strikeFrame == _strikeSounded || _strikeFrame >= m.Frames.Count) return;
+        _strikeSounded = _strikeFrame;
+        if (m.Frames[_strikeFrame].Sound is var s and > 0) PlaySfx(m.SoundEntry, s);
     }
 
     private Motion? MotionOf(int icon, int kind)
@@ -920,6 +934,7 @@ internal sealed partial class GameWindow
             _strikeHeld = 0;
             if (_strikeFrame < frames - 1) _strikeFrame++;
         }
+        FrameSound();
         bool hitFrame = _strikeMotion == null ? _strikeFrame >= frames / 2 : _strikeMotion.Frames[_strikeFrame].Hit != 0 || _strikeFrame == frames - 1;
         if (_strikeDamage < 0 && hitFrame) ResolveStrike();
         if (_strikeDamage >= 0 && _strikeFrame == frames - 1 && _strikeTail > 0.7) NextStrike();

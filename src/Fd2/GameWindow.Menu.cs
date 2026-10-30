@@ -16,7 +16,7 @@ internal sealed partial class GameWindow
 
     private const int MenuScenePrev = 1001, MenuSceneNext = 1002, MenuSceneBase = 1100;
     private const int MenuResBase = 1300, MenuZoomBase = 1400, MenuFullscreen = 1500, MenuResetView = 1501, MenuKeys = 1502;
-    private const int MenuEditor = 1600, MenuExit = 1601, MenuHiRes = 1700, MenuShowRange = 1701, MenuMusic = 1702;
+    private const int MenuEditor = 1600, MenuExit = 1601, MenuHiRes = 1700, MenuShowRange = 1701, MenuMusic = 1702, MenuSound = 1703;
     private const int MenuBattle = 1003, MenuBattleStop = 1004, MenuVersions = 1005;
 
     private static readonly (int W, int H)[] ResChoices =
@@ -69,6 +69,7 @@ internal sealed partial class GameWindow
         Win32.AppendMenuW(mode, Win32.MF_STRING, MenuHiRes, "고해상도(4배, 이 PC 에서 차례로 만듦)(&H)");
         Win32.AppendMenuW(mode, Win32.MF_STRING, MenuShowRange, "이동 · 공격 범위 보기(&R)");
         Win32.AppendMenuW(mode, Win32.MF_STRING, MenuMusic, "배경음악(&U)");
+        Win32.AppendMenuW(mode, Win32.MF_STRING, MenuSound, "효과음(&E)");
         Win32.AppendMenuW(bar, Win32.MF_POPUP, (nuint)mode, "모드(&M)");
 
         IntPtr tools = Win32.CreatePopupMenu();
@@ -92,6 +93,11 @@ internal sealed partial class GameWindow
                 _settings.Save();
                 if (_settings.Music) PlayMusic(_musicWanted);
                 else StopMusic();
+                break;
+            case MenuSound:
+                _settings.Sound = !_settings.Sound;
+                _settings.Save();
+                if (!_settings.Sound) StopSfx();
                 break;
             case MenuScenePrev: LoadScene((_scene.Index + _sceneCount - 1) % _sceneCount); break;
             case MenuSceneNext: LoadScene((_scene.Index + 1) % _sceneCount); break;
@@ -152,6 +158,7 @@ internal sealed partial class GameWindow
         check(MenuHiRes, _settings.HiRes);
         check(MenuShowRange, _settings.ShowRange);
         check(MenuMusic, _settings.Music);
+        check(MenuSound, _settings.Sound);
         if (_scene != null)
             for (int i = 0; i < _sceneCount; i++) check(MenuSceneBase + i, i == _scene.Index);
     }
