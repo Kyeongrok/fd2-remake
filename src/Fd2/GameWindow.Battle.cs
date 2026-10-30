@@ -951,6 +951,7 @@ internal sealed partial class GameWindow
             _spellResults.Add(r);
             _strikeDamage = r.Amount;
             _strikeMiss = !r.Hit;
+            if (!_strikeOnMap && r.Hit) StartSpellFx(_strike.Spell, a.Team == 0);   // 전투 화면 마법 효과(0~8)
             if (r.Hit && r.Note != null) _strikeNotes.Add(new Notice(r.Note, Battle.NameLine(d)));
         }
         else if (_strike.Heal > 0)
@@ -987,9 +988,10 @@ internal sealed partial class GameWindow
             if (_strikeFrame < frames - 1) _strikeFrame++;
         }
         FrameSound();
+        SpellFxTick(dt);
         bool hitFrame = _strikeMotion == null ? _strikeFrame >= frames / 2 : _strikeMotion.Frames[_strikeFrame].Hit != 0 || _strikeFrame == frames - 1;
         if (_strikeDamage < 0 && hitFrame) ResolveStrike();
-        if (_strikeDamage >= 0 && _strikeFrame == frames - 1 && _strikeTail > 0.7) NextStrike();
+        if (_strikeDamage >= 0 && _strikeFrame == frames - 1 && _strikeTail > 0.7 && !SpellFxRunning) NextStrike();
     }
 
     // ── 컴퓨터 차례 ───────────────────────────────────────────────────────────
@@ -1374,10 +1376,11 @@ internal sealed partial class GameWindow
         bool showDefender = (!ranged || hit) && a != d || a == d && hit;
 
         int defenderSide = 0;   // 맞는 쪽이 선 쪽(오른쪽 1) — 피해 숫자를 그 위에
+        DrawSpellFx(bx, by, s, clip, back: true);
         if (showDefender)
         {
-            int shake = hit && !heal && _strikeTail < 0.4 ? (int)(Math.Sin(_strikeTail * 70) * 3 * s) : 0;
-            (uint tint, int amount) = hit && _strikeTail < 0.18 ? (heal ? (0xFF60FF80u, 150) : (0xFFFFFFFFu, 170)) : (0u, 0);
+            int shake = hit && !heal && (_strikeTail < 0.4 || SpellFxRunning) ? (int)(Math.Sin(_strikeTail * 70) * 3 * s) : 0;
+            (uint tint, int amount) = hit && _strikeTail < 0.18 ? (heal ? (0xFF60FF80u, 150) : (0xFFFFFFFFu, 170)) : SpellFxTint();
             var stand = StandOf(d.Icon);
             if (stand != null)
             {
@@ -1414,6 +1417,9 @@ internal sealed partial class GameWindow
                 if ((int)(_time * 10) % 2 == 0) FillRect(bx + bw / 2, by, bw / 2, bh, glow);
             }
         }
+
+        DrawSpellFx(bx, by, s, clip, back: false);
+        if (_sfxFlash > 0 && (int)(_sfxFlash * 33) % 2 == 0) FillRect(bx, by, bw, bh, SpellFlashColor());   // 맞는 컷의 번쩍임
 
         string what = spellName != null ? $"  [{spellName}]" : "";
         var who = Text.Render($"{CharacterNames.Of(a.Icon)}  →  {CharacterNames.Of(d.Icon)}{what}", fs, 0xFFFFFFFF);

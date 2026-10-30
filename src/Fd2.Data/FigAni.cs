@@ -28,7 +28,18 @@ public sealed class Motion
     /// <summary>캐릭터 c 의 모션 kind(0 서기, 1 공격, 2 마법 · 특수 공격 — 17 캐릭터만 있다). 비어 있으면 null.</summary>
     public static Motion? Load(string dir, int character, int kind, uint[] pal)
     {
-        var a = Dat.Load(Path.Combine(dir, "FIGANI.DAT"), 3 * character + kind);
+        return Parse(Dat.Load(Path.Combine(dir, "FIGANI.DAT"), 3 * character + kind), pal);
+    }
+
+    /// <summary>FDOTHER 의 FIGANI 꼴 항목(전투 화면 마법 효과 18~44 — sub_2FF01) — 비었거나 꼴이 아니면 null.</summary>
+    public static Motion? LoadOther(string dir, int entry, uint[] pal)
+    {
+        try { return Parse(Dat.Load(Path.Combine(dir, "FDOTHER.DAT"), entry), pal); }
+        catch (Exception e) when (e is IndexOutOfRangeException or ArgumentOutOfRangeException) { return null; }
+    }
+
+    private static Motion? Parse(byte[] a, uint[] pal)
+    {
         if (a.Length < 12 || a[0] == 0) return null;
         int n = a[0];
         var frames = new List<MotionFrame>(n);
