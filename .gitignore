@@ -15,6 +15,8 @@ obj/
 
 # 게임 클라이언트에서 뽑은 자료 (저작물이라 저장소에 두지 않는다)
 data/extracted/
+# 원작 FD2.EXE 사건 함수를 풀어 만든 대본 — 원작 자료라 저장소에 두지 않는다(있으면 빌드가 실행 파일에 넣는다)
+src/Fd2.Data/SceneEvents.json
 
 # Python
 __pycache__/

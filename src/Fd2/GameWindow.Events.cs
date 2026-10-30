@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Fd2.Data;
 
 namespace Fd2;
@@ -25,11 +26,15 @@ internal sealed partial class GameWindow
     // ── 걸기 ────────────────────────────────────────────────────────────────
 
     /// <summary>사건 하나를 돌리고 after.</summary>
-    private void RunEvent(int id, Action after)
+    private void RunEvent(int id, Action after, int arg = 0)
     {
         if (Events == null) { after(); return; }
+        _eventArg = arg;
         RunOps(Events.Event(id), 0, after);
     }
+
+    /// <summary>사건 함수의 인자(arg0) — 사건을 일으킨 사람의 배열 번호(땅 칸 · 떨굼 · 상자), 차례 사건은 0.</summary>
+    private int _eventArg;
 
     /// <summary>
     /// 그 때(0 적 차례 앞 · 1 우리 차례 끝 · 2 우리 차례 시작)의 사건 줄들을 차례로(sub_1A813) — 차례 수가 같고 때가 같은 줄.
@@ -58,7 +63,7 @@ internal sealed partial class GameWindow
         var (ev, team) = _scene.GroundEvents[k - 1];
         if (u.Team != team) { after(); return; }
         _groundFired.Add(k);
-        RunEvent(ev, after);
+        RunEvent(ev, after, u.Slot);
     }
 
     /// <summary>장면 시작 연출 — 대본에 시작 함수가 있으면 그것, 없으면 대사 묶음 0.</summary>
@@ -125,11 +130,14 @@ internal sealed partial class GameWindow
                 case "ally":
                     if (BySlot(A(1)) is { } ally) { ally.Side = Side.Player; ally.Ai = true; }
                     break;
-                case "setunit" when A(2) == 6:
-                    if (BySlot(A(1)) is { } su) { su.Side = A(3) == 0 ? Side.Other : Side.Player; su.Ai = A(3) == 1; }
+                case "setunit":
+                    if (BySlot(A(1)) is { } su) SetUnitField(su, A(2), A(3));
                     break;
                 case "arm":
-                    if (A(1) < _scene.EventLines.Count) _scene.EventLines[A(1)].Turn = Turn + 1;
+                    if (A(1) < _scene.EventLines.Count) _scene.EventLines[A(1)].Turn = Turn + (op.GetArrayLength() > 2 ? A(2) : 1);
+                    break;
+                case "raw":
+                    RawOp(op.GetArrayLength() > 1 ? op[1].GetString() ?? "" : "");
                     break;
                 case "armset":
                     if (A(1) < _scene.EventLines.Count) _scene.EventLines[A(1)].Turn = A(2);
@@ -161,6 +169,60 @@ internal sealed partial class GameWindow
             }
         }
         after();
+    }
+
+    /// <summary>
+    /// 사람 칸 쓰기(setunit) — +0 · +1 자리, +3 보는 쪽, +6 편, +33 레벨, +52 ~ +54 AI, +61 상자 번호. +5(상태 비트)는 넘긴다.
+    /// </summary>
+    private void SetUnitField(Unit u, int off, int v)
+    {
+        switch (off)
+        {
+            case 0: if (_scene.Inside(v, u.Y)) (u.X, u.FromX) = (v, v); break;
+            case 1: if (_scene.Inside(u.X, v)) (u.Y, u.FromY) = (v, v); break;
+            case 3: u.Facing = (Dir)(v & 3); break;
+            case 6: u.Side = v == 0 ? Side.Other : Side.Player; u.Ai = v == 1; break;
+            case 33: u.Level = Math.Max(1, v); break;
+            case 52: u.AiByte = v; break;
+            case 53: u.AiX = v; break;
+            case 54: u.AiY = v; break;
+            case 61: u.Chest = v; break;
+        }
+    }
+
+    /// <summary>대본의 raw 가운데 옮길 수 있는 것 — ai(units a..b, m), warp(u,x,y), giveitem(i), killfrom(n). 그 밖(그림 · 팔레트 연출)은 넘긴다.</summary>
+    private void RawOp(string text)
+    {
+        var m = Regex.Match(text, @"^ai\(units (\d+)\.\.(\d+), *(\d+)\)");
+        if (m.Success)
+        {
+            int a = int.Parse(m.Groups[1].Value), b = int.Parse(m.Groups[2].Value), v = int.Parse(m.Groups[3].Value);
+            foreach (var u in _scene.Units.Where(u => u.Slot >= a && u.Slot <= b)) u.AiByte = (u.AiByte & 0xF0) | (v & 0x0F);
+            return;
+        }
+        m = Regex.Match(text, @"^warp\((\d+), *(\d+), *(\d+)\)");
+        if (m.Success)
+        {
+            if (BySlot(int.Parse(m.Groups[1].Value)) is { } w)
+            {
+                int x = int.Parse(m.Groups[2].Value), y = int.Parse(m.Groups[3].Value);
+                if (_scene.Inside(x, y)) (w.X, w.Y, w.FromX, w.FromY) = (x, y, x, y);
+            }
+            return;
+        }
+        m = Regex.Match(text, @"^giveitem\((\d+)\)");
+        if (m.Success)
+        {
+            var lead = BySlot(0) ?? Controlled.FirstOrDefault();
+            if (lead != null && lead.Bag.Count < 8) lead.Bag.Add((int.Parse(m.Groups[1].Value), false));
+            return;
+        }
+        m = Regex.Match(text, @"^killfrom\((\d+)\)");
+        if (m.Success)
+        {
+            int n = int.Parse(m.Groups[1].Value);
+            _scene.Units.RemoveAll(u => u.Slot >= n);
+        }
     }
 
     private Unit? BySlot(int slot) => _scene.Units.Find(u => u.Slot == slot && u.Alive);
@@ -208,24 +270,62 @@ internal sealed partial class GameWindow
     }
 
     /// <summary>
-    /// 조건 글 — dead(i) · alive(i)(배열 번호), turn&gt;=n · turn==n · turn&lt;n, inparty(c), flag(k), 앞에 ! 면 뒤집기. 모르는 글은 거짓.
+    /// 조건 글 — dead(i) · alive(i) · anyalive(a..b) · anydead(a..b) · deadcount(a..b) 비교 n(배열 번호), unit(i|arg0).칸 비교 v,
+    /// flag(k)[비교 v], turn 비교 n, arg0 비교 v, inparty(c) · inroster(c), hasitem(i) · hasall(a..b)(우리 편 가방), nitems(arg0) 비교 n,
+    /// itemslot(arg0,i), 앞에 ! 면 뒤집기. 모르는 글은 거짓.
     /// </summary>
     private bool Condition(string text)
     {
         text = text.Replace(" ", "");
         if (text.StartsWith('!')) return !Condition(text[1..]);
-        int Arg()
+        var m = Regex.Match(text, @"^(\w+)(?:\(([^)]*)\))?(?:\.(\d+))?(?:(==|!=|<=|>=|<|>)(-?\d+))?$");
+        if (!m.Success) return false;
+        string name = m.Groups[1].Value, args = m.Groups[2].Value;
+        bool hasCmp = m.Groups[4].Success;
+        int rhs = hasCmp ? int.Parse(m.Groups[5].Value) : 0;
+        bool Cmp(int v) => m.Groups[4].Value switch { "==" => v == rhs, "!=" => v != rhs, "<=" => v <= rhs, ">=" => v >= rhs, "<" => v < rhs, ">" => v > rhs, _ => v != 0 };
+        int Arg(string a) => a == "arg0" ? _eventArg : int.TryParse(a, out int v) ? v : -1;
+        (int A, int B) Range()
         {
-            int a = text.IndexOf('('), b = text.IndexOf(')');
-            return a >= 0 && b > a && int.TryParse(text[(a + 1)..b], out int v) ? v : -1;
+            var p = args.Split("..");
+            return p.Length == 2 ? (Arg(p[0]), Arg(p[1])) : (Arg(args), Arg(args));
         }
-        if (text.StartsWith("dead(")) return BySlot(Arg()) == null;
-        if (text.StartsWith("alive(")) return BySlot(Arg()) != null;
-        if (text.StartsWith("inparty(")) return _campaign?.Party.Any(r => HeroRecord.Id(r) == Arg()) == true
-                                                || _scene.Units.Any(u => u.NameId == Arg() && u.Side == Side.Player && !u.Ai);
-        if (text.StartsWith("flag(")) return _battle.OpenedChests.Contains(Arg());
-        foreach (var (op, f) in new (string, Func<int, int, bool>)[] { (">=", (a, b) => a >= b), ("==", (a, b) => a == b), ("<=", (a, b) => a <= b), (">", (a, b) => a > b), ("<", (a, b) => a < b) })
-            if (text.StartsWith("turn" + op) && int.TryParse(text[(4 + op.Length)..], out int n)) return f(Turn, n);
+        IEnumerable<int> Slots() { var (a, b) = Range(); return Enumerable.Range(a, Math.Max(0, b - a + 1)); }
+        IEnumerable<Unit> Team2() => _scene.Units.Where(u => u.Alive && u.Side == Side.Player && !u.Ai);
+        bool HasItem(int i) => Team2().Any(u => u.Bag.Any(b => b.Item == i));
+        switch (name)
+        {
+            case "dead": return BySlot(Arg(args)) == null;
+            case "alive": return BySlot(Arg(args)) != null;
+            case "anyalive": return Slots().Any(i => BySlot(i) != null);
+            case "anydead": return Slots().Any(i => BySlot(i) == null);
+            case "deadcount": return Cmp(Slots().Count(i => BySlot(i) == null));
+            case "flag": return hasCmp ? Cmp(_battle.OpenedChests.Contains(Arg(args)) ? 1 : 0) : _battle.OpenedChests.Contains(Arg(args));
+            case "turn": return Cmp(Turn);
+            case "arg0": return Cmp(_eventArg);
+            case "inparty": return _campaign?.Party.Any(r => HeroRecord.Id(r) == Arg(args)) == true || Team2().Any(u => u.NameId == Arg(args));
+            case "inroster": return _scene.Units.Any(u => u.Alive && u.NameId == Arg(args));
+            case "hasitem": return HasItem(Arg(args));
+            case "hasall": return Slots().All(HasItem);
+            case "nitems": return BySlot(Arg(args)) is { } nu && Cmp(nu.Bag.Count);
+            case "itemslot":
+            {
+                var p = args.Split(',');
+                return p.Length == 2 && BySlot(Arg(p[0])) is { } iu && iu.Bag.Any(b => b.Item == Arg(p[1]));
+            }
+            case "unit":
+            {
+                if (!m.Groups[3].Success) return false;
+                var u = BySlot(Arg(args));
+                int off = int.Parse(m.Groups[3].Value);
+                int v = u == null ? (off == 5 ? 1 : 0) : off switch
+                {
+                    0 => u.X, 1 => u.Y, 3 => (int)u.Facing, 5 => 0, 6 => u.Team, 7 => u.FormId, 8 => u.NameId, 33 => u.Level,
+                    52 => u.AiByte, 53 => u.AiX, 54 => u.AiY, 61 => u.Chest, 64 => u.Hp, 66 => u.MaxHp, 68 => u.Mp, 70 => u.MaxMp, _ => 0,
+                };
+                return Cmp(v);
+            }
+        }
         return false;
     }
 

@@ -673,7 +673,7 @@ internal sealed partial class GameWindow
             ClearSelection();
             if (_scene.Chests[k].Kind == 0 && u.Bag.Count >= 8) { AskSwap(u, k); return; }
             var (notes, ev) = _battle.OpenChest(u, k);
-            ShowNotices(notes, () => { if (ev >= 0) RunEvent(ev, AfterPlayerAction); else AfterPlayerAction(); });
+            ShowNotices(notes, () => { if (ev >= 0) RunEvent(ev, AfterPlayerAction, u.Slot); else AfterPlayerAction(); });
         }, default));
         _menu.Add(("그냥 둔다", () => { ClearSelection(); AfterPlayerAction(); }, default));
         _menuIndex = 0;
