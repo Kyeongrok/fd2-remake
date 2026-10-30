@@ -1121,22 +1121,61 @@ internal sealed partial class GameWindow
     private bool CrossMenu => _stage is MenuStage.Unit or MenuStage.AfterMove;
 
     /// <summary>
-    /// 십자 메뉴의 자리 — 원작(원본 판 화면): 위 공격, 왼쪽 마법, 오른쪽 물건, 아래 하나 더.
-    /// 이 게임은 물건이 없어 오른쪽에 이동, 아래에 대기를 둔다.
+    /// 십자 메뉴의 자리 — 원작(sub_18D8C · sub_179D5): 위 공격, 왼쪽 마법, 오른쪽 물건, 아래 쉬기.
+    /// 이 게임은 우리 편 물건이 없어 고른 뒤(걷기 전)에는 오른쪽에 이동을 둔다.
     /// </summary>
     private static Dir SlotOf(string label) => label switch
     {
         "공격" => Dir.Up, "마법" => Dir.Left, "이동" => Dir.Right, _ => Dir.Down,
     };
 
+    private Buttons? _buttons;
+    private bool _buttonsTried;
+
     /// <summary>
-    /// 십자 메뉴 — 사람의 위 · 왼쪽 · 오른쪽 · 아래 칸에 네모 단추(원작처럼 노란 테두리, 바탕 빨강, 고른 단추는 파랑).
-    /// 원작 단추 그림(공격 · 마법 · 물건 그림)은 자료에서 아직 못 찾아 글자로 쓴다.
+    /// 십자 메뉴 — 원작 단추 그림(FDOTHER 2)을 사람 둘레에: 위는 사람 칸 바로 위 20점, 왼쪽 · 오른쪽은 2점 아래, 아래는 사람 칸 바로 밑(sub_179D5).
+    /// 못 쓰는 단추는 빨강으로 두고(원작처럼 고를 수 없다), 고른 단추는 4틱(0.22초)마다 반짝인다. 그림이 없으면 글자 단추.
     /// </summary>
     private void DrawCrossMenu(int fs)
     {
         if (_actor is not { } u) return;
+        if (!_buttonsTried)
+        {
+            _buttonsTried = true;
+            try { _buttons = new Buttons(_dir, _pal); }
+            catch (Exception e) when (e is IOException or IndexOutOfRangeException or ArgumentOutOfRangeException) { _buttons = null; }
+        }
         var (sx, sy) = TileScreen(u.X, u.Y);
+        if (_buttons is not { Count: > 3 * Buttons.Rest + 2 } bank) { DrawTextCross(sx, sy); return; }
+
+        int s = _zoom, blink = (int)(_time * 18.2 / 4) & 1;
+        var slots = new[] { (Dir.Up, Buttons.Attack, 0, -20), (Dir.Left, Buttons.Magic, -24, 2), (Dir.Right, Buttons.Item, 24, 2), (Dir.Down, Buttons.Rest, 0, 24) };
+        foreach (var (dir, button, ox, oy) in slots)
+        {
+            int i = _menu.FindIndex(m => SlotOf(m.Label) == dir);
+            int x = sx + ox * s, y = sy + oy * s;
+            if (i < 0)
+            {
+                var (rp, rw, rh) = bank.Frame(button, red: true);
+                BlitScaled(rp, rw, rh, x, y, s, 0, 0, _fbW, _fbH);
+                continue;
+            }
+            var (px, w, h) = _menu[i].Label == "이동" ? bank.Blank(button, red: false) : bank.Frame(button, red: false, i == _menuIndex ? blink : 0);
+            var rect = (X: x, Y: y, W: w * s, H: h * s);
+            if (_mouseMoved && _mouseX >= rect.X && _mouseY >= rect.Y && _mouseX < rect.X + rect.W && _mouseY < rect.Y + rect.H) _menuIndex = i;
+            BlitScaled(px, w, h, x, y, s, 0, 0, _fbW, _fbH);
+            if (_menu[i].Label == "이동")
+            {
+                var label = Text.Render(_menu[i].Label, Math.Max(12, rect.H * 2 / 5), i == _menuIndex && blink == 1 ? 0xFFFFFFFF : 0xFFF0B020);
+                DrawText(label, x + (rect.W - label.W) / 2, y + (rect.H - label.H) / 2);
+            }
+            _menu[i] = (_menu[i].Label, _menu[i].Do, rect);
+        }
+    }
+
+    /// <summary>그림이 없을 때의 십자 메뉴 — 노란 테두리 · 빨강 바탕(고른 단추는 파랑) 글자 단추.</summary>
+    private void DrawTextCross(int sx, int sy)
+    {
         int cell = T * _zoom, border = Math.Max(2, _zoom);
         for (int i = 0; i < _menu.Count; i++)
         {

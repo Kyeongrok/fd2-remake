@@ -520,3 +520,47 @@ public sealed class Scene
         return path;
     }
 }
+
+/// <summary>
+/// 명령 단추 그림 — FDOTHER 2번(원본 sub_179D5 가 사람 둘레에 그린다). 머리 없이 u32 오프셋 표(첫 오프셋 / 4 = 장 수),
+/// 장마다 u16 w · u16 h 뒤 날 바이트(0 = 투명, sub_4ED4F). 거의 24x20.
+/// </summary>
+/// <remarks>
+/// 단추 b 는 세 장: 3b 파랑, 3b+1 파랑(반짝임 — 고른 단추는 4틱마다 3b ↔ 3b+1), 3b+2 빨강(못 고름).
+/// 0 공격 · 1 마법 · 2 물건 · 3 쉬기 · 4 턴 끝 · 6 설정 · 13 · 14 저장 · 불러오기 …
+/// </remarks>
+public sealed class Buttons
+{
+    public const int Attack = 0, Magic = 1, Item = 2, Rest = 3;
+
+    private readonly (uint[] Px, int W, int H)[] _frames;
+
+    public Buttons(string dir, uint[] pal)
+    {
+        var d = Dat.Load(Path.Combine(dir, "FDOTHER.DAT"), 2);
+        _frames = new (uint[], int, int)[Dat.U32(d, 0) / 4];
+        for (int i = 0; i < _frames.Length; i++)
+        {
+            int o = Dat.U32(d, 4 * i), w = Dat.U16(d, o), h = Dat.U16(d, o + 2);
+            var px = new uint[w * h];
+            for (int k = 0; k < px.Length; k++) px[k] = d[o + 4 + k] is var c and not 0 ? pal[c] : 0;
+            _frames[i] = (px, w, h);
+        }
+    }
+
+    public int Count => _frames.Length;
+
+    /// <summary>단추 b 의 그림 — red 면 못 고르는 빨강, 아니면 blink(0 · 1) 장.</summary>
+    public (uint[] Px, int W, int H) Frame(int b, bool red, int blink = 0) => _frames[3 * b + (red ? 2 : blink & 1)];
+
+    /// <summary>단추 b 의 테두리 · 바탕만 — 안쪽 그림을 바탕색으로 지운다(원작에 없는 단추에 글자를 얹을 때).</summary>
+    public (uint[] Px, int W, int H) Blank(int b, bool red)
+    {
+        var (src, w, h) = Frame(b, red);
+        var px = (uint[])src.Clone();
+        uint bg = px[2 * w + 3];
+        for (int y = 2; y < h - 2; y++)
+            for (int x = 2; x < w - 2; x++) px[y * w + x] = bg;
+        return (px, w, h);
+    }
+}
