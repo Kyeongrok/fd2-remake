@@ -467,6 +467,22 @@ public sealed partial class Battle
         return (notes, ev);
     }
 
+    /// <summary>
+    /// 가방이 차서 바꾼다(sub_190AC 의 「도구충분, 교환합니까?」) — 가방 칸의 물건을 상자에 넣고 상자 물건을 가방에. 상자는 닫힌 채로 남는다.
+    /// </summary>
+    public List<Notice> SwapChest(Unit u, int k, int slot)
+    {
+        var notes = new List<Notice>();
+        if (slot < 0 || slot >= u.Bag.Count || k >= Scene.Chests.Count || Scene.Chests[k].Kind != 0) return notes;
+        int give = u.Bag[slot].Item, take = Scene.Chests[k].Value;
+        u.Bag[slot] = (take, false);
+        Scene.SetChest(k, 0, give);
+        Recompute(u);
+        notes.Add(new Notice(" 획득", 181 + take));
+        notes.Add(new Notice(" 을(를) 상자에 넣음", 181 + give));
+        return notes;
+    }
+
     /// <summary>이름 표(FDTXT 0) 의 그 사람 이름 줄 — 캐릭터 번호 + 1.</summary>
     public static int NameLine(Unit u) => u.NameId + 1;
 

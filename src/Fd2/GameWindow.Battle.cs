@@ -667,9 +667,11 @@ internal sealed partial class GameWindow
         PlaySfx(Sound.UiBank, Sound.Chest);
         _stage = MenuStage.Ask;
         _menu.Clear();
+        _menuGlyphs.Clear();
         _menu.Add((hidden ? "보물상자 발견 — 꺼낸다" : "보석상자 — 연다", () =>
         {
             ClearSelection();
+            if (_scene.Chests[k].Kind == 0 && u.Bag.Count >= 8) { AskSwap(u, k); return; }
             var (notes, ev) = _battle.OpenChest(u, k);
             ShowNotices(notes, () => { if (ev >= 0) RunEvent(ev, AfterPlayerAction); else AfterPlayerAction(); });
         }, default));
@@ -678,6 +680,33 @@ internal sealed partial class GameWindow
         _selected = u;
         _bs = BattleState.Menu;
     }
+
+    /// <summary>가방이 찼다 — 원작처럼 바꿀 물건을 고르게 한다(고른 물건은 상자에 남는다).</summary>
+    private void AskSwap(Unit u, int k)
+    {
+        _stage = MenuStage.Ask;
+        _menu.Clear();
+        _menuGlyphs.Clear();
+        _menu.Add(("가방이 가득 — 바꿀 물건을 고르세요", () => { }, default));
+        _menuGlyphs[0] = 181 + _scene.Chests[k].Value;
+        for (int i = 0; i < u.Bag.Count; i++)
+        {
+            int slot = i;
+            _menuGlyphs[_menu.Count] = 181 + u.Bag[i].Item;
+            _menu.Add((u.Bag[i].Equipped ? "(장비) " : "", () =>
+            {
+                _menuGlyphs.Clear();
+                ClearSelection();
+                ShowNotices(_battle.SwapChest(u, k, slot), AfterPlayerAction);
+            }, default));
+        }
+        _menu.Add(("바꾸지 않는다", () => { _menuGlyphs.Clear(); ClearSelection(); AfterPlayerAction(); }, default));
+        _menuIndex = 1;
+        _bs = BattleState.Menu;
+    }
+
+    /// <summary>메뉴 줄에 붙일 원본 글꼴 이름(이름 표 줄 번호) — 물건 이름처럼 글자로 없는 것.</summary>
+    private readonly Dictionary<int, int> _menuGlyphs = new();
 
     /// <summary>마법 고르기 — 아는 마법(원작 이름 · MP 표) 가운데 지금 걸 수 있는 것.</summary>
     private void OpenSpellMenu(Unit u, MenuStage from)
@@ -1287,7 +1316,7 @@ internal sealed partial class GameWindow
         if (CrossMenu) { DrawCrossMenu(fs); return; }
         var (sx, sy) = _actor is { } u ? TileScreen(u.X, u.Y) : TileScreen(_cursor.X, _cursor.Y);
         int cell = T * _zoom;
-        var imgs = _menu.Select(m => Text.Render(m.Label, fs, 0xFFFFFFFF)).ToList();
+        var imgs = _menu.Select((m, i) => WithGlyphs(Text.Render(m.Label, fs, 0xFFFFFFFF), i, fs)).ToList();
         int w = imgs.Max(i => i.W) + 32, rowH = imgs.Max(i => i.H) + 12;
         int x = Math.Min(sx + cell + 6, _clientW - w - 4), y = Math.Clamp(sy, 4, _clientH - rowH * imgs.Count - 4);
         for (int i = 0; i < _menu.Count; i++)
@@ -1299,6 +1328,17 @@ internal sealed partial class GameWindow
             DrawText(imgs[i], x + 16, rect.Item2 + 5);
             _menu[i] = (_menu[i].Label, _menu[i].Do, rect);
         }
+    }
+
+    /// <summary>메뉴 줄 i 에 원본 글꼴 이름이 붙어 있으면 글 뒤에 이어 붙인다.</summary>
+    private Text.Image WithGlyphs(Text.Image text, int i, int fs)
+    {
+        if (_stage != MenuStage.Ask || !_menuGlyphs.TryGetValue(i, out int line) || NameImage(line, Math.Max(1, fs / Font16.Size), 0xFFFFE070) is not { } g) return text;
+        int w = text.W + g.W, h = Math.Max(text.H, g.H);
+        var px = new uint[w * h];
+        for (int r = 0; r < text.H; r++) Array.Copy(text.Px, r * text.W, px, (r + (h - text.H) / 2) * w, text.W);
+        for (int r = 0; r < g.H; r++) Array.Copy(g.Px, r * g.W, px, (r + (h - g.H) / 2) * w + text.W, g.W);
+        return new Text.Image(px, w, h);
     }
 
     /// <summary>

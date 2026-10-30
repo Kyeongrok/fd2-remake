@@ -127,7 +127,7 @@ internal sealed partial class GameWindow
         var b = new BattleRecord
         {
             Scene = _scene.Index, Turn = Turn, Gold = _battle.Gold, ViewX = Math.Max(0, _camX / T), ViewY = Math.Max(0, _camY / T),
-            CursorX = _cursor.X, CursorY = _cursor.Y, Info = _scene.Info, Music = (byte)(_settings.Music ? 1 : 0),
+            CursorX = _cursor.X, CursorY = _cursor.Y, Info = InfoNow(), Music = (byte)(_settings.Music ? 1 : 0),
         };
         if (_campaign != null) b.Party.AddRange(_campaign.Party);
         else b.Party.AddRange(_scene.Units.Where(u => u.Side == Side.Player && !u.Ai).Select(HeroRecord.From));
@@ -148,6 +148,14 @@ internal sealed partial class GameWindow
         }
     }
 
+    /// <summary>지금 장면 정보 — 사건이 켠 사건 줄 차례를 넣는다(원작은 장면 정보를 그 자리에서 고친다).</summary>
+    private byte[] InfoNow()
+    {
+        var info = (byte[])_scene.Info.Clone();
+        for (int k = 0; k < _scene.EventLines.Count && 3 + 3 * k < info.Length; k++) info[3 + 3 * k] = (byte)_scene.EventLines[k].Turn;
+        return info;
+    }
+
     /// <summary>싸움 중 기록을 불러온다(sub_10010) — 그 장면을 띄우고 사람들을 기록대로, 우리 차례부터.</summary>
     private void LoadBattleRecord(BattleRecord b)
     {
@@ -162,6 +170,10 @@ internal sealed partial class GameWindow
             .Where(u => _scene.Inside(u.X, u.Y) && u.Icon < _icons.Characters)
             .ToList();
         _scene.Restore(units, b.Units.Count);
+        // 기록의 장면 정보에서 상자 내용(바꾼 물건)과 사건 줄을 되살린다
+        for (int k = 0; k < _scene.Chests.Count && 85 + 3 * k < b.Info.Length; k++)
+            _scene.SetChest(k, b.Info[83 + 3 * k], b.Info[84 + 3 * k] | b.Info[85 + 3 * k] << 8);
+        for (int k = 0; k < _scene.EventLines.Count && 5 + 3 * k < b.Info.Length; k++) _scene.EventLines[k].Turn = b.Info[3 + 3 * k];
         _battle.Turn = Math.Max(1, b.Turn);
         _battle.Gold = b.Gold;
         _battle.OpenedChests.Clear();

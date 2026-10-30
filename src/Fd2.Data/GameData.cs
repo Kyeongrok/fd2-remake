@@ -295,7 +295,7 @@ public sealed class Scene
         string field = Path.Combine(dir, "FDFIELD.DAT"), shap = Path.Combine(dir, "FDSHAP.DAT");
         var map = Dat.Load(field, 3 * index);
         var info = Dat.Load(field, 3 * index + 1);
-        Info = info;
+        Info = (byte[])info.Clone();
         var pos = Dat.Load(field, 3 * index + 2);
 
         Width = (short)Dat.U16(map, 0);
@@ -479,6 +479,19 @@ public sealed class Scene
     /// 열린 상자 그림으로(sub_12263) — 보석상자(속성 &amp; 0x60 == 0x20)이고 그 상자 번호가 열렸으면 타일 +1, 표시 0.
     /// 숨은 보물(0x40)은 그림이 그대로다.
     /// </summary>
+    /// <summary>상자 k 의 내용을 바꾼다 — 장면 정보(싸움 중 기록에 들어감)도 같이(가방이 차서 바꿀 때, 원작처럼 상자는 닫힌 채).</summary>
+    public void SetChest(int k, int kind, int value)
+    {
+        if (k < 0 || k >= Chests.Count) return;
+        Chests[k] = (kind, value);
+        if (84 + 3 * k + 1 < Info.Length)
+        {
+            Info[83 + 3 * k] = (byte)kind;
+            Info[84 + 3 * k] = (byte)value;
+            Info[85 + 3 * k] = (byte)(value >> 8);
+        }
+    }
+
     public void ShowOpenedChests(ICollection<int> opened)
     {
         for (int i = 0; i < _cells.Length; i++)
