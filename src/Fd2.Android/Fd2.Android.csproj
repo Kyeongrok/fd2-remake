@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      용의기사2 안드로이드판 — 게임 로직은 윈도우판(src/Fd2)의 공용 파일을 그대로 링크해 쓰고,
+      그리기(SurfaceView + CPU 화면), 글자, 터치 · 키 입력, 게임 파일 가져오기만 여기에 있다.
+      빌드: dotnet workload install android → dotnet publish -c Release -f net10.0-android
+    -->
+    <PropertyGroup>
+        <TargetFramework>net10.0-android</TargetFramework>
+        <SupportedOSPlatformVersion>24</SupportedOSPlatformVersion>
+        <OutputType>Exe</OutputType>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <RootNamespace>Fd2</RootNamespace>
+        <AssemblyName>Fd2.Android</AssemblyName>
+        <ApplicationId>com.kyeongrok.fd2remake</ApplicationId>
+        <ApplicationTitle>용의기사2</ApplicationTitle>
+        <ApplicationVersion>1</ApplicationVersion>
+        <ApplicationDisplayVersion>0.0.0</ApplicationDisplayVersion>
+        <AndroidPackageFormat>apk</AndroidPackageFormat>
+        <!-- 공용 파일이 윈도우판의 이름 공간 · 기능(XInput 표 같은)을 그대로 쓰므로 경고는 덮지 않는다 -->
+        <NoWarn>$(NoWarn);CA1416;CS0649</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Fd2.Data\Fd2.Data.csproj" />
+    </ItemGroup>
+
+    <!-- 윈도우판과 함께 쓰는 게임 로직 -->
+    <ItemGroup>
+        <Compile Include="..\Fd2\GameWindow.Core.cs;..\Fd2\GameWindow.Battle.cs;..\Fd2\GameWindow.Talk.cs;..\Fd2\GameWindow.Title.cs;..\Fd2\GameWindow.Keys.cs;..\Fd2\KeyBindings.cs;..\Fd2\GamePad.cs;..\Fd2\Settings.cs;..\Fd2\Native\Win32.Keys.cs"
+                 Link="Shared\%(Filename)%(Extension)" />
+    </ItemGroup>
+
+</Project>

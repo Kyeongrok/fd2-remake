@@ -26,7 +26,7 @@ internal sealed partial class GameWindow
         ("지도 둘러보기", () => { _screen = Screen.Game; LoadScene(_scene.Index); }),
         ("오프닝 다시 보기", StartOpening),
         ("단축키 · 패드 설정", () => { _keysOpen = true; _keysRow = 0; _keysCapture = -1; }),
-        ("편집기 열기", OpenEditor),
+        .. (HasEditor ? new (string, Action)[] { ("편집기 열기", OpenEditor) } : []),
         ("끝내기", () => _running = false),
     ];
 

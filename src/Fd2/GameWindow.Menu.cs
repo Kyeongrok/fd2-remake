@@ -13,8 +13,6 @@ namespace Fd2;
 /// </remarks>
 internal sealed partial class GameWindow
 {
-    /// <summary>배율 「자동」이 맞추는 원본 화면 크기 — 이것이 창에 다 들어가는 가장 큰 정수 배율.</summary>
-    private const int BaseW = 480, BaseH = 312;
 
     private const int MenuScenePrev = 1001, MenuSceneNext = 1002, MenuSceneBase = 1100;
     private const int MenuResBase = 1300, MenuZoomBase = 1400, MenuFullscreen = 1500, MenuResetView = 1501, MenuKeys = 1502;
@@ -27,17 +25,9 @@ internal sealed partial class GameWindow
     /// <summary>0 = 자동.</summary>
     private static readonly int[] ZoomChoices = [0, 1, 2, 3, 4, 5, 6];
 
-    private readonly Settings _settings = Settings.Load();
 
-    /// <summary>
-    /// 화면 밖 시험(창세기전3 의 DUELDX_OFFSCREEN 과 같은 것) — FD2_OFFSCREEN=1 이면 창을 화면 밖에 포커스 없이 띄우고,
-    /// 전체화면 · 패드를 끄고, 설정 파일을 저장하지 않는다. 사용하는 사람의 화면 · 마우스와 섞이지 않게 시험을 돌릴 때.
-    /// </summary>
-    internal static readonly bool Offscreen = Environment.GetEnvironmentVariable("FD2_OFFSCREEN") == "1";
     private IntPtr _menuBar;
 
-    private int _clientW = 1920, _clientH = 1080;
-    private int _zoom = 2, _offX, _offY;
 
     private IntPtr CreateMenuBar()
     {
@@ -143,7 +133,7 @@ internal sealed partial class GameWindow
         UpdateMenuChecks();
     }
 
-    private void UpdateMenuChecks()
+    partial void UpdateMenuChecks()
     {
         if (_menuBar == IntPtr.Zero) return;
         void check(int id, bool on) =>
@@ -190,20 +180,6 @@ internal sealed partial class GameWindow
                            rect.Width, rect.Height, Win32.SWP_NOZORDER | Win32.SWP_FRAMECHANGED | (Offscreen ? Win32.SWP_NOACTIVATE : 0));
     }
 
-    /// <summary>배율과 보이는 판 크기를 창 크기에서 셈한다. 판이 바뀌면 화면 버퍼와 텍스처를 다시 만든다.</summary>
-    private void Layout()
-    {
-        int auto = Math.Max(1, Math.Min(_clientW / BaseW, _clientH / BaseH));
-        _zoom = _settings.Zoom > 0 ? _settings.Zoom : auto;
-        int bw = Math.Max(1, _clientW / _zoom), bh = Math.Max(1, _clientH / _zoom);
-        _offX = (_clientW - bw * _zoom) / 2;
-        _offY = (_clientH - bh * _zoom) / 2;
-        _boardW = bw;
-        _boardH = bh;
-        if (_device != null && (_fbW != _clientW || _fbH != _clientH)) CreateBoardTexture();
-        if (_scene != null) Follow();
-    }
-
     private string _titleStatus = "";
 
     /// <summary>고해상도를 만드는 동안 제목줄 끝에 지금 상태를 붙인다(바뀔 때만 고친다).</summary>
@@ -238,8 +214,11 @@ internal sealed partial class GameWindow
         _running = false;
     }
 
+    /// <summary>타이틀 메뉴에 「편집기 열기」를 보이나 — 윈도우는 편집기가 함께 온다.</summary>
+    private const bool HasEditor = true;
+
     /// <summary>도구 > 편집기 열기 — 같은 폴더의 Fd2.Editor.exe 를 게임 폴더를 주어 띄운다.</summary>
-    private void OpenEditor()
+    private partial void OpenEditor()
     {
         string exe = Path.Combine(AppContext.BaseDirectory, "Fd2.Editor.exe");
         if (!File.Exists(exe))
