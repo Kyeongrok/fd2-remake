@@ -91,7 +91,7 @@ internal sealed partial class GameWindow
     private readonly Dictionary<int, Motion?> _motions = new(), _stands = new();
 
     /// <summary>지금 메뉴가 어느 단계인가 — 취소할 때 어디로 돌아갈지.</summary>
-    private enum MenuStage { System, Unit, AfterMove, Spell, Over, Ask, Deploy, Town }
+    private enum MenuStage { System, Unit, AfterMove, Spell, Over, Ask, Deploy, Town, Item }
     private MenuStage _stage;
 
     /// <summary>이동할 칸을 고르는 중인가(메뉴에서 「이동」을 고른 뒤).</summary>
@@ -417,6 +417,15 @@ internal sealed partial class GameWindow
                 if (_actor == null || !_attackTiles.Contains((tx, ty))) return;
                 var a = _actor;
                 int spell = _pendingSpell;
+                if (_pendingItem >= 0)
+                {
+                    int slot = _pendingItem;
+                    _pendingItem = -1;
+                    a.Acted = true;
+                    ClearSelection();
+                    UsePlayerItem(a, slot, (tx, ty), AfterPlayerAction);
+                    return;
+                }
                 if (spell >= 0)
                 {
                     // 마법 — 고른 칸을 가운데로(사거리 0 이면 자기 칸)
@@ -579,6 +588,10 @@ internal sealed partial class GameWindow
                 break;
             case BattleState.Menu when _stage == MenuStage.Deploy: // 편성 — 물릴 곳이 없다
                 break;
+            case BattleState.Menu when _stage == MenuStage.Item:   // 가방 — 걸은 뒤 메뉴로
+                _menuGlyphs.Clear();
+                BackTo(_itemFrom);
+                break;
             case BattleState.Menu when _stage == MenuStage.Town:   // 마을 — 한 단계 앞 메뉴로
                 _townBack?.Invoke();
                 break;
@@ -598,6 +611,7 @@ internal sealed partial class GameWindow
                 break;
             case BattleState.Target:
                 _pendingSpell = -1;
+                _pendingItem = -1;
                 BackTo(_targetFrom);
                 break;
             case BattleState.Select when _choosingMove && _actor != null:
@@ -656,6 +670,7 @@ internal sealed partial class GameWindow
         // 걸은 뒤에도 마법을 연다 — 원작 메뉴(sub_18D8C)가 움직인 뒤 마법을 막는지는 아직 안 봤다(짐작)
         if (!u.Sealed && CastableSpells(u).Count > 0)
             _menu.Add(("마법", () => OpenSpellMenu(u, stage), default));
+        if (stage == MenuStage.AfterMove && u.Bag.Count > 0) _menu.Add(("물건", () => { _itemFrom = stage; OpenItemMenu(u, stage); }, default));
         _menu.Add(("대기", () =>
         {
             if (stage == MenuStage.Unit) { _battle.Rest(u); PlaySfx(Sound.UiBank, Sound.Rest); }
@@ -733,6 +748,7 @@ internal sealed partial class GameWindow
     {
         _menu.Clear();
         _reach = null;
+        _pendingItem = -1;
         _pendingSpell = spell;
         _targetFrom = from;
         _attackTiles = cells.ToHashSet();
@@ -1276,7 +1292,7 @@ internal sealed partial class GameWindow
     /// </summary>
     private static Dir SlotOf(string label) => label switch
     {
-        "공격" => Dir.Up, "마법" => Dir.Left, "이동" => Dir.Right, _ => Dir.Down,
+        "공격" => Dir.Up, "마법" => Dir.Left, "이동" or "물건" => Dir.Right, _ => Dir.Down,
     };
 
     private Buttons? _buttons;
@@ -1363,7 +1379,7 @@ internal sealed partial class GameWindow
     /// <summary>메뉴 줄 i 에 원본 글꼴 이름이 붙어 있으면 글 뒤에 이어 붙인다.</summary>
     private Text.Image WithGlyphs(Text.Image text, int i, int fs)
     {
-        if (_stage is not (MenuStage.Ask or MenuStage.Deploy or MenuStage.Town) || !_menuGlyphs.TryGetValue(i, out int line) || NameImage(line, Math.Max(1, fs / Font16.Size), 0xFFFFE070) is not { } g) return text;
+        if (_stage is not (MenuStage.Ask or MenuStage.Deploy or MenuStage.Town or MenuStage.Item) || !_menuGlyphs.TryGetValue(i, out int line) || NameImage(line, Math.Max(1, fs / Font16.Size), 0xFFFFE070) is not { } g) return text;
         int w = text.W + g.W, h = Math.Max(text.H, g.H);
         var px = new uint[w * h];
         for (int r = 0; r < text.H; r++) Array.Copy(text.Px, r * text.W, px, (r + (h - text.H) / 2) * w, text.W);
