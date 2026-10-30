@@ -84,7 +84,7 @@ public static partial class Prologue
             for (int up = 0; up < 3 && d != null; up++, d = d.Parent) roots.Add((d.FullName, 2));
         }
         roots.Add((Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), 4));
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seen = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);   // 폴더 → 본 깊이
         foreach (var (root, depth) in roots)
             foreach (var dir in Walk(root, depth, seen))
                 if (IsFd2Re(dir)) return dir;
@@ -94,9 +94,11 @@ public static partial class Prologue
     private static readonly HashSet<string> Skip = new(StringComparer.OrdinalIgnoreCase)
         { "AppData", "node_modules", "Windows", "Program Files", "Program Files (x86)", "FD2Re_Data", "bin", "obj" };
 
-    private static IEnumerable<string> Walk(string dir, int depth, HashSet<string> seen)
+    private static IEnumerable<string> Walk(string dir, int depth, Dictionary<string, int> seen)
     {
-        if (!Directory.Exists(dir) || !seen.Add(dir)) yield break;
+        // 이미 더 깊게 본 폴더는 건너뛴다(얕게만 봤으면 다시 깊게)
+        if (!Directory.Exists(dir) || seen.TryGetValue(dir, out int had) && had >= depth) yield break;
+        seen[dir] = depth;
         yield return dir;
         if (depth == 0) yield break;
         string[] subs;

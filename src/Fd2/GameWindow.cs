@@ -425,6 +425,8 @@ internal sealed unsafe partial class GameWindow : IDisposable
             File.WriteAllBytes(Path.Combine(dir, $"{DateTime.Now:yyyyMMdd-HHmmss}.bmp"), bytes);
             File.WriteAllBytes(Path.Combine(dir, "last.bmp"), bytes);
         }
+        catch (IOException) { }   // 다른 프로그램이 last.bmp 를 열고 있으면 이번 것은 건너뛴다 — 게임은 계속
+
         finally { _ctx.Unmap(staging, 0); }
     }
 
