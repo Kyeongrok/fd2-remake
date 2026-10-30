@@ -39,8 +39,22 @@ public sealed record SpellInfo(int Power, int Hit, int Range, int Area, int Mp, 
 /// </summary>
 public sealed record ClassInfo(int[] EquipKinds, int Crit, int MagicMul, int Revive, int[] MoveCost);
 
-/// <summary>마을 상점(0x6238D, 31바이트) — 무기점 12 · 도구점 8 · 비밀상점 8 (물건 번호, 255 끝). Town = 마을 그림 · 건물 배치 번호. 0 만 든 기록은 빈 기록.</summary>
-public sealed record ShopInfo(int Town, int[] Weapons, int[] Tools, int[] Secret);
+/// <summary>
+/// 마을 상점(0x6238D, 31바이트) — 무기점 12 · 도구점 8 · 비밀상점 8 (물건 번호, 255 끝 — sub_26A0D). Town = 마을 그림 · 건물 배치 번호. 0 만 든 기록은 빈 기록.
+/// 비밀상점 열쇠(sub_26152): 건물 SecretAt(+1, 0 주점 · 1 무기점 · 2 출구 · 3 도구점 · 4 교회)을 고른 채 스캔코드 SecretKey(+2) 키를 누르면 건물 5(「???」)로.
+/// 키는 0x54~0x5D Shift+F1~F10 · 0x5E~0x67 Ctrl+F1~F10 · 0x68~0x71 Alt+F1~F10.
+/// </summary>
+public sealed record ShopInfo(int Town, int[] Weapons, int[] Tools, int[] Secret, int SecretAt = -1, int SecretKey = -1)
+{
+    /// <summary>열쇠 키 이름 — 「Ctrl+F2」 꼴, 모르면 빈 글.</summary>
+    public string SecretKeyName => SecretKey switch
+    {
+        >= 0x54 and <= 0x5D => $"Shift+F{SecretKey - 0x53}",
+        >= 0x5E and <= 0x67 => $"Ctrl+F{SecretKey - 0x5D}",
+        >= 0x68 and <= 0x71 => $"Alt+F{SecretKey - 0x67}",
+        _ => "",
+    };
+}
 
 /// <summary>
 /// 이동 대본(0x627D8, sub_1366A) 한 걸음 — Wait 가 아니면 Units 가 다 함께 그 쪽으로 Count 칸 걷고,
@@ -127,8 +141,8 @@ public sealed class GameTables
         {
             var r = Bytes(0x6238D + 31 * n, 31);
             if (r.All(b => b == 0)) return new ShopInfo(0, [], [], []);   // 빈 기록(22~24 — 하늘 위 장이라 마을이 없다)
-            int[] List(int from, int count) => r.Skip(from).Take(count).Where(b => b != 255).Select(b => (int)b).ToArray();
-            return new ShopInfo(r[0], List(3, 12), List(15, 8), List(23, 8));
+            int[] List(int from, int count) => r.Skip(from).Take(count).TakeWhile(b => b != 255).Select(b => (int)b).ToArray();
+            return new ShopInfo(r[0], List(3, 12), List(15, 8), List(23, 8), r[1], r[2]);
         }).ToList();
     }
 

@@ -24,7 +24,7 @@ internal static partial class Win32
     public const uint WM_QUIT = 0x0012;
     public const uint WM_KEYDOWN = 0x0100;
     public const uint WM_COMMAND = 0x0111;
-    public const uint WM_SYSKEYDOWN = 0x0104;
+    public const uint WM_SYSKEYDOWN = 0x0104, WM_SYSKEYUP = 0x0105;
     public const uint WM_KEYUP = 0x0101;
     public const uint WM_KILLFOCUS = 0x0008;
     public const uint WM_MOUSEMOVE = 0x0200;

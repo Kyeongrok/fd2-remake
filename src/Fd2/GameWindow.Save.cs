@@ -77,7 +77,7 @@ internal sealed partial class GameWindow
             if (c.NextScene < _sceneCount && c.NextScene <= Campaign.FinalScene)
             {
                 _menu.Add(($"다음 장으로 — {ChapterName(c.NextScene)}", PlayCampaign, default));
-                if (HasTown) _menu.Add(($"마을 — 상점 · 교회 (돈 {c.Gold}원)", OpenTownMenu, default));
+                if (HasTown) _menu.Add(($"마을 — 주점 · 상점 · 교회 (돈 {c.Gold}원)", OpenTownMenu, default));
                 _menu.Add(("기록하기", OpenSlotMenu, default));
             }
             else _menu.Add(("끝 — 이야기를 다 했습니다", ToTitle, default));
@@ -105,8 +105,9 @@ internal sealed partial class GameWindow
         _bs = BattleState.Menu;
     }
 
-    private void WriteSlot(int k)
+    private void WriteSlot(int k, Action? after = null)
     {
+        after ??= OpenOverMenu;
         if (_campaign is not { } c) return;
         var save = SaveFile.Load(SavePath);
         c.Music = (byte)(_settings.Music ? 1 : 0);
@@ -115,11 +116,11 @@ internal sealed partial class GameWindow
         {
             save.Save(SavePath);
             _hasSaves = null;
-            ShowBanner($"기록 {k + 1} 에 남겼습니다", OpenOverMenu, 0.9);
+            ShowBanner($"기록 {k + 1} 에 남겼습니다", after, 0.9);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            ShowBanner($"기록하지 못했습니다 — {e.Message}", OpenOverMenu, 1.5);
+            ShowBanner($"기록하지 못했습니다 — {e.Message}", after, 1.5);
         }
     }
 

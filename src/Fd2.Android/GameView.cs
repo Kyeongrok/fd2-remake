@@ -198,6 +198,10 @@ public sealed class GameView : SurfaceView, ISurfaceHolderCallback
             Keycode.ButtonL1 => 'H',
             Keycode.ButtonSelect => 'J',
             >= Keycode.A and <= Keycode.Z => 'A' + (code - Keycode.A),
+            >= Keycode.F1 and <= Keycode.F10 => Win32.VK_F1 + (code - Keycode.F1),   // 마을 비밀상점 열쇠(키보드)
+            Keycode.ShiftLeft or Keycode.ShiftRight => Win32.VK_SHIFT,
+            Keycode.CtrlLeft or Keycode.CtrlRight => Win32.VK_CONTROL,
+            Keycode.AltLeft or Keycode.AltRight => Win32.VK_MENU,
             _ => 0,
         };
         if (vk == 0) return false;

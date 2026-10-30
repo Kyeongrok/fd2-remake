@@ -143,6 +143,18 @@ internal sealed unsafe partial class GameWindow : IDisposable
             case Win32.WM_KEYUP:
                 KeyUp((int)wParam);
                 return IntPtr.Zero;
+            case Win32.WM_SYSKEYDOWN:
+                // Alt 와 F10 은 시스템 키로 온다 — 마을 비밀상점 열쇠(Alt+F · Shift+F10)를 받게 넘기고, Alt+F4 · 메뉴는 윈도우에
+                if ((int)wParam == Win32.VK_MENU) KeyDown(Win32.VK_MENU);
+                else if ((int)wParam is >= 0x70 and <= 0x79 && (int)wParam != 0x73)
+                {
+                    KeyDown((int)wParam);
+                    return IntPtr.Zero;
+                }
+                break;
+            case Win32.WM_SYSKEYUP:
+                KeyUp((int)wParam);
+                break;
             case Win32.WM_KILLFOCUS:
                 _keys.Clear();
                 break;

@@ -208,6 +208,7 @@ internal sealed partial class GameWindow
             TitleKey(vk);
             return;
         }
+        if (TownSecretKey(vk)) return;   // 마을 비밀상점 열쇠(Shift · Ctrl · Alt + F) — 도움말 같은 단축키보다 먼저
 
         // 바꿀 수 있는 키 — 커서 키는 방향키로 바꿔 넘기고, 목록 · 체력바는 어디서나
         switch (ActionOf(vk))

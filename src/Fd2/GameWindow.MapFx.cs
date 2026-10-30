@@ -7,10 +7,11 @@ namespace Fd2;
 /// <list type="bullet">
 /// <item>덮개(타일 속성 0x80, sub_12AC6): 다음 타일(+1)을 사람 위에 한 번 더 — 지붕 · 나무 꼭대기.</item>
 /// <item>두 장 번갈아(0x04 → +1, 0x08 → +2, sub_11EEE): 시계 틱마다 뒤집히는 dword_53A40.</item>
+/// <item>느린 두 장(0x10 → + dword_53C0B / 2, sub_11EEE): 0~3 을 BIOS 틱 5 마다 하나씩 세는 값(sub_1297D) — 0 · 0 · 1 · 1.</item>
 /// <item>물결 색(sub_4E31C): BIOS 틱 2 마다 단계 +1(16 단계), 색 224~239 = EXE 표[단계 .. 단계+15].</item>
 /// </list>
 /// 고해상도 지도는 칸 그림이 따로 없어 덮개 · 연 상자만 낮은 해상도 그림으로 얹고, 번갈아 · 물결은 그리지 않는다.
-/// 0x10(여러 장 돌기)은 세는 값(dword_53C0B)을 바꾸는 곳을 못 찾아 그대로 둔다.
+/// 같이 붙으면 원작 차례대로 0x08 이 먼저, 그다음 0x10, 0x04.
 /// </summary>
 internal sealed partial class GameWindow
 {
@@ -28,6 +29,9 @@ internal sealed partial class GameWindow
     /// <summary>번갈아 타일의 지금 장(dword_53A40) — 원작은 그리는 틀마다 틱이 바뀌면 뒤집는다. 여기서는 4틱마다(원작 화면 틀 빠르기쯤).</summary>
     private int AltFrame => _mapHi ? 0 : BiosTick / 4 & 1;
 
+    /// <summary>느린 두 장(dword_53C0B / 2) — sub_1297D 가 틱 차이가 4 를 넘으면(5 틱마다) 0~3 을 센다.</summary>
+    private int SlowFrame => _mapHi ? 0 : BiosTick / 5 % 4 / 2;
+
     private int WaterStep => BiosTick / 2 % 16;
 
     /// <summary>장면이 바뀌면 덮개 칸 · 움직이는 칸을 다시 찾는다.</summary>
@@ -44,7 +48,7 @@ internal sealed partial class GameWindow
             {
                 int t = _scene.CellTile(x, y), f = _scene.FlagsOf(t), i = y * _scene.Width + x;
                 if ((f & 0x80) != 0) _coverCells.Add(i);
-                if ((f & 0x0C) != 0 || WaterVariants(t) != null || WaterVariants(t + ((f & 0x08) != 0 ? 2 : 1)) != null) _liveCells.Add(i);
+                if ((f & 0x1C) != 0 || WaterVariants(t) != null || WaterVariants(t + ((f & 0x08) != 0 ? 2 : 1)) != null) _liveCells.Add(i);
             }
     }
 
@@ -74,6 +78,7 @@ internal sealed partial class GameWindow
         int x = i % _scene.Width, y = i / _scene.Width;
         int t = _scene.CellTile(x, y), f = _scene.FlagsOf(t);
         if ((f & 0x08) != 0) t += 2 * AltFrame;
+        else if ((f & 0x10) != 0) t += SlowFrame;
         else if ((f & 0x04) != 0) t += AltFrame;
         return t;
     }

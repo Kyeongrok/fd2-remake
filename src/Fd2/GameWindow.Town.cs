@@ -1,10 +1,12 @@
 using Fd2.Data;
+using Fd2.Native;
 
 namespace Fd2;
 
 /// <summary>
 /// 장 사이 마을(sub_26152) — 이긴 뒤 메뉴의 「마을」. 다음 장면 n17 앞에 마을이 있으면(byte_523E7[n17] = 0) 그 마을 기록 sub_4E809(n17)의
-/// 무기점 · 도구점에서 사고팔고, 교회에서 부활 · 전직한다. 원작의 건물 그림 · 걷기 없이 메뉴로만. 비밀상점(숨은 열쇠로 여는 n5 = 5)은 아직.
+/// 무기점 · 도구점에서 사고팔고, 교회에서 부활 · 전직하고, 주점에서 동료 보기 · 기록 · 불러오기 · 전장 이탈을 한다. 원작의 건물 그림 · 걷기 없이 메뉴로만.
+/// 첫 메뉴 줄은 원작 건물 차례(n5 0 주점 · 1 무기점 · 2 출구 · 3 도구점 · 4 교회) — 기록 +1 건물 줄에서 +2 키(Shift · Ctrl · Alt + F1~F10)를 누르면 비밀상점(n5 = 5)이 열린다.
 /// 고친 것은 동료 표(<see cref="Campaign.Party"/>)와 돈에 바로 들어가, 그 뒤 기록하면 그대로 남는다.
 /// </summary>
 internal sealed partial class GameWindow
@@ -17,11 +19,21 @@ internal sealed partial class GameWindow
     /// <summary>한 쪽에 보일 사람 수 — 동료가 많으면 쪽을 넘긴다.</summary>
     private const int TownPage = 10;
 
+    /// <summary>첫 메뉴가 떠 있나 — 비밀상점 열쇠는 이때만 받는다.</summary>
+    private bool _townTop;
+
+    /// <summary>이번 마을에서 비밀상점을 찾았나(원작 n5 = 5) — 마을을 나가면 다시 숨는다.</summary>
+    private bool _townSecret;
+
+    /// <summary>지금 상점 — 1 무기점 · 3 도구점 · 5 비밀상점(원작 n5).</summary>
+    private int _shopAt = 1;
+
     private bool HasTown => _campaign is { } c && _tables?.HasTown(c.NextScene) == true;
 
     private void BeginTownMenu(Action? back)
     {
         _stage = MenuStage.Town;
+        _townTop = false;
         _menu.Clear();
         _menuGlyphs.Clear();
         _townBack = back;
@@ -43,36 +55,73 @@ internal sealed partial class GameWindow
 
     private string GoldLine(string what) => $"돈 {_campaign?.Gold ?? 0}원 — {what}";
 
-    /// <summary>마을 첫 메뉴 — 상점 · 교회 · 돌아가기.</summary>
-    private void OpenTownMenu()
+    /// <summary>마을 첫 메뉴 — 원작 건물 차례(주점 · 무기점 · 출구 · 도구점 · 교회), 찾았으면 비밀상점. row = 건물 n5.</summary>
+    private void OpenTownMenu() => OpenTownMenu(-1);
+
+    private void OpenTownMenu(int building)
     {
         if (_campaign is not { } c || _tables?.ShopFor(c.NextScene) is not { } shop) { OpenOverMenu(); return; }
         _town = new Town(c, _battle);
         BeginTownMenu(LeaveTown);
         _menu.Add((GoldLine($"{ChapterName(c.NextScene)} 앞 마을"), () => { }, default));
-        _menu.Add(("상점 — 사기 · 팔기", () => OpenShopMenu(shop), default));
+        _menu.Add(("주점 — 동료 보기 · 기록 · 불러오기", OpenTavern, default));
+        _menu.Add(("무기점 — 사기 · 팔기", () => OpenShopMenu(shop, 1), default));
+        _menu.Add(("출구 — 돌아가기", LeaveTown, default));
+        _menu.Add(("도구점 — 사기 · 팔기", () => OpenShopMenu(shop, 3), default));
         _menu.Add(("교회 — 부활 · 전직", OpenChurchMenu, default));
-        _menu.Add(("돌아가기", LeaveTown, default));
-        EndTownMenu(1);
+        if (_townSecret && shop.Secret.Length > 0) _menu.Add(("??? — 비밀상점", () => OpenShopMenu(shop, 5), default));
+        EndTownMenu(building < 0 ? (_shopAt == 5 && _townSecret ? 6 : 1) : building + 1);
+        _townTop = true;
     }
 
     private void LeaveTown()
     {
         _menuGlyphs.Clear();
         _townBack = null;
+        _townTop = _townSecret = false;
+        _shopAt = 1;
         OpenOverMenu();
+    }
+
+    /// <summary>
+    /// 비밀상점 열쇠(sub_26152) — 첫 메뉴에서 기록 +1 건물 줄을 고른 채 +2 스캔코드 키를 누르면 「???」 줄이 열리고 커서가 그리로.
+    /// 스캔코드 = Shift+F 0x54 · Ctrl+F 0x5E · Alt+F 0x68 + (F 번호 − 1). 받았으면 참.
+    /// </summary>
+    private bool TownSecretKey(int vk)
+    {
+        if (!_townTop || _stage != MenuStage.Town || _bs != BattleState.Menu || vk < Win32.VK_F1 || vk > Win32.VK_F1 + 9) return false;
+        if (_campaign is not { } c || _tables?.ShopFor(c.NextScene) is not { } shop || shop.Secret.Length == 0) return false;
+        int scan = _keys.Contains(Win32.VK_MENU) ? 0x68 : _keys.Contains(Win32.VK_CONTROL) ? 0x5E : _keys.Contains(Win32.VK_SHIFT) ? 0x54 : -1;
+        if (scan < 0) return false;
+        if (scan + vk - Win32.VK_F1 != shop.SecretKey || _menuIndex - 1 != shop.SecretAt) return true;   // 틀린 열쇠 — 아무 일도 없다(도움말 · 단축키로 새지 않게)
+        _townSecret = true;
+        _shopAt = 5;
+        PlaySfx(Sound.UiBank, 5);
+        OpenTownMenu(5);
+        return true;
     }
 
     // ── 상점 ───────────────────────────────────────────────────────────────
 
-    private void OpenShopMenu(ShopInfo shop)
+    /// <summary>상점 이름 · 물건 — 1 무기점(+3, 12칸) · 3 도구점(+15) · 5 비밀상점(+23, 8칸), sub_26A0D.</summary>
+    private static (string Name, int[] Goods) ShopGoods(ShopInfo shop, int at) => at switch
     {
-        BeginTownMenu(OpenTownMenu);
-        _menu.Add((GoldLine("상점"), () => { }, default));
-        if (shop.Weapons.Length > 0) _menu.Add(("무기점 — 사기", () => OpenBuy(shop, shop.Weapons, 0), default));
-        if (shop.Tools.Length > 0) _menu.Add(("도구점 — 사기", () => OpenBuy(shop, shop.Tools, 0), default));
+        1 => ("무기점", shop.Weapons),
+        3 => ("도구점", shop.Tools),
+        _ => ("비밀상점", shop.Secret),
+    };
+
+    private void OpenShopMenu(ShopInfo shop) => OpenShopMenu(shop, _shopAt);
+
+    private void OpenShopMenu(ShopInfo shop, int at)
+    {
+        _shopAt = at;
+        var (name, goods) = ShopGoods(shop, at);
+        BeginTownMenu(() => OpenTownMenu(at));
+        _menu.Add((GoldLine(name), () => { }, default));
+        if (goods.Length > 0) _menu.Add(("사기", () => OpenBuy(shop, goods, 0), default));
         _menu.Add(("팔기", () => OpenSellWho(shop, 0), default));
-        _menu.Add(("돌아가기", OpenTownMenu, default));
+        _menu.Add(("돌아가기", () => OpenTownMenu(at), default));
         EndTownMenu(1);
     }
 
@@ -192,15 +241,115 @@ internal sealed partial class GameWindow
         EndTownMenu(1);
     }
 
+    // ── 주점 ───────────────────────────────────────────────────────────────
+
+    /// <summary>주점(sub_29300) — 원작 글 585 「도와드릴까요?」, 동료 보기(sub_29620) · 기록(sub_2968D) · 불러오기(sub_2986F) · 전장 이탈(글 415).</summary>
+    private void OpenTavern()
+    {
+        BeginTownMenu(() => OpenTownMenu(0));
+        _menu.Add((GoldLine("주점 — 도와드릴까요?"), () => { }, default));
+        _menu.Add(("동료 보기", () => OpenTavernView(0), default));
+        _menu.Add(("기록하기", OpenTavernSave, default));
+        _menu.Add(("불러오기", OpenTavernLoad, default));
+        _menu.Add(("전장 이탈", AskQuit, default));
+        _menu.Add(("돌아가기", () => OpenTownMenu(0), default));
+        EndTownMenu(1);
+    }
+
+    /// <summary>동료 보기 — 고른 사람의 레벨 · HP · MP · 셈한 능력 · 장비(원작 sub_17AED 상태 창 대신 알림 줄로).</summary>
+    private void OpenTavernView(int page)
+    {
+        if (_town is not { } t || _campaign is not { } c) return;
+        BeginTownMenu(OpenTavern);
+        _menu.Add(($"동료 {c.Party.Count}명 — 누구를 보나", () => { }, default));
+        foreach (int i in Enumerable.Range(0, c.Party.Count).Skip(page * TownPage).Take(TownPage))
+        {
+            var r = c.Party[i];
+            int name = HeroRecord.Id(r) + 1;
+            _menuGlyphs[_menu.Count] = name;
+            _menu.Add(($"Lv{Town.Level(r),-3} HP {HeroRecord.Hp(r),3}  ", () =>
+            {
+                var u = t.View(i);
+                var notes = new List<Notice>
+                {
+                    new($" Lv {u.Level}  경험 {u.Exp}{(Town.Down(r) ? "  (쓰러짐)" : "")}", name),
+                    new($"HP {u.Hp}/{u.MaxHp}  MP {u.Mp}/{u.MaxMp}  이동 {u.Move}"),
+                    new($"공격 {u.Atk}  방어 {u.Def}  명중 {u.Hit}  회피 {u.Evade}"),
+                };
+                foreach (var (item, on) in u.Bag) notes.Add(new Notice(on ? " (장비)" : "", 181 + item));
+                _menuGlyphs.Clear();
+                ShowNotices(notes, () => OpenTavernView(page));
+            }, default));
+        }
+        AddPager(c.Party.Count, page, OpenTavernView);
+        _menu.Add(("돌아가기", OpenTavern, default));
+        EndTownMenu(1);
+    }
+
+    /// <summary>기록(sub_2968D) — 네 칸 가운데 하나에, 남긴 뒤 주점으로(원작 글 660 「저장완료」).</summary>
+    private void OpenTavernSave()
+    {
+        var save = SaveFile.Load(SavePath);
+        BeginTownMenu(OpenTavern);
+        _menu.Add(("어디에 기록하나", () => { }, default));
+        for (int k = 0; k < SaveFile.Slots; k++)
+        {
+            int slot = k;
+            _menu.Add(($"기록 {k + 1}: {SlotLabel(save, k)}", () => WriteSlot(slot, OpenTavern), default));
+        }
+        _menu.Add(("돌아가기", OpenTavern, default));
+        EndTownMenu(1);
+    }
+
+    /// <summary>불러오기(sub_2986F) — 마을 앞 기록만(아니면 원작 글 479 「상점내 불러오기 안 됨」), 불러온 마을로.</summary>
+    private void OpenTavernLoad()
+    {
+        var save = SaveFile.Load(SavePath);
+        BeginTownMenu(OpenTavern);
+        _menu.Add(("어느 기록을 부르나", () => { }, default));
+        for (int k = 0; k < SaveFile.Slots; k++)
+        {
+            int slot = k;
+            _menu.Add(($"기록 {k + 1}: {SlotLabel(save, k)}", () =>
+            {
+                if (save.ReadSlot(slot) is not { } loaded || loaded.NextScene >= _sceneCount) { PlaySfx(Sound.UiBank, 7); return; }
+                if (_tables?.HasTown(loaded.NextScene) != true) { PlaySfx(Sound.UiBank, 7); TownBanner("마을 안에서는 불러올 수 없는 기록입니다", OpenTavernLoad); return; }
+                _campaign = loaded;
+                _battle.Gold = loaded.Gold;
+                _townSecret = false;
+                _shopAt = 1;
+                PlaySfx(Sound.UiBank, 5);
+                TownBanner($"기록 {slot + 1} 을 불러왔습니다", () => OpenTownMenu(0));
+            }, default));
+        }
+        _menu.Add(("돌아가기", OpenTavern, default));
+        EndTownMenu(1);
+    }
+
+    /// <summary>전장 이탈(글 415 「전장이탈합니까?」 → 416 「그럼 쉬세요.」) — 타이틀로.</summary>
+    private void AskQuit()
+    {
+        BeginTownMenu(OpenTavern);
+        _menu.Add(("전장 이탈합니까?", () => { }, default));
+        _menu.Add(("예 — 타이틀로", () =>
+        {
+            _townBack = null;
+            _townTop = _townSecret = false;
+            TownBanner("그럼 쉬세요.", ToTitle);
+        }, default));
+        _menu.Add(("아니오", OpenTavern, default));
+        EndTownMenu(2);
+    }
+
     // ── 교회 ───────────────────────────────────────────────────────────────
 
     private void OpenChurchMenu()
     {
-        BeginTownMenu(OpenTownMenu);
+        BeginTownMenu(() => OpenTownMenu(4));
         _menu.Add((GoldLine("교회"), () => { }, default));
         _menu.Add(("부활 — 쓰러진 동료", () => OpenRevive(0), default));
         _menu.Add(("전직 — Lv 20 이상", () => OpenClassChange(0), default));
-        _menu.Add(("돌아가기", OpenTownMenu, default));
+        _menu.Add(("돌아가기", () => OpenTownMenu(4), default));
         EndTownMenu(1);
     }
 
