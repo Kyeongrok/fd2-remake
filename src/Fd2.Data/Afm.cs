@@ -5,7 +5,8 @@ namespace Fd2.Data;
 /// 이어서 컷마다 u16 크기 · u16 명령 수 · 4바이트 예비 · 명령들. 320x200 한 장과 VGA 팔레트를 명령으로 고쳐 나간다.
 /// </summary>
 /// <remarks>
-/// 명령: 0 팔레트를 한 값으로, 1 팔레트 768, 2 팔레트 RLE, 4 화면을 한 값으로, 5 화면 64000, 6 화면 RLE,
+/// 명령: 0 팔레트를 한 값으로, 1 팔레트 768, 2 팔레트 RLE, 3 팔레트 일부(u8 무리 수, 무리마다 u8 시작 색 · u8 색 수 · 3×색 수 바이트),
+/// 4 화면을 한 값으로, 5 화면 64000, 6 화면 RLE,
 /// 7 점들(u16 개수, [u16 자리, 색]…), 8 줄 칠하기([u16 자리, 길이, 색]…), 9 줄 복사([u16 자리, 길이, 바이트들]…).
 /// RLE 는 <c>11nnnnnn</c> 이면 다음 바이트를 n 번, 아니면 그 바이트 하나(fd2_hermes 의 해독을 옮긴 것).
 /// </remarks>
@@ -22,7 +23,7 @@ public sealed class AfmPlayer
     public AfmPlayer(string dir)
     {
         _data = File.ReadAllBytes(Path.Combine(dir, "ANI.DAT"));
-        int n = (Dat.U32(_data, 6) - 6) / 4;
+        int n = (Dat.U32(_data, 6) - 6) / 4 - 1;   // 마지막 칸은 파일 끝 표시
         for (int i = 0; i < n; i++)
         {
             int o = Dat.U32(_data, 6 + 4 * i);
@@ -77,6 +78,20 @@ public sealed class AfmPlayer
                 case 0x02:
                     p = Unrle(p, end, _pal);
                     break;
+                case 0x03:
+                {
+                    // 자료에서는 안 쓰지만 원본 명령 표(0x5276A)에 있다
+                    int groups = _data[p++];
+                    for (int g = 0; g < groups && p + 2 <= end; g++)
+                    {
+                        int first = _data[p], count = _data[p + 1];
+                        p += 2;
+                        int k = Math.Max(0, Math.Min(Math.Min(3 * count, _pal.Length - 3 * first), end - p));
+                        _data.AsSpan(p, k).CopyTo(_pal.AsSpan(3 * first));
+                        p += 3 * count;
+                    }
+                    break;
+                }
                 case 0x04:
                     Array.Fill(_px, _data[p++]);
                     break;

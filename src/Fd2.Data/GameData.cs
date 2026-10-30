@@ -6,8 +6,8 @@ namespace Fd2.Data;
 /// 용의기사2(FD2) 자료 파일 읽개. 설치 폴더의 파일을 그 자리에서 읽는다.
 /// </summary>
 /// <remarks>
-/// <para><c>*.DAT</c> 는 모두 <c>"LLLLLL"</c> + u32 오프셋 표. 첫 오프셋이 곧 표의 끝이라
-/// 항목 수는 <c>(off[0] - 6) / 4</c>, i 번째 항목은 <c>off[i]..off[i+1]</c>.</para>
+/// <para><c>*.DAT</c> 는 모두 <c>"LLLLLL"</c> + u32 오프셋 표. 첫 오프셋이 곧 표의 끝이라 칸 수는 <c>(off[0] - 6) / 4</c>,
+/// 마지막 칸은 파일 길이(끝 표시)라 항목 수는 그보다 하나 적다. i 번째 항목은 <c>off[i]..off[i+1]</c>.</para>
 /// <para>장면 n 은 FDFIELD 3n(지도) · 3n+1(장면 정보·유닛 표) · 3n+2(좌표),
 /// 타일은 FDSHAP 2t(그림) · 2t+1(타일 속성, 4바이트씩). t 는 장면 정보 첫 바이트.</para>
 /// </remarks>
@@ -26,13 +26,14 @@ public static class Dat
         return data;
     }
 
+    /// <summary>항목 수 — 오프셋 칸 수에서 끝 표시 칸 하나를 뺀다(원본 읽개 sub_111BA 는 표 크기를 보지 않는다).</summary>
     public static int Count(string path)
     {
         using var fs = File.OpenRead(path);
         Span<byte> four = stackalloc byte[4];
         fs.Seek(6, SeekOrigin.Begin);
         fs.ReadExactly(four);
-        return ((int)BinaryPrimitives.ReadUInt32LittleEndian(four) - 6) / 4;
+        return ((int)BinaryPrimitives.ReadUInt32LittleEndian(four) - 6) / 4 - 1;
     }
 
     public static ushort U16(byte[] d, int at) => BinaryPrimitives.ReadUInt16LittleEndian(d.AsSpan(at));
@@ -238,8 +239,8 @@ public sealed class Scene
             int icon = info[u + 1];
             Roster.Add(new RosterEntry(info[u], icon, Math.Max(1, (int)info[u + 4]), info[u + 21], pos[2 + 6 * i], pos[4 + 6 * i]));
         }
-        foreach (var e in Roster.Where(e => e.Phase == 0)) Spawn(e);
 
+        // 원본(sub_1088D → sub_10C50)처럼 우리 편 출전자를 먼저(배열 번호 0 ~ P-1) 세우고, 그다음 유닛 표의 처음부터 나와 있는 줄.
         // 우리 편 그림은 원본에서는 저장 자료가 정한다 — 여기서는 PartyOrder 차례로, 이 장면에서 나중에 합류하는 아군(편 2)은 건너뛴다.
         var joiners = Roster.Where(e => e.Type == 2).Select(e => e.Icon).ToHashSet();
         var party = PartyOrder.Concat(Enumerable.Range(0, CharacterNames.Heroes)).Distinct().Where(i => !joiners.Contains(i) && i < icons.Characters).ToList();
@@ -249,13 +250,14 @@ public sealed class Scene
             if (p + 3 > pos.Length) break;
             Place(new Unit { Icon = party[k], Side = Side.Player, Facing = Dir.Up }, pos[p], pos[p + 2]);
         }
+        foreach (var e in Roster.Where(e => e.Phase == 0)) Spawn(e);
     }
 
     /// <summary>
-    /// 우리 편 자리를 채우는 차례 — 1장 대사에 나오는 사울 · 아래스 · 유니, 그다음 마린(회복) …
-    /// 원본은 저장 자료가 정하므로 넷째부터는 정한 것이다.
+    /// 우리 편 자리를 채우는 차례 — 프롤로그 끝에 원본(sub_3231B)이 넣는 사울(0) · 유니(9) · 아래스(4) · 카일(30), 그다음 마린(회복) …
+    /// 원본은 저장 자료(합류 차례)가 정하므로 다섯째부터는 정한 것이다.
     /// </summary>
-    public static readonly int[] PartyOrder = [0, 4, 9, 10, 2, 5, 6, 7, 8, 11];
+    public static readonly int[] PartyOrder = [0, 9, 4, 30, 10, 2, 5, 6, 7, 8, 11];
 
     /// <summary>
     /// 유닛 표의 한 줄을 지도에 세운다 — 편 2 는 합류하는 우리 편, 편 1 은 컴퓨터가 움직이는 우리 편, 편 0 은 적.
@@ -309,8 +311,14 @@ public sealed class Scene
 
     public uint[] TileAt(int x, int y) => _tiles[Math.Min(_cells[y * Width + x], _tiles.Length - 1)];
 
-    /// <summary>타일 속성 둘째 바이트: 1 못 감(물·집·통나무), 2 숲.</summary>
-    public bool Walkable(int x, int y) => Inside(x, y) && _attr[4 * _cells[y * Width + x] + 1] != 1;
+    /// <summary>
+    /// 걸어서 갈 수 있나 — 타일 속성 둘째 바이트(지형 종류 0~5)가 1(날아서만 — 물 · 집 · 바위) · 5(아무도 못 감)가 아닌 칸.
+    /// 전투의 이동은 직업별 이동비 표를 쓴다(Battle).
+    /// </summary>
+    public bool Walkable(int x, int y) => Inside(x, y) && Ground(x, y) is not (1 or 5);
+
+    /// <summary>지형 종류 — 타일 속성 둘째 바이트: 0 평지 · 1 날아서만 · 2 숲 · 3 깊은 숲 · 4 물 · 늪 · 5 못 감(이름은 그림을 보고 붙인 짐작).</summary>
+    public int Ground(int x, int y) => Inside(x, y) ? _attr[4 * _cells[y * Width + x] + 1] : 1;
 
     public Unit? UnitAt(int x, int y) => Units.Find(u => u.X == x && u.Y == y && u.Alive);
 

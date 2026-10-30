@@ -5,7 +5,7 @@ namespace Fd2.Data;
 /// 글자 번호는 원본 글꼴(FDOTHER 4번, 16x16 한 비트 그림, 글자당 32바이트)의 차례 — 한글판은 한글 글자가 들어 있다.
 /// </summary>
 /// <remarks>
-/// 제어 번호: 0xFFEE 다음 값 = 말하는 사람(그림 번호, 왼쪽), 0xFFEF 다음 값 = 말하는 사람(오른쪽),
+/// 제어 번호: 0xFFEE 다음 값 = 말하는 사람(캐릭터 번호 — 원본 판에서는 그림 번호와 같다, 왼쪽), 0xFFEF 다음 값 = 말하는 사람(오른쪽),
 /// 0xFFEC · 0xFFED 다음 값 = 말하는 사람을 장면 유닛 표(FDFIELD 3n+1)의 차례 번호로(왼쪽 · 오른쪽) — 해적 · 왕 · 프롤로그의 사울처럼
 /// 우리 편 자리가 아닌 사람. 0xFFFE 줄 바꿈, 0xFFFD 쪽 넘김, 0xFFFF 끝.
 /// 0x9E 는 빈칸. 이 뜻은 1장 대사를 그려 맞춰 본 것이다.
@@ -96,7 +96,10 @@ public sealed class Font16
     }
 }
 
-/// <summary>얼굴 그림 — DATO.DAT 의 그림 번호 항목. 앞에 u32 오프셋들(첫 값 = 표 크기), 장마다 u16 너비 · 높이 · RLE(11nnnnnn 이면 다음 바이트 n 번).</summary>
+/// <summary>
+/// 얼굴 그림 — DATO.DAT 의 그림 번호 항목. 앞에 u32 오프셋들(첫 값 = 표 크기), 장마다 u16 너비 · 높이 · PCX 꼴 RLE
+/// (원본 sub_4EC66: 0xC0 보다 크면 다음 바이트를 (b − 0xC0) 번, 0xC0 까지는 그 색 한 점 — 되풀이는 줄 끝을 넘어 이어진다).
+/// </summary>
 public static class Portrait
 {
     public static List<(uint[] Px, int W, int H)> Load(string dir, int icon, uint[] pal)
@@ -117,9 +120,9 @@ public static class Portrait
             while (d < px.Length && p < e.Length)
             {
                 byte b = e[p++];
-                if ((b & 0xC0) == 0xC0)
+                if (b > 0xC0)
                 {
-                    int run = b & 0x3F;
+                    int run = b - 0xC0;
                     uint c = p < e.Length ? pal[e[p++]] : 0;
                     for (int k = 0; k < run && d < px.Length; k++) px[d++] = c;
                 }

@@ -197,7 +197,7 @@ public partial class MainWindow : Window
         }
         FrameSlider.Maximum = _motion.Frames.Count - 1;
         MotionStrip.ItemsSource = _motion.Frames
-            .Select((f, i) => new FrameItem(i, $"{i + 1}  ({f.Hold}틱{(f.Hit != 0 ? " · 타격" : "")})", Compose(i, onion: false, box: false), 0))
+            .Select((f, i) => new FrameItem(i, $"{i + 1}  ({f.Hold}틱{(f.Hit != 0 ? " · 맞음" : "")})", Compose(i, onion: false, box: false), 0))
             .ToList();
         ShowFrame();
     }
@@ -209,7 +209,7 @@ public partial class MainWindow : Window
         MotionImage.Source = Compose(_frame, Onion.IsChecked == true, ShowBox.IsChecked == true);
         if ((int)FrameSlider.Value != _frame) FrameSlider.Value = _frame;
         FrameInfo.Text = $"컷 {_frame + 1}/{_motion.Frames.Count}   자리 ({f.X},{f.Y})   크기 {f.Width}×{f.Height}   " +
-                         $"붙드는 틱 {f.Hold}   타격 {f.Hit}   효과음 {f.Sound}   (모션 머리 [4] = {_motion.HitFrame})";
+                         $"붙드는 틱 {f.Hold}   맞음 {f.Hit}   효과음 {f.Sound}   (모션 머리 [4] 소리 묶음 = {_motion.SoundBank})";
     }
 
     /// <summary>320x200 전투 화면에 컷을 제자리에 놓는다. onion 이면 앞 컷을 흐리게 밑에 깐다.</summary>

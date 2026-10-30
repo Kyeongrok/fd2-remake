@@ -90,7 +90,7 @@ public static class GameVersions
 
     private static List<ReadOnlyMemory<byte>> Entries(byte[] d)
     {
-        int n = (Dat.U32(d, 6) - 6) / 4;
+        int n = (Dat.U32(d, 6) - 6) / 4 - 1;   // 마지막 칸은 파일 끝 표시
         var list = new List<ReadOnlyMemory<byte>>(n);
         for (int i = 0; i < n; i++)
         {
