@@ -215,10 +215,10 @@ internal sealed partial class GameWindow
     }
 
     /// <summary>타이틀 메뉴에 「편집기 열기」를 보이나 — 윈도우는 편집기가 함께 온다.</summary>
-    private const bool HasEditor = true;
+    private static readonly bool HasEditor = true;
 
     /// <summary>안내 글을 터치 기준으로 쓰나 — 윈도우는 키보드 · 마우스.</summary>
-    private const bool TouchUi = false;
+    private static readonly bool TouchUi = false;
 
     /// <summary>도구 > 편집기 열기 — 같은 폴더의 Fd2.Editor.exe 를 게임 폴더를 주어 띄운다.</summary>
     private partial void OpenEditor()

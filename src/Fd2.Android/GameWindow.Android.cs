@@ -5,10 +5,10 @@ namespace Fd2;
 /// </summary>
 internal sealed partial class GameWindow
 {
-    private const bool HasEditor = false;
+    private static readonly bool HasEditor = false;
 
     /// <summary>안내 글을 터치 기준으로.</summary>
-    private const bool TouchUi = true;
+    private static readonly bool TouchUi = true;
 
     partial void PlatformInit() => _cpuMap = true;
 
