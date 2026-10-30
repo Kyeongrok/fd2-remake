@@ -56,8 +56,8 @@ public static class GameVersions
         var result = new List<FileDiff>();
         foreach (var f in a.Union(b, StringComparer.OrdinalIgnoreCase).OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
         {
-            if (!a.Contains(f)) { result.Add(new(f, "비교 판에만", [])); continue; }
-            if (!b.Contains(f)) { result.Add(new(f, "기준 판에만", [])); continue; }
+            if (!a.Contains(f)) { result.Add(new(f, "비교 버전에만", [])); continue; }
+            if (!b.Contains(f)) { result.Add(new(f, "기준 버전에만", [])); continue; }
             var pa = Path.Combine(baseDir, f);
             var pb = Path.Combine(otherDir, f);
             if (new FileInfo(pa).Length == new FileInfo(pb).Length && Hash(pa) == Hash(pb)) { result.Add(new(f, "같음", [])); continue; }

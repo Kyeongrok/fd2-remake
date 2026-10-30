@@ -90,7 +90,7 @@ public partial class MainWindow : Window
             item.Click += (_, _) => Open(v.Dir);
             VersionMenu.Items.Add(item);
         }
-        if (VersionMenu.Items.Count == 0) VersionMenu.Items.Add(new MenuItem { Header = "(찾은 판이 없습니다)", IsEnabled = false });
+        if (VersionMenu.Items.Count == 0) VersionMenu.Items.Add(new MenuItem { Header = "(찾은 버전이 없습니다)", IsEnabled = false });
     }
 
     private void FillVersionBoxes()
@@ -105,7 +105,7 @@ public partial class MainWindow : Window
 
     private void OnAddVersion(object sender, RoutedEventArgs e)
     {
-        var dlg = new OpenFolderDialog { Title = "판 폴더(FDFIELD.DAT 가 있는 곳)" };
+        var dlg = new OpenFolderDialog { Title = "버전 폴더(FDFIELD.DAT 가 있는 곳)" };
         if (dlg.ShowDialog(this) != true) return;
         if (GameFolder.Missing(dlg.FolderName) is { } f) { Status.Text = $"{dlg.FolderName} 에 {f} 가 없습니다."; return; }
         _extraVersions.Add(dlg.FolderName);
@@ -122,7 +122,15 @@ public partial class MainWindow : Window
                 d.ChangedEntries.Count == 0 ? "" : $"{d.ChangedEntries.Count}개: " + string.Join(", ", d.ChangedEntries.Take(40)) + (d.ChangedEntries.Count > 40 ? " …" : "")))
             .ToList();
         DiffGrid.ItemsSource = rows;
-        Status.Text = $"다른 파일 {rows.Count}개 — 「비교 판 것」을 체크하고 합치면, 기준 판에 그 파일만 바꿔 넣은 새 폴더를 만듭니다.";
+        Status.Text = $"다른 파일 {rows.Count}개 — 「비교 버전 것」을 체크하고 합치면, 기준 버전에 그 파일만 바꿔 넣은 새 폴더를 만듭니다.";
+    }
+
+    /// <summary>고른 파일의 상세 — 모션은 컷마다, FD2.EXE 는 수치 표 칸마다(<see cref="VersionDetail"/>).</summary>
+    private void OnDiffSelected(object sender, SelectionChangedEventArgs e)
+    {
+        if (DiffGrid.SelectedItem is not DiffRow row || BaseVersion.SelectedItem is not VersionItem a || OtherVersion.SelectedItem is not VersionItem b) return;
+        DiffDetail.Text = $"{row.File} — {a.Label} → {b.Label}\n\n" + string.Join("\n", VersionDetail.Describe(a.Dir, b.Dir, row.File));
+        DiffDetail.ScrollToHome();
     }
 
     private void OnMerge(object sender, RoutedEventArgs e)
@@ -135,7 +143,7 @@ public partial class MainWindow : Window
             GameVersions.Merge(a.Dir, picks, target);
             _extraVersions.Add(target);
             FillVersionBoxes();
-            Status.Text = $"합쳤습니다 — {target} (비교 판 것 {picks.Count}개). 게임의 게임 > 판 고르기에서 고르실 수 있습니다.";
+            Status.Text = $"합쳤습니다 — {target} (비교 버전 것 {picks.Count}개). 게임의 게임 > 버전 고르기에서 고르실 수 있습니다.";
         }
         catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException) { Status.Text = $"못 합쳤습니다: {ex.Message}"; }
     }

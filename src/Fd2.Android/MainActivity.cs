@@ -58,8 +58,8 @@ public class MainActivity : Activity
         if (Directory.Exists(VersionsDir))
             foreach (var d in Directory.GetDirectories(VersionsDir).OrderBy(d => d))
                 if (GameFolder.Missing(d) == null) list.Add((System.IO.Path.GetFileName(d), d));
-        if (GameFolder.Missing(GameDir) == null) list.Add(("처음 가져온 판", GameDir));
-        if (ExternalGameDir is { } ext && GameFolder.Missing(ext) == null) list.Add(("USB 로 넣은 판", ext));
+        if (GameFolder.Missing(GameDir) == null) list.Add(("처음 가져온 버전", GameDir));
+        if (ExternalGameDir is { } ext && GameFolder.Missing(ext) == null) list.Add(("USB 로 넣은 버전", ext));
         return list;
     }
 
@@ -107,7 +107,7 @@ public class MainActivity : Activity
                 else
                 {
                     try { Directory.Delete(target, recursive: true); } catch (IOException) { }
-                    _message!.Text = result + "\n빠진 파일이 있어 판으로 쓸 수 없습니다 — 다른 폴더를 골라 주세요.";
+                    _message!.Text = result + "\n빠진 파일이 있어 버전으로 쓸 수 없습니다 — 다른 폴더를 골라 주세요.";
                 }
             });
         });
@@ -116,8 +116,8 @@ public class MainActivity : Activity
     /// <summary>새 판 폴더 이름 — 고른 폴더 이름(겹치면 뒤에 (2) …).</summary>
     private string NewVersionDir(Android.Net.Uri tree)
     {
-        string id = DocumentsContract.GetTreeDocumentId(tree) ?? "판";
-        string name = id.Split(':', '/').LastOrDefault(p => p.Length > 0) ?? "판";
+        string id = DocumentsContract.GetTreeDocumentId(tree) ?? "버전";
+        string name = id.Split(':', '/').LastOrDefault(p => p.Length > 0) ?? "버전";
         foreach (char c in System.IO.Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
         string dir = System.IO.Path.Combine(VersionsDir, name);
         for (int k = 2; Directory.Exists(dir); k++) dir = System.IO.Path.Combine(VersionsDir, $"{name} ({k})");

@@ -23,7 +23,7 @@
         <Menu DockPanel.Dock="Top">
             <MenuItem Header="파일(_F)">
                 <MenuItem Header="게임 폴더 열기(_O)..." Click="OnOpenFolder" />
-                <MenuItem x:Name="VersionMenu" Header="판 고르기(_V)" SubmenuOpened="OnVersionMenuOpened">
+                <MenuItem x:Name="VersionMenu" Header="버전 고르기(_V)" SubmenuOpened="OnVersionMenuOpened">
                     <MenuItem Header="(찾는 중…)" IsEnabled="False" />
                 </MenuItem>
                 <Separator />
@@ -173,29 +173,39 @@
                 </DockPanel>
             </TabItem>
             <!-- 여러 판: 기준 판과 비교 판의 다른 파일 · DAT 안 바뀐 항목, 고른 파일만 비교 판 것으로 바꿔 새 폴더로 합치기 -->
-            <TabItem Header="판 비교 · 합치기">
+            <TabItem Header="버전 비교 · 합치기">
                 <DockPanel Margin="8">
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
-                        <TextBlock Text="기준 판" VerticalAlignment="Center" Margin="0,0,6,0" />
+                        <TextBlock Text="기준 버전" VerticalAlignment="Center" Margin="0,0,6,0" />
                         <ComboBox x:Name="BaseVersion" Width="320" DisplayMemberPath="Label" />
-                        <TextBlock Text="비교 판" VerticalAlignment="Center" Margin="16,0,6,0" />
+                        <TextBlock Text="비교 버전" VerticalAlignment="Center" Margin="16,0,6,0" />
                         <ComboBox x:Name="OtherVersion" Width="320" DisplayMemberPath="Label" />
                         <Button Content="비교" Click="OnCompare" Margin="12,0,0,0" Padding="14,2" />
-                        <Button Content="판 폴더 더하기..." Click="OnAddVersion" Margin="8,0,0,0" Padding="10,2" />
+                        <Button Content="버전 폴더 더하기..." Click="OnAddVersion" Margin="8,0,0,0" Padding="10,2" />
                     </StackPanel>
                     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
-                        <TextBlock Text="체크한 파일은 비교 판 것으로, 나머지는 기준 판 것으로 — 새 판 이름" VerticalAlignment="Center" Margin="0,0,6,0" />
+                        <TextBlock Text="체크한 파일은 비교 버전 것으로, 나머지는 기준 버전 것으로 — 새 버전 이름" VerticalAlignment="Center" Margin="0,0,6,0" />
                         <TextBox x:Name="MergeName" Width="220" Text="용의기사2 합본" VerticalContentAlignment="Center" />
                         <Button Content="합치기 (새 폴더로)" Click="OnMerge" Margin="8,0,0,0" Padding="14,2" />
                     </StackPanel>
-                    <DataGrid x:Name="DiffGrid" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column">
+                    <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="5" />
+                        <RowDefinition Height="2*" />
+                    </Grid.RowDefinitions>
+                    <DataGrid x:Name="DiffGrid" Grid.Row="0" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column" SelectionMode="Single" SelectionChanged="OnDiffSelected">
                         <DataGrid.Columns>
-                            <DataGridCheckBoxColumn Header="비교 판 것" Binding="{Binding UseOther, UpdateSourceTrigger=PropertyChanged}" />
+                            <DataGridCheckBoxColumn Header="비교 버전 것" Binding="{Binding UseOther, UpdateSourceTrigger=PropertyChanged}" />
                             <DataGridTextColumn Header="파일" Binding="{Binding File}" IsReadOnly="True" Width="140" />
                             <DataGridTextColumn Header="상태" Binding="{Binding Status}" IsReadOnly="True" Width="100" />
                             <DataGridTextColumn Header="바뀐 항목(DAT 안 번호)" Binding="{Binding Entries}" IsReadOnly="True" Width="*" />
                         </DataGrid.Columns>
                     </DataGrid>
+                    <GridSplitter Grid.Row="1" HorizontalAlignment="Stretch" Background="#DDD" />
+                    <TextBox x:Name="DiffDetail" Grid.Row="2" IsReadOnly="True" FontFamily="Consolas, 맑은 고딕" FontSize="13" TextWrapping="NoWrap"
+                             VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Text="위에서 파일을 고르면 무엇이 다른지 자세히 보입니다(모션은 컷마다, FD2.EXE 는 수치 표 칸마다)." />
+                    </Grid>
                 </DockPanel>
             </TabItem>
         </TabControl>

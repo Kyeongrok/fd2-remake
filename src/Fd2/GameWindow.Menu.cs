@@ -44,7 +44,7 @@ internal sealed partial class GameWindow
         Win32.AppendMenuW(game, Win32.MF_STRING, MenuBattle, "1장 전투 시작(&B)");
         Win32.AppendMenuW(game, Win32.MF_STRING, MenuBattleStop, "전투 그만두기(&Q)");
         Win32.AppendMenuW(game, Win32.MF_SEPARATOR, 0, null);
-        Win32.AppendMenuW(game, Win32.MF_STRING, MenuVersions, "판 고르기(&V)...");
+        Win32.AppendMenuW(game, Win32.MF_STRING, MenuVersions, "버전 고르기(&V)...");
         Win32.AppendMenuW(game, Win32.MF_SEPARATOR, 0, null);
         Win32.AppendMenuW(game, Win32.MF_STRING, MenuExit, "끝내기(&X)\tEsc");
         Win32.AppendMenuW(bar, Win32.MF_POPUP, (nuint)game, "게임(&G)");
@@ -218,7 +218,7 @@ internal sealed partial class GameWindow
             bool now = string.Equals(Path.GetFullPath(versions[i].Dir), Path.GetFullPath(_dir), StringComparison.OrdinalIgnoreCase);
             Win32.AppendMenuW(popup, Win32.MF_STRING | (now ? Win32.MF_CHECKED : 0), (nuint)(i + 1), $"{versions[i].Name}   —   {versions[i].Dir}");
         }
-        if (versions.Count == 0) Win32.AppendMenuW(popup, Win32.MF_STRING | Win32.MF_GRAYED, 0, "(찾은 판이 없습니다)");
+        if (versions.Count == 0) Win32.AppendMenuW(popup, Win32.MF_STRING | Win32.MF_GRAYED, 0, "(찾은 버전이 없습니다)");
         Win32.GetCursorPos(out var at);
         int pick = Win32.TrackPopupMenuEx(popup, Win32.TPM_RETURNCMD, at.X, at.Y, _hwnd, IntPtr.Zero);
         Win32.DestroyMenu(popup);

@@ -88,10 +88,10 @@ internal sealed partial class GameWindow
         if (!_versionsOpen) return;
         int fs = Math.Max(14, 7 * _zoom);
         var rows = _versions.Select(v => (Label: v.Name, Sub: v.Dir, Now: SameDir(v.Dir, _dir))).ToList();
-        if (CanAddVersion()) rows.Add(("+ 판 더하기 (게임 폴더 하나 더 가져오기)", "", false));
-        if (rows.Count == 0) rows.Add(("찾은 판이 없습니다", "", false));
+        if (CanAddVersion()) rows.Add(("+ 버전 더하기 (게임 폴더 하나 더 가져오기)", "", false));
+        if (rows.Count == 0) rows.Add(("찾은 버전이 없습니다", "", false));
 
-        var title = Text.Render("판 고르기 — 고르면 그 판으로 다시 켭니다 · Esc 닫기", fs, 0xFFFFE070);
+        var title = Text.Render("버전 고르기 — 고르면 그 버전으로 다시 켭니다 · Esc 닫기", fs, 0xFFFFE070);
         var imgs = rows.Select(r => (L: Text.Render(r.Now ? $"● {r.Label}" : r.Label, fs, r.Now ? 0xFF90E0FF : 0xFFFFFFFF),
                                      S: Text.Render(r.Sub, Math.Max(11, fs * 2 / 3), 0xFF9098A8, bold: false))).ToList();
         int rowH = imgs.Max(i => i.L.H + (i.S.W > 1 ? i.S.H : 0)) + 10;

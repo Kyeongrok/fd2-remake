@@ -46,7 +46,7 @@ internal sealed partial class GameWindow
         : [
         ("Start — 게임 시작", StartGame),
         .. ((_hasSaves ??= ContinueSlots().Count > 0) ? new (string, Action)[] { ("이어하기", () => { OpenContinue(); _titleIndex = 0; }) } : []),
-        ($"판: {VersionName}", OpenVersions),
+        ($"버전: {VersionName}", OpenVersions),
         .. (TouchUi ? new (string, Action)[] { ("단축키 · 패드 설정", () => { _keysOpen = true; _keysRow = 0; _keysCapture = -1; }) } : []),   // PC 는 창 메뉴 「설정」에
         ("끝내기", () => _running = false),
     ];
