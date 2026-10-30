@@ -122,6 +122,8 @@ internal sealed partial class GameWindow
     private void StartBattle(int scene)
     {
         LoadScene(scene, BattleParty);
+        _partyAtStart = _campaign?.Party.Select(r => (byte[])r.Clone()).ToList();   // 지면 되돌릴 동료 표(싸움 중 합류가 겹치지 않게)
+        Array.Clear(_flags);
         _battle.Turn = 0;
         _battle.Gold = _campaign?.Gold ?? 0;
         _outcome = 0;
@@ -292,7 +294,7 @@ internal sealed partial class GameWindow
     /// <summary>이기고 졌나 — 원작 판정(<see cref="Battle.Judge"/>: 기본은 적 전멸 = 이김, 사울 쓰러짐 = 짐, 판마다 덧붙인 조건).</summary>
     private bool CheckOver()
     {
-        if (_bs == BattleState.Over) return true;
+        if (_bs == BattleState.Over || _victoryRunning) return true;
         switch (_forcedOutcome != 0 ? _forcedOutcome : _battle.Judge())
         {
             case 1:
@@ -304,8 +306,10 @@ internal sealed partial class GameWindow
             case 2:
                 _bs = BattleState.Over;
                 int turns = Turn;
+                _victoryRunning = true;
                 RunVictory(() =>   // 승리 뒤 함수(대사 · 합류) 뒤 동료 표를 고친다
                 {
+                    _victoryRunning = false;
                     OnOutcome(2);
                     _bs = BattleState.Over;
                     _banner = $"승리! ({turns}턴) — 누르면 메뉴";
@@ -324,7 +328,11 @@ internal sealed partial class GameWindow
                 if ((_bannerLeft -= dt) <= 0) { var a = _afterBanner; _afterBanner = null; a?.Invoke(); }
                 break;
             case BattleState.Moving:
-                if (_actor is { Moving: false } m && m.Path.Count == 0) OpenMenu();
+                if (_actor is { Moving: false } m && m.Path.Count == 0)
+                {
+                    _bs = BattleState.None;   // 땅 칸 사건이 도는 동안 다시 들어오지 않게
+                    GroundCheck(m, () => { if (m.Hp > 0 && !CheckOver()) { _actor = m; OpenMenu(); } });   // 우리 편도 멈춘 칸의 사건(sub_18890 → sub_13A44)
+                }
                 break;
             case BattleState.CutIn:
                 CutInTick(dt);
@@ -963,6 +971,9 @@ internal sealed partial class GameWindow
         }
         _bs = BattleState.CutIn;
     }
+
+    /// <summary>승리 뒤 함수가 도는 중 — 그동안 다시 판정하지 않는다.</summary>
+    private bool _victoryRunning;
 
     /// <summary>지금 치기들이 지도 위 마법인가(전투 화면을 안 띄운다).</summary>
     private bool _strikeOnMap;

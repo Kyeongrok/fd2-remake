@@ -506,7 +506,7 @@ public sealed partial class Battle
     /// </summary>
     public int Judge()
     {
-        bool Dead(int slot) => Scene.Units.Any(u => u.Slot == slot && u.MaxHp > 0 && u.Hp <= 0);
+        bool Dead(int slot) => Scene.Units.Any(u => u.Slot == slot && u.MaxHp > 0 && u.Hp <= 0) || Scene.Hidden.Any(u => u.Slot == slot);
         bool AllDead(int from, int to) => Enumerable.Range(from, to - from + 1).All(Dead);
         bool AnyDead(params int[] slots) => slots.Any(Dead);
         int Base()

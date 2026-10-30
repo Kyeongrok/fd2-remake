@@ -352,6 +352,7 @@ public sealed class Scene
             Place(new Unit { Icon = CharacterNames.SpriteOf(form, _royalsMoved), Form = form, Id = id, Side = Side.Player, Facing = Dir.Up, Slot = _nextSlot++, Record = record },
                   pos[p], pos[p + 2]);
         }
+        _nextSlot = Math.Max(_nextSlot, players);   // 우리 자리는 비어도 0 ~ P-1 번을 차지한다 — 판정 · 대본이 유닛 표 사람을 P 부터의 번호로 본다
         foreach (var e in Roster.Where(e => e.Phase == 0)) Spawn(e);
     }
 
@@ -386,6 +387,9 @@ public sealed class Scene
         Units.AddRange(units);
         _nextSlot = slots;
     }
+
+    /// <summary>사건이 숨긴 사람(원작 +5 비트 0, sub_32975) — 지도에서 빠지지만 배열 번호 · 능력은 남아 setunit +5 = 0 으로 되선다. 판정에서는 쓰러진 것으로 본다.</summary>
+    public readonly List<Unit> Hidden = new();
 
     /// <summary>지금까지 쓴 배열 번호 수(원작 유닛 수 `n6_0`) — 못 세운 줄도 번호를 쓴다.</summary>
     public int SlotCount => _nextSlot;

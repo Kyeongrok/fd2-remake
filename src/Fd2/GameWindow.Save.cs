@@ -45,9 +45,17 @@ internal sealed partial class GameWindow
     }
 
     /// <summary>판정이 났다 — 이긴 장면이면 동료 표를 고치고 다음 장면으로 넘길 차례를 정한다.</summary>
+    /// <summary>싸움을 시작할 때의 동료 표 — 지면 이리로 되돌린다.</summary>
+    private List<byte[]>? _partyAtStart;
+
     private void OnOutcome(int outcome)
     {
         _outcome = outcome;
+        if (outcome == 1 && _campaign is { } lost && _partyAtStart != null)
+        {
+            lost.Party.Clear();
+            lost.Party.AddRange(_partyAtStart.Select(r => (byte[])r.Clone()));
+        }
         if (outcome != 2 || _campaign is not { } c) return;
         c.AfterVictory(_scene.Units);
         c.Gold = _battle.Gold;
@@ -166,6 +174,7 @@ internal sealed partial class GameWindow
         _continueOpen = false;
         _campaign = new Campaign { NextScene = b.Scene, Gold = b.Gold };
         _campaign.Party.AddRange(b.Party);
+        _partyAtStart = b.Party.Select(r => (byte[])r.Clone()).ToList();
         _screen = Screen.Game;
         LoadScene(b.Scene, new List<byte[]>());
         var units = b.Units.Select((r, i) => (r, i))

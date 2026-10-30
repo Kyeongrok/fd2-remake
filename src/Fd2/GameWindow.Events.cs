@@ -61,7 +61,7 @@ internal sealed partial class GameWindow
         int k = _scene.Mark(u.X, u.Y);
         if (k < 1 || (_scene.TileFlags(u.X, u.Y) & 0x60) != 0 || k > _scene.GroundEvents.Count || _groundFired.Contains(k)) { after(); return; }
         var (ev, team) = _scene.GroundEvents[k - 1];
-        if (u.Team != team) { after(); return; }
+        if (u.Team == 0 != (team == 0)) { after(); return; }   // 편 0 = 적이 밟을 때, 1 = 우리 쪽(우리 · 컴퓨터 아군 — 사건 안에서 arg0 으로 다시 가른다)
         _groundFired.Add(k);
         RunEvent(ev, after, u.Slot);
     }
@@ -156,13 +156,18 @@ internal sealed partial class GameWindow
                     Join(A(1));
                     break;
                 case "remove":
-                    if (BySlot(A(1)) is { } gone) _scene.Units.Remove(gone);
+                    if (BySlot(A(1)) is { } gone) { _scene.Units.Remove(gone); _scene.Hidden.Add(gone); }
                     break;
                 case "ally":
                     if (BySlot(A(1)) is { } ally) { ally.Side = Side.Player; ally.Ai = true; }
                     break;
+                case "setunit" when A(2) == 5:
+                    // +5 상태 비트 — 0 이면 숨긴 사람을 되세우고, 비트 0 이 켜지면 숨긴다
+                    if ((A(3) & 1) == 0 && _scene.Hidden.Find(u => u.Slot == A(1)) is { } back) { _scene.Hidden.Remove(back); if (back.Hp > 0) _scene.Units.Add(back); }
+                    else if ((A(3) & 1) != 0 && BySlot(A(1)) is { } hide) { _scene.Units.Remove(hide); _scene.Hidden.Add(hide); }
+                    break;
                 case "setunit":
-                    if (BySlot(A(1)) is { } su) SetUnitField(su, A(2), A(3));
+                    if (AnySlot(A(1)) is { } su) SetUnitField(su, A(2), A(3));
                     break;
                 case "arm":
                     if (A(1) < _scene.EventLines.Count) _scene.EventLines[A(1)].Turn = Turn + (op.GetArrayLength() > 2 ? A(2) : 1);
@@ -171,6 +176,14 @@ internal sealed partial class GameWindow
                 {
                     string raw = op.GetArrayLength() > 1 ? op[1].GetString() ?? "" : "";
                     if (EndingOp(raw, ops, next)) return;
+                    var cm = Regex.Match(raw, @"^(spawn|talk)\((.+)\)$");
+                    if (cm.Success && Eval(cm.Groups[2].Value) is { } cv)
+                    {
+                        if (cm.Groups[1].Value == "spawn") { SpawnPhase(cv); break; }
+                        _bs = BattleState.Talk;
+                        StartTalk(_scene.Index, [cv], Go);
+                        return;
+                    }
                     RawOp(raw);
                     break;
                 }
@@ -184,7 +197,7 @@ internal sealed partial class GameWindow
                     SetMusic(A(1));
                     break;
                 case "flag":
-                    _battle.OpenedChests.Add(A(1));
+                    SetFlag(A(1), 1);
                     break;
                 case "win":
                     _forcedOutcome = 2;
@@ -225,9 +238,63 @@ internal sealed partial class GameWindow
         }
     }
 
-    /// <summary>대본의 raw 가운데 옮길 수 있는 것 — ai(units a..b, m), warp(u,x,y), giveitem(i), killfrom(n). 그 밖(그림 · 팔레트 연출)은 넘긴다.</summary>
+    /// <summary>깃발 값(dword_53AD5[k], 0~255) — 상자 열림과 같은 자리다. 0 이 아니면 <see cref="Battle.OpenedChests"/> 에도 든다.</summary>
+    private readonly int[] _flags = new int[32];
+
+    private int Flag(int k) => k is >= 0 and < 32 ? Math.Max(_flags[k], _battle.OpenedChests.Contains(k) ? 1 : 0) : 0;
+
+    private void SetFlag(int k, int v)
+    {
+        if (k is < 0 or >= 32) return;
+        _flags[k] = v & 0xFF;
+        if (_flags[k] != 0) _battle.OpenedChests.Add(k); else _battle.OpenedChests.Remove(k);
+    }
+
+    /// <summary>대본의 셈(정수 · turn · arg0 · nunits · flag(k) · + − × · &gt;&gt; &lt;&lt; · 괄호) — 모르는 글이면 null.</summary>
+    private int? Eval(string text)
+    {
+        int i = 0;
+        string s = text.Replace(" ", "");
+        int? Expr()
+        {
+            var a = Term();
+            while (a != null && i < s.Length)
+            {
+                if (s[i] == '+') { i++; var b = Term(); a = b == null ? null : a + b; }
+                else if (s[i] == '*') { i++; var b = Term(); a = b == null ? null : a * b; }   // 왼쪽부터(대본의 식은 turn*2-27 꼴뿐)
+                else if (s[i] == '-') { i++; var b = Term(); a = b == null ? null : a - b; }
+                else if (i + 1 < s.Length && s[i] == '>' && s[i + 1] == '>') { i += 2; var b = Term(); a = b == null ? null : a >> b; }
+                else if (i + 1 < s.Length && s[i] == '<' && s[i + 1] == '<') { i += 2; var b = Term(); a = b == null ? null : a << b; }
+                else break;
+            }
+            return a;
+        }
+        int? Term()
+        {
+            if (i >= s.Length) return null;
+            if (s[i] == '(') { i++; var v = Expr(); if (i < s.Length && s[i] == ')') i++; return v; }
+            int st = i;
+            while (i < s.Length && char.IsDigit(s[i])) i++;
+            if (i > st) return int.Parse(s[st..i]);
+            if (s.AsSpan(i).StartsWith("turn")) { i += 4; return Turn; }
+            if (s.AsSpan(i).StartsWith("arg0")) { i += 4; return _eventArg; }
+            if (s.AsSpan(i).StartsWith("nunits")) { i += 6; return _scene.SlotCount; }   // 유닛 수(n6_0)
+            if (s.AsSpan(i).StartsWith("flag(")) { i += 5; var k = Expr(); if (i < s.Length && s[i] == ')') i++; return k == null ? null : Flag(k.Value); }
+            return null;
+        }
+        var r = Expr();
+        return i == s.Length ? r : null;
+    }
+
+    /// <summary>대본의 raw 가운데 옮길 수 있는 것 — ai(units a..b, m), warp(u,x,y), giveitem(i), killfrom(n), flag[k]=식. 그 밖(그림 · 팔레트 연출)은 넘긴다.</summary>
     private void RawOp(string text)
     {
+        var fm = Regex.Match(text, @"^flag\[(\d+)\]=(.+)$");
+        if (fm.Success)
+        {
+            if (Eval(fm.Groups[2].Value) is { } fv) SetFlag(int.Parse(fm.Groups[1].Value), fv);
+            return;
+        }
         var m = Regex.Match(text, @"^ai\(units (\d+)\.\.(\d+), *(\d+)\)");
         if (m.Success)
         {
@@ -255,10 +322,14 @@ internal sealed partial class GameWindow
         m = Regex.Match(text, @"^killfrom\((\d+)\)");
         if (m.Success)
         {
+            // sub_35F10 — n 번부터 끝까지 HP 0(쓰러진 것으로 — 판정이 그 번호를 본다), 떨굼은 없다
             int n = int.Parse(m.Groups[1].Value);
-            _scene.Units.RemoveAll(u => u.Slot >= n);
+            foreach (var u in _scene.Units.Where(u => u.Slot >= n)) { u.Hp = 0; u.DropKind = 255; }
         }
     }
+
+    /// <summary>배열 번호 slot 의 사람 — 숨긴 사람까지.</summary>
+    private Unit? AnySlot(int slot) => BySlot(slot) ?? _scene.Hidden.Find(u => u.Slot == slot);
 
     private Unit? BySlot(int slot) => _scene.Units.Find(u => u.Slot == slot && u.Alive);
 
@@ -335,7 +406,7 @@ internal sealed partial class GameWindow
             case "anyalive": return Slots().Any(i => BySlot(i) != null);
             case "anydead": return Slots().Any(i => BySlot(i) == null);
             case "deadcount": return Cmp(Slots().Count(i => BySlot(i) == null));
-            case "flag": return hasCmp ? Cmp(_battle.OpenedChests.Contains(Arg(args)) ? 1 : 0) : _battle.OpenedChests.Contains(Arg(args));
+            case "flag": return hasCmp ? Cmp(Flag(Arg(args))) : Flag(Arg(args)) != 0;
             case "turn": return Cmp(Turn);
             case "arg0": return Cmp(_eventArg);
             case "inparty": return _campaign?.Party.Any(r => HeroRecord.Id(r) == Arg(args)) == true || Team2().Any(u => u.NameId == Arg(args));
@@ -351,11 +422,11 @@ internal sealed partial class GameWindow
             case "unit":
             {
                 if (!m.Groups[3].Success) return false;
-                var u = BySlot(Arg(args));
+                var u = AnySlot(Arg(args));
                 int off = int.Parse(m.Groups[3].Value);
                 int v = u == null ? (off == 5 ? 1 : 0) : off switch
                 {
-                    0 => u.X, 1 => u.Y, 3 => (int)u.Facing, 5 => 0, 6 => u.Team, 7 => u.FormId, 8 => u.NameId, 33 => u.Level,
+                    0 => u.X, 1 => u.Y, 3 => (int)u.Facing, 5 => _scene.Hidden.Contains(u) || u.Hp <= 0 ? 1 : 0, 6 => u.Team, 7 => u.FormId, 8 => u.NameId, 33 => u.Level,
                     52 => u.AiByte, 53 => u.AiX, 54 => u.AiY, 61 => u.Chest, 64 => u.Hp, 66 => u.MaxHp, 68 => u.Mp, 70 => u.MaxMp, _ => 0,
                 };
                 return Cmp(v);
