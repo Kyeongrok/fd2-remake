@@ -58,7 +58,37 @@ internal sealed partial class GameWindow
         after?.Invoke();
     }
 
-    private int PageChars(Dialogue.Page p) => p.Lines.Sum(l => l.Count);
+    private int PageChars(Dialogue.Page p) => p.Text?.Length ?? p.Lines.Sum(l => l.Count);
+
+    private readonly Dictionary<(string, int, int), List<string>> _wrapped = new();
+
+    /// <summary>보통 글을 폭 width 에 맞게 줄로 — 띄어쓰기에서 끊고, 한 낱말이 넘치면 글자에서.</summary>
+    private List<string> Wrap(string text, int size, int width)
+    {
+        if (_wrapped.TryGetValue((text, size, width), out var lines)) return lines;
+        lines = new List<string>();
+        foreach (var para in text.Split('\n'))
+        {
+            string line = "";
+            foreach (var word in para.Split(' '))
+            {
+                string next = line.Length == 0 ? word : line + " " + word;
+                if (Text.Render(next, size, 0xFFFFFFFF).W <= width) { line = next; continue; }
+                if (line.Length > 0) lines.Add(line);
+                line = word;
+                while (line.Length > 1 && Text.Render(line, size, 0xFFFFFFFF).W > width)
+                {
+                    int n = line.Length - 1;
+                    while (n > 1 && Text.Render(line[..n], size, 0xFFFFFFFF).W > width) n--;
+                    lines.Add(line[..n]);
+                    line = line[n..];
+                }
+            }
+            lines.Add(line);
+        }
+        if (_wrapped.Count > 500) _wrapped.Clear();
+        return _wrapped[(text, size, width)] = lines;
+    }
 
     private void TalkTick(double dt)
     {
@@ -95,10 +125,19 @@ internal sealed partial class GameWindow
 
         int boxW = Math.Min(_clientW - 40, Math.Max(faceW + glyph * 16 + 80, _clientW * 2 / 3));
         int boxH = Math.Max(faceH + 40, lineH * 3 + 70);
+
+        // 보통 글(프롤로그) — 얼굴 옆 남는 폭에 맞춰 줄을 나누고, 줄이 많으면 창을 키운다
+        int textSize = Math.Max(14, glyph * 5 / 8), textLineH = textSize * 3 / 2;
+        List<string>? textLines = null;
+        if (page.Text != null)
+        {
+            textLines = Wrap(page.Text, textSize, boxW - faceW - 24 * 3);
+            boxH = Math.Max(boxH, textLines.Count * textLineH + textSize * 2 + 50);
+        }
         // 일행이 화면 아래쪽에 있으면 창을 위로 — 말하는 사람들을 가리지 않게
         var party = _scene.Units.Where(u => u.Side == Side.Player && u.Alive).ToList();
         double partyY = party.Count == 0 ? 0 : party.Average(u => _offY + (u.DrawY * T - _camY) * _zoom);
-        int bx = (_clientW - boxW) / 2, by = partyY > _clientH / 2 ? 64 : _clientH - boxH - 24;
+        int bx = (_clientW - boxW) / 2, by = _screen != Screen.Prologue && partyY > _clientH / 2 ? 64 : _clientH - boxH - 24;
         FillRect(bx, by, boxW, boxH, 0xE0101828);
         FillRect(bx, by, boxW, 3, 0xFF8090C0);
         FillRect(bx, by + boxH - 3, boxW, 3, 0xFF8090C0);
@@ -114,7 +153,7 @@ internal sealed partial class GameWindow
         }
 
         // 이름 — 「사울-검사」에서 직업을 떼고
-        string name = page.Speaker >= 0 ? CharacterNames.Of(page.Speaker).Split('-')[0] : "";
+        string name = page.Name ?? (page.Speaker >= 0 ? CharacterNames.Of(page.Speaker).Split('-')[0] : "");
         int ty = by + 16;
         if (name.Length > 0)
         {
@@ -124,6 +163,15 @@ internal sealed partial class GameWindow
         }
 
         int left = (int)_talkShown;
+        foreach (var line in textLines ?? [])
+        {
+            if (left <= 0) break;
+            var img = Text.Render(left >= line.Length ? line : line[..left], textSize, 0xFFFFFFFF, bold: false);
+            DrawText(img, textX, ty);
+            left -= line.Length + 1;   // 줄 사이의 띄어쓰기 한 칸
+            ty += textLineH;
+        }
+        if (textLines != null) left = 0;
         foreach (var line in page.Lines)
         {
             int x = textX;

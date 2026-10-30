@@ -130,6 +130,7 @@ internal sealed partial class GameWindow
         _mouseMoved = true;
         if (_keysOpen || _helpOpen) { KeysWindowKey(Win32.VK_ESCAPE); return; }
         if (VersionsClick(x, y)) return;
+        if (_screen == Screen.Prologue) { TalkNext(); return; }
         if (_screen != Screen.Game) { TitleClick(_mouseX, _mouseY); return; }
         if (Talking) { TalkNext(); return; }
         MouseToCursor();
@@ -169,6 +170,11 @@ internal sealed partial class GameWindow
         if (vk == Win32.VK_F11) { ToggleFullscreen(); return; }
         if (KeysWindowKey(vk)) return;
         if (VersionsKey(vk)) return;
+        if (_screen == Screen.Prologue)
+        {
+            TalkKey(vk);   // Enter · Space 다음, Esc 프롤로그 건너뛰기
+            return;
+        }
         if (_screen != Screen.Game)
         {
             // 패드 · 바꾼 키로도 메뉴를 고를 수 있게 커서 키는 방향키로
@@ -260,6 +266,7 @@ internal sealed partial class GameWindow
     {
         _time += dt;
         PlatformTick();
+        if (_screen == Screen.Prologue) { TalkTick(dt); return; }
         if (_screen != Screen.Game)
         {
             TitleTick(dt);
@@ -336,6 +343,12 @@ internal sealed partial class GameWindow
     private void Compose()
     {
         Array.Clear(_fb);
+        if (_screen == Screen.Prologue)
+        {
+            DrawPrologue();
+            DrawKeysWindow();
+            return;
+        }
         if (_screen != Screen.Game)
         {
             DrawTitle();

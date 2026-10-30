@@ -18,6 +18,12 @@ public static class Dialogue
         public int Speaker = Generic;
         public bool Right;
         public readonly List<List<int>> Lines = [[]];
+
+        /// <summary>원본 글꼴이 아닌 보통 글(프롤로그 대사 파일) — 있으면 Lines 대신 이것을 보인다.</summary>
+        public string? Text;
+
+        /// <summary>이름 — 비면 Speaker 의 원작 이름.</summary>
+        public string? Name;
     }
 
     /// <summary>장면 scene 의 대사 묶음들 — 묶음마다 쪽들.</summary>

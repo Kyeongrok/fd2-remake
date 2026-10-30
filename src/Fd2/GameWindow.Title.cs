@@ -8,7 +8,7 @@ namespace Fd2;
 /// </summary>
 internal sealed partial class GameWindow
 {
-    private enum Screen { Opening, Title, Game }
+    private enum Screen { Opening, Title, Prologue, Game }
 
     private const double OpeningCut = 1.0 / 18;
     private const string FanMadeNotice = "이 게임은 팬메이드 게임입니다. 원작 및 모드의 저작권은 각 저작권자에게 있습니다.";
@@ -22,7 +22,7 @@ internal sealed partial class GameWindow
 
     private (string Label, Action Do)[] TitleItems =>
     [
-        ("Start — 게임 시작", () => { _screen = Screen.Game; StartBattle(0); }),
+        ("Start — 게임 시작", StartGame),
         ($"판: {VersionName}", OpenVersions),
         ("지도 둘러보기", () => { _screen = Screen.Game; LoadScene(_scene.Index); }),
         ("오프닝 다시 보기", StartOpening),
