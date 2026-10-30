@@ -316,6 +316,7 @@ public sealed class Scene
         for (int k = 0; k < 16 && 85 + 3 * k < info.Length; k++) Chests.Add((info[83 + 3 * k], Dat.U16(info, 84 + 3 * k)));
         var tiles = Dat.Load(shap, 2 * TileSet);
         _attr = Dat.Load(shap, 2 * TileSet + 1);
+        _tileData = tiles;
         _tiles = new uint[Dat.U16(tiles, 4)][];
         for (int i = 0; i < _tiles.Length; i++) _tiles[i] = Rle.DecodeTile(tiles, Dat.U32(tiles, 6 + 4 * i), pal);
 
@@ -431,6 +432,22 @@ public sealed class Scene
     }
 
     public bool Inside(int x, int y) => x >= 0 && y >= 0 && x < Width && y < Height;
+
+    private readonly byte[] _tileData = [];
+
+    public int TileCount => _tiles.Length;
+
+    /// <summary>칸의 타일 번호.</summary>
+    public int CellTile(int x, int y) => Inside(x, y) ? _cells[y * Width + x] : 0;
+
+    /// <summary>타일 t 의 그림(없는 번호면 마지막).</summary>
+    public uint[] Tile(int t) => _tiles[Math.Clamp(t, 0, _tiles.Length - 1)];
+
+    /// <summary>타일 t 의 속성 첫 바이트.</summary>
+    public int FlagsOf(int t) => t >= 0 && 4 * t < _attr.Length ? _attr[4 * t] : 0;
+
+    /// <summary>타일 t 를 다른 팔레트로 다시 푼다(물결 색 돌리기).</summary>
+    public uint[] DecodeTile(int t, uint[] pal) => Rle.DecodeTile(_tileData, Dat.U32(_tileData, 6 + 4 * Math.Clamp(t, 0, _tiles.Length - 1)), pal);
 
     public uint[] TileAt(int x, int y) => _tiles[Math.Min(_cells[y * Width + x], _tiles.Length - 1)];
 

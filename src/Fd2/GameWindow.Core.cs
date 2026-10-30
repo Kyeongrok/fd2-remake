@@ -393,24 +393,12 @@ internal sealed partial class GameWindow
         DrawPatches();
         DrawRanges();
         DrawUnits(outline: true);
+        DrawCovers();
         DrawBattleHud();
         DrawKeysWindow();
     }
 
     /// <summary>지도 위 사람들 — outline 이면 고른 사람에 테두리.</summary>
-    /// <summary>타일이 바뀐 칸(연 상자) — 지도 텍스처 위에 새 타일을 덧그린다.</summary>
-    private void DrawPatches()
-    {
-        int cell = T * _zoom;
-        foreach (int i in _scene.Patched)
-        {
-            int x = i % _scene.Width, y = i / _scene.Width;
-            int sx = _offX + (x * T - _camX) * _zoom, sy = _offY + (y * T - _camY) * _zoom;
-            if (sx >= _fbW || sy >= _fbH || sx + cell <= 0 || sy + cell <= 0) continue;
-            Blit(_scene.TileAt(x, y), T, sx, sy, cell);
-        }
-    }
-
     private void DrawUnits(bool outline)
     {
         int cell = T * _zoom;

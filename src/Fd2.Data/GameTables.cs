@@ -159,6 +159,23 @@ public sealed class GameTables
                             Bytes(a + 14, 4).Select(b => (int)b).ToArray(), S16(a + 18), S16(a + 20), S16(a + 22));
     }
 
+    // ── 물결 색 ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 물결 색 돌리기 표(0x60003, sub_4E31C) — 6비트 VGA 32색. 단계 s(0~15, BIOS 틱 2 마다 +1)에 색 224~239 = 표[s .. s+15].
+    /// </summary>
+    public uint[] WaterColors()
+    {
+        var c = new uint[32];
+        for (int i = 0; i < 32; i++)
+        {
+            uint Six(int a) { int v = U8(a) & 63; return (uint)((v << 2) | (v >> 4)); }
+            int a = 0x60003 + 3 * i;
+            c[i] = 0xFF000000 | Six(a) << 16 | Six(a + 1) << 8 | Six(a + 2);
+        }
+        return c;
+    }
+
     // ── 장면 ↔ 곡 ─────────────────────────────────────────────────────────────
 
     /// <summary>

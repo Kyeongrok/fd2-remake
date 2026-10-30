@@ -212,6 +212,7 @@ internal sealed unsafe partial class GameWindow : IDisposable
     {
         int lw = _scene.Width * T, lh = _scene.Height * T;
         _mapScale = _hires.Enabled ? HiRes.Scale : 1;
+        _mapHi = _mapScale > 1;
         _mapHiScene = _scene.Index;
         int w = lw * _mapScale, h = lh * _mapScale;
         var px = _mapScale > 1 ? HiRes.LoadMap(_scene.Index, lw, lh) : null;
