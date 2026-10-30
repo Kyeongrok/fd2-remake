@@ -20,6 +20,9 @@ internal sealed class Settings
     /// <summary>모드 > 고해상도 — 기본 켬. 처음에는 이 PC 에서 차례로 만들어 다 된 것부터 갈아 끼운다.</summary>
     public bool HiRes { get; set; } = true;
 
+    /// <summary>모드 > 배경음악 — 기본 켬.</summary>
+    public bool Music { get; set; } = true;
+
     /// <summary>모드 > 이동 · 공격 범위 보기 — 전투 밖에서도 고른 사람의 이동(파랑) · 공격(빨강) 범위를 보인다.</summary>
     public bool ShowRange { get; set; } = true;
 

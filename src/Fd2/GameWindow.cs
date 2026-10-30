@@ -360,7 +360,7 @@ internal sealed unsafe partial class GameWindow : IDisposable
         var v = (float*)cb.DataPointer;
         v[0] = _zoom; v[1] = _offX; v[2] = _offY; v[3] = _mapScale;
         v[4] = _boardW; v[5] = _boardH; v[6] = _camX; v[7] = _camY;
-        v[8] = _scene.Width * T * _mapScale; v[9] = _scene.Height * T * _mapScale; v[10] = _mapScale > 1 ? 1 : 0; v[11] = _screen == Screen.Game ? 0 : 1;
+        v[8] = _scene.Width * T * _mapScale; v[9] = _scene.Height * T * _mapScale; v[10] = _mapScale > 1 ? 1 : 0; v[11] = MapShown ? 0 : 1;
         _ctx.Unmap(_viewCb, 0);
 
         var map = _ctx.Map(_boardTex, 0, MapMode.WriteDiscard);
@@ -432,6 +432,7 @@ internal sealed unsafe partial class GameWindow : IDisposable
 
     public void Dispose()
     {
+        StopMusic();
         if (_active == this) _active = null;
         _backBufferRtv?.Dispose();
         _swapChain?.Dispose();

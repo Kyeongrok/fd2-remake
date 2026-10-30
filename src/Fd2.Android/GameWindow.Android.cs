@@ -35,6 +35,36 @@ internal sealed partial class GameWindow
         VersionSwitcher?.Invoke(dir);
     }
 
+    private Android.Media.MediaPlayer? _player;
+    private int _musicPlaying = -1;
+
+    /// <summary>배경음악 — 곡을 MIDI 파일로 바꿔 두고 안드로이드 미디어 플레이어로 되풀이.</summary>
+    partial void PlayMusic(int index)
+    {
+        if (index == _musicPlaying) return;
+        StopMusic();
+        try
+        {
+            string cache = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fd2", "music");
+            if (Fd2.Data.Music.MidiFile(_dir, index, cache) is not { } file) return;
+            _player = new Android.Media.MediaPlayer();
+            _player.SetDataSource(file);
+            _player.Looping = true;
+            _player.Prepare();
+            _player.Start();
+            _musicPlaying = index;
+        }
+        catch (Exception) { StopMusic(); }   // 소리가 안 나도 게임은 계속
+    }
+
+    partial void StopMusic()
+    {
+        try { _player?.Stop(); } catch (Java.Lang.IllegalStateException) { }
+        _player?.Release();
+        _player = null;
+        _musicPlaying = -1;
+    }
+
     private partial bool CanAddVersion() => VersionAdder != null;
 
     private partial void AddVersion() => VersionAdder?.Invoke();

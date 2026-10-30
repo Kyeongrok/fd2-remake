@@ -23,6 +23,15 @@ public static partial class Prologue
     public sealed class Act
     {
         public string Title { get; set; } = "";
+
+        /// <summary>배경 지도(장면 번호, 0부터) — -1 이면 어두운 바탕에 얼굴들. 비면 기본값.</summary>
+        public int? Scene { get; set; }
+
+        /// <summary>배경음악(FDMUS.DAT 곡 번호) — -1 이면 없음. 비면 기본값.</summary>
+        public int? Music { get; set; }
+
+        /// <summary>대사 앞에 사울이 걸어가 설 칸 [x, y] — 비면 기본값, 빈 배열이면 걷지 않는다.</summary>
+        public int[]? WalkTo { get; set; }
         public List<Line> Lines { get; set; } = [];
     }
 
@@ -45,9 +54,31 @@ public static partial class Prologue
     public static string FilePath =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fd2", "prologue.json");
 
+    /// <summary>
+    /// 막마다 기본 배경 · 음악 · 걸어갈 칸 — 1막 알현은 장면 33(0부터 32, 왕 · 왕비가 옥좌에 앉은 알현실)에서 사울이 입구에서 옥좌 앞까지 걸어간다.
+    /// 음악 번호는 원작이 장면마다 어느 곡을 쓰는지 자료에서 찾지 못해 곡의 악기 · 길이를 보고 고른 것이다 — 대사 파일에서 바꿀 수 있다.
+    /// </summary>
+    private static readonly (int Scene, int Music, int[] WalkTo)[] Defaults =
+    [
+        (32, 10, [8, 8]),
+        (-1, 11, []),
+        (-1, 4, []),
+    ];
+
     public static Script? Load(string path)
     {
-        try { return File.Exists(path) ? JsonSerializer.Deserialize<Script>(File.ReadAllText(path), Json) : null; }
+        try
+        {
+            if (!File.Exists(path) || JsonSerializer.Deserialize<Script>(File.ReadAllText(path), Json) is not { } s) return null;
+            for (int i = 0; i < s.Acts.Count; i++)
+            {
+                var d = i < Defaults.Length ? Defaults[i] : (-1, -1, []);
+                s.Acts[i].Scene ??= d.Scene;
+                s.Acts[i].Music ??= d.Music;
+                s.Acts[i].WalkTo ??= d.WalkTo;
+            }
+            return s;
+        }
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException) { return null; }
     }
 
@@ -64,8 +95,8 @@ public static partial class Prologue
         if (FindFd2Re(near) is not { } dir) return null;
         var built = Build(dir);
         if (built.Acts.Count == 0) return null;
-        try { Save(built, FilePath); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
-        return built;
+        try { Save(built, FilePath); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return built; }
+        return Load(FilePath) ?? built;
     }
 
     // ── FD2Re 찾기 ───────────────────────────────────────────────────────────
@@ -162,7 +193,12 @@ public static partial class Prologue
             }
         }
         if (act.Lines.Count > 0) script.Acts.Add(act);
-        for (int i = 0; i < script.Acts.Count; i++) script.Acts[i].Title = $"프롤로그 {i + 1}막";
+        for (int i = 0; i < script.Acts.Count; i++)
+        {
+            var a = script.Acts[i];
+            a.Title = $"프롤로그 {i + 1}막";
+            if (i < Defaults.Length) (a.Scene, a.Music, a.WalkTo) = Defaults[i];
+        }
         return script;
     }
 

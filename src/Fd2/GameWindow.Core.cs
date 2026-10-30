@@ -76,6 +76,13 @@ internal sealed partial class GameWindow
     partial void RequestShot();
     partial void UpdateMenuChecks();
 
+    /// <summary>배경음악 — 곡 번호(FDMUS.DAT)를 되풀이해 튼다. 같은 곡이 이미 돌면 그대로.</summary>
+    partial void PlayMusic(int index);
+    partial void StopMusic();
+
+    /// <summary>음악이 끝났으면 처음부터 다시(윈도우 MCI 는 스스로 되풀이하지 않는다).</summary>
+    partial void MusicTick();
+
     /// <summary>고해상도 캐릭터 그림(96x96), 없으면 null — 안드로이드는 늘 null.</summary>
     private partial uint[]? HiIcon(int icon, int frame);
 
@@ -130,7 +137,7 @@ internal sealed partial class GameWindow
         _mouseMoved = true;
         if (_keysOpen || _helpOpen) { KeysWindowKey(Win32.VK_ESCAPE); return; }
         if (VersionsClick(x, y)) return;
-        if (_screen == Screen.Prologue) { TalkNext(); return; }
+        if (_screen == Screen.Prologue) { PrologueNext(); return; }
         if (_screen != Screen.Game) { TitleClick(_mouseX, _mouseY); return; }
         if (Talking) { TalkNext(); return; }
         MouseToCursor();
@@ -172,7 +179,8 @@ internal sealed partial class GameWindow
         if (VersionsKey(vk)) return;
         if (_screen == Screen.Prologue)
         {
-            TalkKey(vk);   // Enter · Space 다음, Esc 프롤로그 건너뛰기
+            if (vk is Win32.VK_RETURN or Win32.VK_SPACE) PrologueNext();   // Enter · Space 다음
+            else if (vk == Win32.VK_ESCAPE) EndTalk();                     // Esc 프롤로그 건너뛰기
             return;
         }
         if (_screen != Screen.Game)
@@ -266,7 +274,8 @@ internal sealed partial class GameWindow
     {
         _time += dt;
         PlatformTick();
-        if (_screen == Screen.Prologue) { TalkTick(dt); return; }
+        MusicTick();
+        if (_screen == Screen.Prologue) { PrologueTick(dt); return; }
         if (_screen != Screen.Game)
         {
             TitleTick(dt);
@@ -283,6 +292,13 @@ internal sealed partial class GameWindow
             else if (Held(Win32.VK_RIGHT, KeyAction.MoveRight)) TryStep(sel, 1, 0, Dir.Right);
         }
 
+        MoveUnits(dt);
+        Follow();
+    }
+
+    /// <summary>걷는 사람들을 한 걸음씩 — 칸 사이를 나아가고, 다 오면 다음 칸으로.</summary>
+    private void MoveUnits(double dt)
+    {
         foreach (var u in _scene.Units)
         {
             if (u.Moving)
@@ -297,8 +313,6 @@ internal sealed partial class GameWindow
                 if (!TryStep(u, dx, dy, DirOf(dx, dy))) u.Path.Clear();
             }
         }
-
-        Follow();
     }
 
     private static Dir DirOf(int dx, int dy) =>
@@ -356,10 +370,17 @@ internal sealed partial class GameWindow
             DrawKeysWindow();
             return;
         }
-        int cell = T * _zoom;
         if (_cpuMap) DrawMapCpu();
         DrawRanges();
+        DrawUnits(outline: true);
+        DrawBattleHud();
+        DrawKeysWindow();
+    }
 
+    /// <summary>지도 위 사람들 — outline 이면 고른 사람에 테두리.</summary>
+    private void DrawUnits(bool outline)
+    {
+        int cell = T * _zoom;
         // 아래쪽 사람이 위쪽 사람을 가리도록 y 순서로. 쓰러진 사람은 안 그린다.
         foreach (var u in _scene.Units.Where(u => u.Alive).OrderBy(u => u.DrawY))
         {
@@ -374,10 +395,8 @@ internal sealed partial class GameWindow
             bool dim = InBattle && u.Side == Side.Player && u.Acted;   // 행동을 마친 아군은 어둡게
             if (hi != null) Blit(hi, T * 4, sx, sy, cell, dim);
             else Blit(_icons.Frame(u.Icon, frame), T, sx, sy, cell, dim);
-            if (u == (InBattle ? _actor : _selected)) Frame(sx, sy, cell, cell, 2 * Math.Max(1, _zoom / 2), CursorColor);
+            if (outline && u == (InBattle ? _actor : _selected)) Frame(sx, sy, cell, cell, 2 * Math.Max(1, _zoom / 2), CursorColor);
         }
-        DrawBattleHud();
-        DrawKeysWindow();
     }
 
     /// <summary>size x size 그림을 화면 (x, y) 에 cell x cell 로 — 가까운 점으로 늘리거나 줄인다. 투명(0)은 건너뛴다.</summary>

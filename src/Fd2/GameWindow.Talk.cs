@@ -102,6 +102,7 @@ internal sealed partial class GameWindow
         if (_talkShown < PageChars(_talk[_talkPage])) { _talkShown = 9999; return; }
         if (++_talkPage >= _talk.Count) { EndTalk(); return; }
         _talkShown = 0;
+        if (_screen == Screen.Prologue) { ProloguePage(); return; }
         FocusSpeaker();
     }
 
