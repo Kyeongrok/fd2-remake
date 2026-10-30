@@ -61,6 +61,7 @@ public partial class MainWindow : Window
         _walkTimer.Start();
         Title = $"용의기사2 편집기 — {dir}";
         FillVersionBoxes();
+        FillMusic();
         Status.Text = $"캐릭터 그림 {_icons.Characters}명 · 전투 모션 {motions}명  ·  ←/→ 한 컷씩, 스페이스 재생/정지";
     }
 

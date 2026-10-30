@@ -342,7 +342,8 @@ internal sealed partial class GameWindow
                 if (_choosingMove) return;   // 범위 밖 — 무시(취소는 Esc · 오른쪽 단추)
                 if (who == null)
                 {
-                    if (_actor == null && _reach == null) OpenSystemMenu();
+                    // 빈 칸 — 키(Enter)와 터치면 시스템 메뉴, PC 마우스 클릭은 고른 것만 푼다(시스템 메뉴는 X 키)
+                    if (_actor == null && _reach == null) { if (mx < 0 || TouchUi) OpenSystemMenu(); }
                     else ClearSelection();
                     return;
                 }
@@ -855,10 +856,9 @@ internal sealed partial class GameWindow
 
     private bool _mouseMoved;
 
-    /// <summary>커서 — 칸 네 귀퉁이에 노란 꺾쇠, 깜박인다.</summary>
+    /// <summary>커서 — 칸 네 귀퉁이에 꺾쇠(깜박이지 않는다 — 눈이 아프다).</summary>
     private void DrawCursor()
     {
-        if ((int)(_time * 3) % 3 == 2) return;
         var (sx, sy) = TileScreen(_cursor.X, _cursor.Y);
         int cell = T * _zoom, len = cell / 3, t = 2 * Math.Max(2, _zoom);
         uint c = CursorColor;

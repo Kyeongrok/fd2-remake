@@ -143,6 +143,56 @@ public static class Music
         return Math.Max(time, endTime) / (double)TicksPerSecond;
     }
 
+    /// <summary>곡에 쓰인 악기(GM 프로그램 번호, 타악기 채널 10 은 빼고) — 처음 나온 차례로.</summary>
+    public static List<int> Programs(byte[] xmi)
+    {
+        var list = new List<int>();
+        int evnt = Find(xmi, "EVNT"u8);
+        if (evnt < 0) return list;
+        int p = evnt + 8;
+        while (p < xmi.Length)
+        {
+            byte b = xmi[p++];
+            if (b < 0x80) continue;
+            switch (b & 0xF0)
+            {
+                case 0x90: p += 2; VarLen(xmi, ref p); break;
+                case 0xC0:
+                    if ((b & 0x0F) != 9 && !list.Contains(xmi[p])) list.Add(xmi[p]);
+                    p++;
+                    break;
+                case 0xD0: p++; break;
+                case 0x80 or 0xA0 or 0xB0 or 0xE0: p += 2; break;
+                default:
+                    if (b == 0xFF) { byte t = xmi[p++]; int n = (int)VarLen(xmi, ref p); p += n; if (t == 0x2F) p = xmi.Length; }
+                    else { int n = (int)VarLen(xmi, ref p); p += n; }
+                    break;
+            }
+        }
+        return list;
+    }
+
+    /// <summary>GM 악기 이름(프로그램 번호 0~127).</summary>
+    public static readonly string[] GmNames =
+    [
+        "Acoustic Grand Piano", "Bright Piano", "Electric Grand", "Honky-tonk", "E.Piano 1", "E.Piano 2", "Harpsichord", "Clavinet",
+        "Celesta", "Glockenspiel", "Music Box", "Vibraphone", "Marimba", "Xylophone", "Tubular Bells", "Dulcimer",
+        "Drawbar Organ", "Percussive Organ", "Rock Organ", "Church Organ", "Reed Organ", "Accordion", "Harmonica", "Bandoneon",
+        "Nylon Guitar", "Steel Guitar", "Jazz Guitar", "Clean Guitar", "Muted Guitar", "Overdrive Guitar", "Distortion Guitar", "Guitar Harmonics",
+        "Acoustic Bass", "Finger Bass", "Pick Bass", "Fretless Bass", "Slap Bass 1", "Slap Bass 2", "Synth Bass 1", "Synth Bass 2",
+        "Violin", "Viola", "Cello", "Contrabass", "Tremolo Strings", "Pizzicato", "Harp", "Timpani",
+        "Strings", "Slow Strings", "Synth Strings 1", "Synth Strings 2", "Choir Aahs", "Voice Oohs", "Synth Voice", "Orchestra Hit",
+        "Trumpet", "Trombone", "Tuba", "Muted Trumpet", "French Horn", "Brass", "Synth Brass 1", "Synth Brass 2",
+        "Soprano Sax", "Alto Sax", "Tenor Sax", "Baritone Sax", "Oboe", "English Horn", "Bassoon", "Clarinet",
+        "Piccolo", "Flute", "Recorder", "Pan Flute", "Bottle", "Shakuhachi", "Whistle", "Ocarina",
+        "Square Lead", "Saw Lead", "Calliope", "Chiff", "Charang", "Voice Lead", "Fifths", "Bass+Lead",
+        "New Age Pad", "Warm Pad", "Polysynth", "Choir Pad", "Bowed Pad", "Metallic Pad", "Halo Pad", "Sweep Pad",
+        "Rain", "Soundtrack", "Crystal", "Atmosphere", "Brightness", "Goblins", "Echoes", "Sci-fi",
+        "Sitar", "Banjo", "Shamisen", "Koto", "Kalimba", "Bagpipe", "Fiddle", "Shanai",
+        "Tinkle Bell", "Agogo", "Steel Drums", "Woodblock", "Taiko", "Melodic Tom", "Synth Drum", "Reverse Cymbal",
+        "Fret Noise", "Breath Noise", "Seashore", "Bird Tweet", "Telephone", "Helicopter", "Applause", "Gunshot",
+    ];
+
     private static int Find(byte[] data, ReadOnlySpan<byte> tag) => data.AsSpan().IndexOf(tag);
 
     private static long VarLen(byte[] d, ref int p)

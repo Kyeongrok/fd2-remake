@@ -149,6 +149,29 @@
                     </ScrollViewer>
                 </DockPanel>
             </TabItem>
+            <!-- 배경음악: FDMUS.DAT 의 곡들을 MIDI 로 바꿔 듣기 · 저장 -->
+            <TabItem Header="배경음악">
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button Content="▶ 듣기" Click="OnMusicPlay" Padding="14,2" />
+                        <Button Content="■ 멈춤" Click="OnMusicStop" Margin="8,0,0,0" Padding="14,2" />
+                        <CheckBox x:Name="MusicLoop" Content="되풀이" IsChecked="True" VerticalAlignment="Center" Margin="12,0,0,0" />
+                        <Button Content="MIDI 파일로 저장..." Click="OnMusicSave" Margin="16,0,0,0" Padding="10,2" />
+                        <TextBlock x:Name="MusicNow" VerticalAlignment="Center" Margin="16,0,0,0" />
+                    </StackPanel>
+                    <TextBlock DockPanel.Dock="Bottom" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#555"
+                               Text="두 번 누르거나 Enter = 듣기, Esc = 멈춤. 지금 게임은 프롤로그 1막에 10번, 2막에 11번, 3막에 4번 곡을 씁니다. 소리는 윈도우 기본 MIDI 신시사이저로 나옵니다(원작의 애드립 · 사운드블래스터 소리와는 다릅니다)." />
+                    <ListView x:Name="MusicList" MouseDoubleClick="OnMusicPlay" KeyDown="OnMusicListKey">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="곡" DisplayMemberBinding="{Binding Index}" Width="50" />
+                                <GridViewColumn Header="길이" DisplayMemberBinding="{Binding Length}" Width="70" />
+                                <GridViewColumn Header="악기" DisplayMemberBinding="{Binding Instruments}" Width="700" />
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+                </DockPanel>
+            </TabItem>
             <!-- 여러 판: 기준 판과 비교 판의 다른 파일 · DAT 안 바뀐 항목, 고른 파일만 비교 판 것으로 바꿔 새 폴더로 합치기 -->
             <TabItem Header="판 비교 · 합치기">
                 <DockPanel Margin="8">

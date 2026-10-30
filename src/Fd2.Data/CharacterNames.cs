@@ -8,6 +8,12 @@ public static class CharacterNames
 {
     public const int Heroes = 0x44;
 
+    /// <summary>
+    /// 장면 유닛 표 · 대사의 사람 번호 → 그림 번호. 거의 같지만 왕(48 「래터-왕」)과 왕비(66 「미란-왕비」)는
+    /// 옥좌에 앉은 그림 57 · 75 를 쓴다(장면 33 알현실이 원작 화면과 같도록 맞춘 것).
+    /// </summary>
+    public static int SpriteOf(int id) => id switch { 48 => 57, 66 => 75, _ => id };
+
     private static readonly string[] Names =
     [
         "사울-검사", "하노-전사", "티노-검사", "하와터-전사", "아래스-기사", "로나-기사", "래터-기사", "란스로타",

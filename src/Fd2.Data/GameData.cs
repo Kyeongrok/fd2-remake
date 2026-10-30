@@ -149,6 +149,9 @@ public sealed class Unit
     public int X, Y;
     public Dir Facing = Dir.Down;
 
+    /// <summary>쓰러져 누워 있다 — 옆모습을 눕혀 그린다(프롤로그의 유니).</summary>
+    public bool Lying;
+
     /// <summary>장면 정보의 레벨(+4). 우리 편은 1.</summary>
     public int Level = 1;
 
@@ -190,12 +193,15 @@ public sealed class Scene
 
     public List<Unit> Units { get; } = new();
 
+    private readonly int _iconCount;
+
     /// <summary>장면 정보의 유닛 표 전부(등장 차례 상관없이).</summary>
     public List<RosterEntry> Roster { get; } = new();
 
     public Scene(string dir, int index, uint[] pal, IconBank icons)
     {
         Index = index;
+        _iconCount = icons.Characters;
         string field = Path.Combine(dir, "FDFIELD.DAT"), shap = Path.Combine(dir, "FDSHAP.DAT");
         var map = Dat.Load(field, 3 * index);
         var info = Dat.Load(field, 3 * index + 1);
@@ -220,8 +226,8 @@ public sealed class Scene
         {
             int u = 131 + 26 * i;
             if (u + 26 > info.Length || 4 + 6 * i >= pos.Length) break;
+            // 그림 번호가 없는 줄도 넣어 둔다 — 대사의 FFEC · FFED 가 이 표의 차례 번호로 말하는 사람을 가리킨다
             int icon = info[u + 1];
-            if (icon >= icons.Characters) continue;
             Roster.Add(new RosterEntry(info[u], icon, Math.Max(1, (int)info[u + 4]), info[u + 21], pos[2 + 6 * i], pos[4 + 6 * i]));
         }
         foreach (var e in Roster.Where(e => e.Phase == 0)) Spawn(e);
@@ -249,7 +255,8 @@ public sealed class Scene
     /// </summary>
     public Unit? Spawn(RosterEntry e)
     {
-        var u = new Unit { Icon = e.Icon, Side = e.Type is 1 or 2 ? Side.Player : Side.Other, Ai = e.Type == 1, Level = e.Level };
+        if (CharacterNames.SpriteOf(e.Icon) >= _iconCount) return null;
+        var u = new Unit { Icon = CharacterNames.SpriteOf(e.Icon), Side = e.Type is 1 or 2 ? Side.Player : Side.Other, Ai = e.Type == 1, Level = e.Level };
         Place(u, e.X, e.Y);
         return Units.Contains(u) ? u : null;
     }

@@ -124,6 +124,8 @@ internal sealed partial class GameWindow
 
     internal void PointerMove(int x, int y)
     {
+        // 윈도우는 마우스가 그대로여도 이동 알림을 보낼 때가 있다 — 그때 커서를 숨겼다 보였다 하지 않게
+        if ((x, y) == (_mouseX, _mouseY)) return;
         (_mouseX, _mouseY) = (x, y);
         _mouseMoved = true;
         if (_versionsOpen) VersionsHover(_mouseX, _mouseY);
@@ -170,17 +172,20 @@ internal sealed partial class GameWindow
         if (_scene != null) Follow();
     }
 
+    /// <summary>이번 키가 누른 채로 들어온 되풀이인가 — 대사는 되풀이로 넘기지 않는다(꾹 누르면 대사가 다 지나가므로).</summary>
+    private bool _keyRepeat;
+
     private void OnKeyDown(int vk)
     {
-        _keys.Add(vk);
+        _keyRepeat = !_keys.Add(vk);
         if (vk == Win32.VK_F12) { RequestShot(); return; }
         if (vk == Win32.VK_F11) { ToggleFullscreen(); return; }
         if (KeysWindowKey(vk)) return;
         if (VersionsKey(vk)) return;
         if (_screen == Screen.Prologue)
         {
-            if (vk is Win32.VK_RETURN or Win32.VK_SPACE) PrologueNext();   // Enter · Space 다음
-            else if (vk == Win32.VK_ESCAPE) EndTalk();                     // Esc 프롤로그 건너뛰기
+            if (TalkAdvanceKey(vk)) PrologueNext();                        // Enter · Space · 방향키 · WASD 다음
+            else if (vk == Win32.VK_ESCAPE) SkipPrologue();                // Esc 프롤로그 건너뛰기
             return;
         }
         if (_screen != Screen.Game)
@@ -391,12 +396,24 @@ internal sealed partial class GameWindow
             int f = walking ? WalkCycle[(int)(_time * WalkFps) % WalkCycle.Length]
                             : WalkCycle[(int)(_time * IdleFps) % WalkCycle.Length];
             int frame = (int)u.Facing * 3 + f;
+            if (u.Lying) frame = (int)Dir.Left * 3 + 1;   // 누운 사람 — 왼옆 모습을 눕힌다
             var hi = HiIcon(u.Icon, frame);
             bool dim = InBattle && u.Side == Side.Player && u.Acted;   // 행동을 마친 아군은 어둡게
-            if (hi != null) Blit(hi, T * 4, sx, sy, cell, dim);
+            if (u.Lying) Blit(Rotate(hi ?? _icons.Frame(u.Icon, frame), hi != null ? T * 4 : T), hi != null ? T * 4 : T, sx, sy, cell, dim);
+            else if (hi != null) Blit(hi, T * 4, sx, sy, cell, dim);
             else Blit(_icons.Frame(u.Icon, frame), T, sx, sy, cell, dim);
             if (outline && u == (InBattle ? _actor : _selected)) Frame(sx, sy, cell, cell, 2 * Math.Max(1, _zoom / 2), CursorColor);
         }
+    }
+
+    /// <summary>정사각 그림을 시계 반대 방향으로 90도 — 왼쪽을 보던 머리가 위 왼쪽으로 가 누운 꼴.</summary>
+    private static uint[] Rotate(uint[] px, int size)
+    {
+        var r = new uint[px.Length];
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+                r[(size - 1 - x) * size + y] = px[y * size + x];
+        return r;
     }
 
     /// <summary>size x size 그림을 화면 (x, y) 에 cell x cell 로 — 가까운 점으로 늘리거나 줄인다. 투명(0)은 건너뛴다.</summary>

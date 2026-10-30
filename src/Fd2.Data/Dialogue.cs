@@ -6,7 +6,8 @@ namespace Fd2.Data;
 /// </summary>
 /// <remarks>
 /// 제어 번호: 0xFFEE 다음 값 = 말하는 사람(그림 번호, 왼쪽), 0xFFEF 다음 값 = 말하는 사람(오른쪽),
-/// 0xFFED = 이름 없는 사람(뒤의 글자 하나가 「A」 같은 꼬리표), 0xFFFE 줄 바꿈, 0xFFFD 쪽 넘김, 0xFFFF 끝.
+/// 0xFFEC · 0xFFED 다음 값 = 말하는 사람을 장면 유닛 표(FDFIELD 3n+1)의 차례 번호로(왼쪽 · 오른쪽) — 해적 · 왕 · 프롤로그의 사울처럼
+/// 우리 편 자리가 아닌 사람. 0xFFFE 줄 바꿈, 0xFFFD 쪽 넘김, 0xFFFF 끝.
 /// 0x9E 는 빈칸. 이 뜻은 1장 대사를 그려 맞춰 본 것이다.
 /// </remarks>
 public static class Dialogue
@@ -18,6 +19,9 @@ public static class Dialogue
         public int Speaker = Generic;
         public bool Right;
         public readonly List<List<int>> Lines = [[]];
+
+        /// <summary>FFEC · FFED 의 장면 유닛 표 차례 번호(-1 이면 Speaker 가 그림 번호) — 보일 때 그 장면에서 그림 번호로 푼다.</summary>
+        public int Roster = -1;
 
         /// <summary>원본 글꼴이 아닌 보통 글(프롤로그 대사 파일) — 있으면 Lines 대신 이것을 보인다.</summary>
         public string? Text;
@@ -48,15 +52,16 @@ public static class Dialogue
                         pages.Add(page);
                         p += 2;
                         break;
-                    case 0xFFED:
-                        page = new Page();
+                    case 0xFFEC or 0xFFED when p + 3 < offs[m + 1]:
+                        page = new Page { Roster = Dat.U16(t, p + 2), Right = c == 0xFFED };
                         pages.Add(page);
+                        p += 2;
                         break;
                     case 0xFFFE:
                         page?.Lines.Add([]);
                         break;
                     case 0xFFFD when page != null:
-                        page = new Page { Speaker = page.Speaker, Right = page.Right };
+                        page = new Page { Speaker = page.Speaker, Right = page.Right, Roster = page.Roster };
                         pages.Add(page);
                         break;
                     case >= 0xFF00:

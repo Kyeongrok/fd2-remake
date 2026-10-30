@@ -32,11 +32,27 @@ internal sealed partial class GameWindow
                 if (m < all.Count) _talk.AddRange(all[m]);
         }
         catch (Exception e) when (e is IOException or IndexOutOfRangeException or ArgumentOutOfRangeException) { _talk.Clear(); }
+        ResolveSpeakers();
         _talkPage = 0;
         _talkShown = 0;
         _afterTalk = after;
         if (!Talking) EndTalk();
         else FocusSpeaker();
+    }
+
+    /// <summary>
+    /// FFEC · FFED 쪽의 말하는 사람(장면 유닛 표 차례 번호)을 그림 번호 · 이름으로 — 동료 · 왕처럼 이름이 있으면 이름과 얼굴,
+    /// 몬스터 표(해적 같은)면 얼굴만.
+    /// </summary>
+    private void ResolveSpeakers()
+    {
+        foreach (var p in _talk)
+        {
+            if (p.Roster < 0 || p.Roster >= _scene.Roster.Count) continue;
+            int id = _scene.Roster[p.Roster].Icon;
+            p.Speaker = CharacterNames.SpriteOf(id);
+            p.Name ??= id < CharacterNames.Heroes ? CharacterNames.Of(id).Split('-')[0] : "";
+        }
     }
 
     /// <summary>말하는 사람이 지도에 있으면 커서를 그리로 — 화면이 그 사람을 비춘다.</summary>
@@ -102,14 +118,18 @@ internal sealed partial class GameWindow
         if (_talkShown < PageChars(_talk[_talkPage])) { _talkShown = 9999; return; }
         if (++_talkPage >= _talk.Count) { EndTalk(); return; }
         _talkShown = 0;
-        if (_screen == Screen.Prologue) { ProloguePage(); return; }
         FocusSpeaker();
     }
+
+    /// <summary>대사를 넘기는 키 — Enter · Space · 방향키 · W/A/S/D(바꾼 커서 키도).</summary>
+    private bool TalkAdvanceKey(int vk) => !_keyRepeat && (
+        vk is Win32.VK_RETURN or Win32.VK_SPACE or Win32.VK_UP or Win32.VK_DOWN or Win32.VK_LEFT or Win32.VK_RIGHT
+        || ActionOf(vk) is KeyAction.MoveUp or KeyAction.MoveDown or KeyAction.MoveLeft or KeyAction.MoveRight);
 
     private bool TalkKey(int vk)
     {
         if (!Talking) return false;
-        if (vk is Win32.VK_RETURN or Win32.VK_SPACE) TalkNext();
+        if (TalkAdvanceKey(vk)) TalkNext();
         else if (vk == Win32.VK_ESCAPE) EndTalk();
         return true;
     }
@@ -138,7 +158,7 @@ internal sealed partial class GameWindow
         // 일행이 화면 아래쪽에 있으면 창을 위로 — 말하는 사람들을 가리지 않게
         var party = _scene.Units.Where(u => u.Side == Side.Player && u.Alive).ToList();
         double partyY = party.Count == 0 ? 0 : party.Average(u => _offY + (u.DrawY * T - _camY) * _zoom);
-        int bx = (_clientW - boxW) / 2, by = _screen != Screen.Prologue && partyY > _clientH / 2 ? 64 : _clientH - boxH - 24;
+        int bx = (_clientW - boxW) / 2, by = partyY > _clientH / 2 ? 64 : _clientH - boxH - 24;
         FillRect(bx, by, boxW, boxH, 0xE0101828);
         FillRect(bx, by, boxW, 3, 0xFF8090C0);
         FillRect(bx, by + boxH - 3, boxW, 3, 0xFF8090C0);
