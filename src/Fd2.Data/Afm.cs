@@ -31,6 +31,17 @@ public sealed class AfmPlayer
         }
     }
 
+    /// <summary>편 하나만 — film 번째 편을 처음부터 끝까지(엔딩 sub_31529 의 sub_20421(2) 처럼).</summary>
+    public AfmPlayer(string dir, int film) : this(dir)
+    {
+        if (film < 0 || film >= _films.Count) { _film = _films.Count; return; }
+        _film = film - 1;
+        _only = 1;
+    }
+
+    /// <summary>편 하나만 돌릴 때 — 1 이면 아직 그 편 앞, 2 면 그 편을 돌리는 중.</summary>
+    private int _only;
+
     public int Films => _films.Count;
 
     /// <summary>다음 컷을 BGRA 로 — 다 끝났으면 null.</summary>
@@ -38,7 +49,8 @@ public sealed class AfmPlayer
     {
         while (_cut >= _cuts)
         {
-            if (++_film >= _films.Count) return null;
+            if (_only == 2 || ++_film >= _films.Count) return null;
+            if (_only == 1) _only = 2;
             int o = _films[_film];
             _cuts = Dat.U16(_data, o + 165);
             _cut = 0;

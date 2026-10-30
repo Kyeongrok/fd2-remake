@@ -8,7 +8,7 @@ namespace Fd2;
 /// </summary>
 internal sealed partial class GameWindow
 {
-    private enum Screen { Opening, Title, Prologue, Game }
+    private enum Screen { Opening, Title, Prologue, Game, Ending }
 
     private const double OpeningCut = 1.0 / 18;
     private const string FanMadeNotice = "이 게임은 팬메이드 게임입니다. 원작 및 모드의 저작권은 각 저작권자에게 있습니다.";

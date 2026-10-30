@@ -60,7 +60,11 @@ internal sealed partial class GameWindow
         _stage = MenuStage.Over;
         _menu.Clear();
         ClearSelection();
-        if (_outcome == 2 && _campaign is { } c)
+        if (_outcome == 2 && _endingKind != 0)
+        {
+            _menu.Add(("끝 — 엔딩 보기", StartEnding, default));
+        }
+        else if (_outcome == 2 && _campaign is { } c)
         {
             if (c.NextScene < _sceneCount && c.NextScene <= Campaign.FinalScene)
             {

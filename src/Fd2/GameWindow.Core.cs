@@ -148,6 +148,7 @@ internal sealed partial class GameWindow
         if (_keysOpen || _helpOpen) { KeysWindowKey(Win32.VK_ESCAPE); return; }
         if (VersionsClick(x, y)) return;
         if (_screen == Screen.Prologue) { PrologueNext(); return; }
+        if (_screen == Screen.Ending) { EndingNext(); return; }
         if (_screen != Screen.Game) { TitleClick(_mouseX, _mouseY); return; }
         if (Talking) { TalkNext(); return; }
         MouseToCursor();
@@ -190,6 +191,7 @@ internal sealed partial class GameWindow
         if (vk == Win32.VK_F11) { ToggleFullscreen(); return; }
         if (KeysWindowKey(vk)) return;
         if (VersionsKey(vk)) return;
+        if (EndingKey(vk)) return;
         if (_screen == Screen.Prologue)
         {
             if (TalkAdvanceKey(vk)) PrologueNext();                        // Enter · Space · 방향키 · WASD 다음
@@ -298,6 +300,7 @@ internal sealed partial class GameWindow
         PlatformTick();
         MusicTick();
         if (_screen == Screen.Prologue) { PrologueTick(dt); return; }
+        if (_screen == Screen.Ending) { EndingTick(dt); return; }
         if (_screen != Screen.Game)
         {
             TitleTick(dt);
@@ -384,6 +387,12 @@ internal sealed partial class GameWindow
         if (_screen == Screen.Prologue)
         {
             DrawPrologue();
+            DrawKeysWindow();
+            return;
+        }
+        if (_screen == Screen.Ending)
+        {
+            DrawEnding();
             DrawKeysWindow();
             return;
         }

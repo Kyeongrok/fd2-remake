@@ -76,8 +76,39 @@ internal sealed partial class GameWindow
     /// <summary>승리 뒤 함수(대사 · 합류) — 없으면 바로.</summary>
     private void RunVictory(Action after)
     {
-        if (UseEvents && Events!.Victory(_scene.Index) is { } ops) RunOps(ops, 0, after);
-        else after();
+        _endingKind = 0;
+        _endingOps = null;
+        _victoryAfter = after;
+        if (UseEvents && Events!.Victory(_scene.Index) is { } ops) RunOps(ops, 0, () => { _victoryAfter = null; after(); });
+        else
+        {
+            _victoryAfter = null;
+            if (_scene.Index == Campaign.FinalScene - 1) _endingKind = 1;   // 대본이 없어도 30장 뒤는 끝
+            after();
+        }
+    }
+
+    /// <summary>
+    /// 승리 뒤 함수에서 끝으로 가는 자리 — sub_1088D(n17)(30장 뒤: 나머지는 끝 장면 지도 연출이라 남겨 두고) · sub_31529(27장 뒤 열쇠가 없을 때 · 끝 장면 지도 연출 끝).
+    /// 승리 함수는 여기서 멈추고 판정 메뉴의 「끝」이 이어 튼다. 그랬으면 true.
+    /// </summary>
+    private bool EndingOp(string raw, JsonElement[] ops, int next)
+    {
+        if (raw.StartsWith("sub_1088D") && !_endingPrelude)
+        {
+            _endingKind = 1;
+            _endingOps = ops[next..];
+        }
+        else if (raw == "sub_31529()")
+        {
+            if (_endingPrelude) { StartEndingFilm(); return true; }
+            _endingKind = _scene.Index == Campaign.FinalScene - 1 ? 1 : 2;
+        }
+        else return false;
+        var done = _victoryAfter;
+        _victoryAfter = null;
+        done?.Invoke();
+        return true;
     }
 
     // ── 낱말 돌리기 ──────────────────────────────────────────────────────────
@@ -137,8 +168,12 @@ internal sealed partial class GameWindow
                     if (A(1) < _scene.EventLines.Count) _scene.EventLines[A(1)].Turn = Turn + (op.GetArrayLength() > 2 ? A(2) : 1);
                     break;
                 case "raw":
-                    RawOp(op.GetArrayLength() > 1 ? op[1].GetString() ?? "" : "");
+                {
+                    string raw = op.GetArrayLength() > 1 ? op[1].GetString() ?? "" : "";
+                    if (EndingOp(raw, ops, next)) return;
+                    RawOp(raw);
                     break;
+                }
                 case "armset":
                     if (A(1) < _scene.EventLines.Count) _scene.EventLines[A(1)].Turn = A(2);
                     break;
