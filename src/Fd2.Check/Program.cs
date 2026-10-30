@@ -24,6 +24,7 @@ internal static class Program
         Tables(t);
         Names(dir);
         Scripts(t);
+        Rules.Run(dir, t);
 
         Console.WriteLine();
         Console.WriteLine(_fail == 0 ? $"모두 맞음 ({_pass})" : $"틀림 {_fail} / {_pass + _fail}");

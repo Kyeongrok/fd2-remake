@@ -31,6 +31,9 @@ internal sealed partial class GameWindow
     private readonly string _dir;
     private readonly uint[] _pal;
     private readonly IconBank _icons;
+
+    /// <summary>원작 규칙 표(FD2.EXE) — 없으면 null(전투는 기본값으로 돈다).</summary>
+    private readonly GameTables? _tables;
     private readonly int _sceneCount;
     private Scene _scene = null!;
     private Unit? _selected;
@@ -63,6 +66,7 @@ internal sealed partial class GameWindow
         _pal = GameFolder.Palette(dir);
         _icons = new IconBank(Path.Combine(dir, "FDICON.B24"), _pal);
         _sceneCount = Dat.Count(Path.Combine(dir, "FDFIELD.DAT")) / 3;
+        _tables = GameTables.Load(dir);
         PlatformInit();
     }
 
@@ -257,7 +261,8 @@ internal sealed partial class GameWindow
         _bs = BattleState.None;
         ClearSelection();
         _scene = new Scene(_dir, index, _pal, _icons);
-        foreach (var u in _scene.Units) Equip(u, battle: false);
+        _battle = new Battle(_scene, _tables);
+        foreach (var u in _scene.Units) _battle.Setup(u);
         _freeReachFor = default;
         _selected = _scene.Units.Find(u => u.Side == Side.Player);
         _keys.Clear();

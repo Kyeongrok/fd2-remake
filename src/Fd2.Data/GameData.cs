@@ -149,6 +149,7 @@ public sealed class IconBank
 public enum Side { Player, Other }
 
 /// <summary>지도 위의 한 사람.</summary>
+/// <remarks>전투 칸은 원본 유닛 기록(80바이트, 분석-전투 1절)을 따른다 — 채우는 것은 <see cref="Battle"/>.</remarks>
 public sealed class Unit
 {
     public required int Icon;
@@ -159,17 +160,66 @@ public sealed class Unit
     /// <summary>쓰러져 누워 있다 — 옆모습을 눕혀 그린다(프롤로그의 유니).</summary>
     public bool Lying;
 
-    /// <summary>장면 정보의 레벨(+4). 우리 편은 1.</summary>
+    /// <summary>레벨(+33). 장면 정보의 레벨(+4), 우리 편은 동료 표의 합류 레벨.</summary>
     public int Level = 1;
 
-    // 전투(게임의 GameWindow.Battle.cs 가 채운다) — 능력치는 원본 규칙이 아니라 직업별 기본값이다.
-    public int Hp, MaxHp, Mp, MaxMp, Atk, Def, Move = 4, RangeMin = 1, RangeMax = 1;
+    /// <summary>꼴(+7) — 표를 찾는 캐릭터 번호(0~67 동료 꼴, 68~ 몬스터). 그림(Icon)은 판에 따라 옮겨 그릴 수 있어 따로 둔다. -1 이면 Icon.</summary>
+    public int Form = -1;
+
+    /// <summary>처음 캐릭터 번호(+8) — 이름 · 대사 FFEE/FFEF 의 사람 찾기. -1 이면 Form.</summary>
+    public int Id = -1;
+
+    /// <summary>전투 배열 번호 — 우리 편 출전자가 0 부터, 그다음 유닛 표에서 나온 차례(승패 판정 · 이동 대본이 이 번호를 쓴다). -1 은 배열 밖.</summary>
+    public int Slot = -1;
+
+    /// <summary>장면 유닛 표에서 나왔으면 그 줄(장비 · 마법 · AI · 떨굼).</summary>
+    public RosterEntry? Entry;
+
+    public int FormId => Form >= 0 ? Form : Icon;
+    public int NameId => Id >= 0 ? Id : FormId;
+
+    // 전투 — Battle 이 채운다
+    /// <summary>Hp · MaxHp(+64 · +66), Mp · MaxMp(+68 · +70), Atk · Def · Hit · Evade = 셈한 공격 · 방어 · 명중 · 회피(+72 ~ +78).</summary>
+    public int Hp, MaxHp, Mp, MaxMp, Atk, Def, Hit, Evade, Move = 4, RangeMin = 1, RangeMax = 1;
+
+    /// <summary>바탕 공격(역량 +55) · 바탕 방어(내력 +57) · 속도(+62).</summary>
+    public int BaseAtk, BaseDef, Speed;
+
+    /// <summary>종족(+31) · 직업(+32).</summary>
+    public int Race, Class;
+
+    /// <summary>경험치(+60) 0~99, 적 · 컴퓨터 편은 255.</summary>
+    public int Exp;
+
+    /// <summary>가방 8칸(+10 ~ +25) — 물건 번호와 장비 중인가. 무기는 장비 중인 첫 번호 &lt; 128, 옷은 128 이상.</summary>
+    public readonly List<(int Item, bool Equipped)> Bag = new();
+
+    /// <summary>아는 마법 비트(+26 ~ +30, 40개) — 마법 m = 비트 m.</summary>
+    public ulong Spells;
+
+    /// <summary>상태(+34 ~ +39) 남은 차례 — 0 공격↑ · 1 방어↑ · 2 속도↑ · 3 독 · 4 마비 · 5 봉쇄.</summary>
+    public readonly int[] Status = new int[6];
+
+    /// <summary>AI(+52: 아래 4비트 갈래, 0x40 공격 좋아함, 0x80 아끼는 유닛) · 인자(+53 · +54) · 상자 번호(+61).</summary>
+    public int AiByte, AiX, AiY, Chest;
+
+    /// <summary>쓰러지면 주는 것(+49 · +50): 0 물건 · 1 돈 · 2 사건 · 3 대사 묶음, 255 없음.</summary>
+    public int DropKind = 255, DropValue;
+
     public bool Acted;
 
     /// <summary>컴퓨터가 움직이는 우리 편(장면 정보의 편 1 — 1장의 해양순찰대 같은).</summary>
     public bool Ai;
+
+    /// <summary>원본의 편(+6): 0 적 · 1 컴퓨터 아군 · 2 우리 편.</summary>
+    public int Team => Side == Side.Other ? 0 : Ai ? 1 : 2;
+
     /// <summary>쓰러지지 않았나 — 전투 능력치가 없는(전투 밖) 사람은 늘 서 있다.</summary>
     public bool Alive => Hp > 0 || MaxHp == 0;
+
+    public bool Poisoned => Status[3] > 0;
+    public bool Paralyzed => Status[4] > 0;
+    public bool Sealed => Status[5] > 0;
 
     // 칸 사이를 걷는 중이면 0..1 로 나아간다
     public int FromX, FromY;
@@ -183,8 +233,26 @@ public sealed class Unit
 
 public enum Dir { Down = 0, Left = 1, Up = 2, Right = 3 }
 
-/// <summary>장면 정보의 유닛 한 줄 — 편(0 적 · 1 적 우두머리 · 2 합류하는 아군), 그림, 레벨, 등장 차례, 자리.</summary>
-public sealed record RosterEntry(int Type, int Icon, int Level, int Phase, int X, int Y);
+/// <summary>
+/// 장면 정보의 유닛 한 줄(26바이트, sub_10C50) — 편(0 적 · 1 컴퓨터 아군 · 2 합류하는 아군), 캐릭터 번호, 레벨, 등장 차례, 자리.
+/// Raw 의 나머지: +2 상자 번호(+61), +5 · +6 무기 · 옷(+5 = 255 면 +6 하나만), +7 ~ +12 물건 6칸, +13 ~ +16 마법 비트,
+/// +17 ~ +19 AI(+52 ~ +54), +22 떨굼 종류 · +23 u16 값.
+/// </summary>
+public sealed record RosterEntry(int Type, int Icon, int Level, int Phase, int X, int Y)
+{
+    public byte[] Raw { get; init; } = new byte[26];
+
+    public int Chest => Raw[2];
+    public int Weapon => Raw[5];
+    public int Armor => Raw[6];
+    public IEnumerable<int> Items => Raw.Skip(7).Take(6).Where(b => b != 255).Select(b => (int)b);
+    public uint Spells => (uint)(Raw[13] | Raw[14] << 8 | Raw[15] << 16 | Raw[16] << 24);
+    public int AiByte => Raw[17];
+    public int AiX => Raw[18];
+    public int AiY => Raw[19];
+    public int DropKind => Raw[22];
+    public int DropValue => Raw[23] | Raw[24] << 8;
+}
 
 /// <summary>장면 하나 — 지도·타일·속성·처음 배치.</summary>
 public sealed class Scene
@@ -201,6 +269,9 @@ public sealed class Scene
     public List<Unit> Units { get; } = new();
 
     private readonly int _iconCount;
+
+    /// <summary>다음에 세울 사람의 전투 배열 번호.</summary>
+    private int _nextSlot;
     private readonly bool _royalsMoved;
 
     /// <summary>장면 정보의 유닛 표 전부(등장 차례 상관없이).</summary>
@@ -237,7 +308,10 @@ public sealed class Scene
             if (u + 26 > info.Length || 4 + 6 * i >= pos.Length) break;
             // 그림 번호가 없는 줄도 넣어 둔다 — 대사의 FFEC · FFED 가 이 표의 차례 번호로 말하는 사람을 가리킨다
             int icon = info[u + 1];
-            Roster.Add(new RosterEntry(info[u], icon, Math.Max(1, (int)info[u + 4]), info[u + 21], pos[2 + 6 * i], pos[4 + 6 * i]));
+            Roster.Add(new RosterEntry(info[u], icon, Math.Max(1, (int)info[u + 4]), info[u + 21], pos[2 + 6 * i], pos[4 + 6 * i])
+            {
+                Raw = info.AsSpan(u, 26).ToArray(),
+            });
         }
 
         // 원본(sub_1088D → sub_10C50)처럼 우리 편 출전자를 먼저(배열 번호 0 ~ P-1) 세우고, 그다음 유닛 표의 처음부터 나와 있는 줄.
@@ -248,7 +322,7 @@ public sealed class Scene
         {
             int p = 2 + 6 * (others + k);
             if (p + 3 > pos.Length) break;
-            Place(new Unit { Icon = party[k], Side = Side.Player, Facing = Dir.Up }, pos[p], pos[p + 2]);
+            Place(new Unit { Icon = party[k], Form = party[k], Side = Side.Player, Facing = Dir.Up, Slot = _nextSlot++ }, pos[p], pos[p + 2]);
         }
         foreach (var e in Roster.Where(e => e.Phase == 0)) Spawn(e);
     }
@@ -265,9 +339,14 @@ public sealed class Scene
     /// </summary>
     public Unit? Spawn(RosterEntry e)
     {
+        int slot = _nextSlot++;   // 원본은 늘 배열 뒤에 붙인다 — 못 세워도 번호는 넘긴다
         int sprite = CharacterNames.SpriteOf(e.Icon, _royalsMoved);
         if (sprite >= _iconCount) return null;
-        var u = new Unit { Icon = sprite, Side = e.Type is 1 or 2 ? Side.Player : Side.Other, Ai = e.Type == 1, Level = e.Level };
+        var u = new Unit
+        {
+            Icon = sprite, Form = e.Icon, Side = e.Type is 1 or 2 ? Side.Player : Side.Other, Ai = e.Type == 1, Level = e.Level,
+            Slot = slot, Entry = e,
+        };
         Place(u, e.X, e.Y);
         return Units.Contains(u) ? u : null;
     }
@@ -327,19 +406,27 @@ public sealed class Scene
     /// <summary>지형 — 타일 속성 셋째 바이트(4 풀밭 · 5 숲 · 6 모래 · 0 물 …). 원본은 이것을 전투 배경 BG.DAT 번호로 쓴다(sub_12E38).</summary>
     public int Terrain(int x, int y) => Inside(x, y) ? _attr[4 * _cells[y * Width + x] + 2] : 0;
 
-    /// <summary>이 칸에 들어가는 데 드는 이동력 — 못 가면 -1, 숲(속성 2)은 2, 나머지 1.</summary>
-    public int MoveCost(int x, int y)
+    /// <summary>보통 직업의 지형 종류 0~5 이동비(원본 표 0x61646 의 검사 줄) — 표가 없을 때.</summary>
+    public static readonly int[] DefaultMoveCost = [1, 20, 1, 2, 2, 20];
+
+    /// <summary>이 칸에 들어가는 데 드는 이동력 — 지형 종류(0~5)로 이동비 표 costs 를 찾는다(20 = 사실상 못 감). 지도 밖은 -1.</summary>
+    public int MoveCost(int x, int y, int[]? costs = null)
     {
         if (!Inside(x, y)) return -1;
-        return _attr[4 * _cells[y * Width + x] + 1] switch { 1 => -1, 2 => 2, _ => 1 };
+        int g = Ground(x, y);
+        costs ??= DefaultMoveCost;
+        return g < costs.Length ? costs[g] : 20;
     }
 
     /// <summary>
-    /// 이동 범위 — 칸마다 (남은 이동력이 가장 큰) 앞 칸. 다른 편이 선 칸은 못 지나가고, 같은 편은 지나가되 멈출 수는 없다.
-    /// 같은 편을 지나가는 칸도 들어 있다 — 멈출 수 있는 칸만은 <see cref="Stops"/>.
+    /// 이동 범위(sub_4E390 · sub_4E4BE) — 칸마다 (남은 이동력이 가장 큰) 앞 칸. 칸마다 이동비 표 costs(직업 줄)로 깎는다.
+    /// zoc 면 원본처럼 상대 편(편 0 ↔ 편 1 · 2) 칸은 못 들어가고, 그 위아래양옆 칸에 들어가면 거기서 멈춘다(남은 이동력 0).
+    /// zoc 가 아니면 다른 편이 선 칸만 막는다. 같은 편은 지나가되 멈출 수는 없다 — 멈출 수 있는 칸만은 <see cref="Stops"/>.
     /// </summary>
-    public Dictionary<(int X, int Y), (int X, int Y)> Reach(Unit u)
+    public Dictionary<(int X, int Y), (int X, int Y)> Reach(Unit u, int[]? costs = null, bool zoc = false)
     {
+        bool Opponent(Unit o) => zoc ? o.Team == 0 != (u.Team == 0) : o.Side != u.Side;
+        var foes = Units.Where(o => o != u && o.Alive && Opponent(o)).Select(o => (o.X, o.Y)).ToHashSet();
         var best = new Dictionary<(int, int), int> { [(u.X, u.Y)] = u.Move };
         var prev = new Dictionary<(int X, int Y), (int X, int Y)> { [(u.X, u.Y)] = (u.X, u.Y) };
         var q = new PriorityQueue<(int X, int Y), int>();
@@ -352,11 +439,13 @@ public sealed class Scene
             foreach (var (dx, dy) in dirs)
             {
                 var n = (c.X + dx, c.Y + dy);
-                int cost = MoveCost(n.Item1, n.Item2);
+                int cost = MoveCost(n.Item1, n.Item2, costs);
                 if (cost < 0 || left - cost < 0) continue;
-                var who = UnitAt(n.Item1, n.Item2);
-                if (who != null && who.Alive && who.Side != u.Side) continue;
+                if (foes.Contains(n)) continue;
                 int remain = left - cost;
+                if (zoc && remain > 0 && (foes.Contains((n.Item1 + 1, n.Item2)) || foes.Contains((n.Item1 - 1, n.Item2))
+                                          || foes.Contains((n.Item1, n.Item2 + 1)) || foes.Contains((n.Item1, n.Item2 - 1))))
+                    remain = 0;   // 상대 곁 — 들어가면 멈춘다
                 if (best.TryGetValue(n, out int had) && had >= remain) continue;
                 best[n] = remain;
                 prev[n] = c;

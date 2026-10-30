@@ -4,13 +4,14 @@ using Fd2.Native;
 namespace Fd2;
 
 /// <summary>
-/// 전투 — 아군 턴(고르기 → 메뉴: 이동 · 공격 · 마법 · 대기) ↔ 적군 턴, 이동 범위(파랑) · 공격 범위(빨강),
+/// 전투 — 아군 턴(고르기 → 메뉴: 이동 · 공격 · 마법 · 대기) → 컴퓨터 아군 → 적군 턴, 이동 범위(파랑) · 공격 범위(빨강),
 /// 컷인(공격하는 쪽 FIGANI 공격 모션 + 맞는 쪽 서기 모션, 원거리 · 마법은 맞는 쪽 화면으로 넘어간다).
 /// </summary>
 /// <remarks>
-/// 지도 · 배치 · 그림 · 모션은 원본 자료를 쓰지만, 능력치 · 피해 · 적의 움직임은 원본 규칙이 아니라
-/// 직업별 기본값과 흔한 SRPG 규칙이다(<see cref="Equip"/> · <see cref="Damage"/> · <see cref="EnemyStep"/>).
-/// 적은 장면 정보의 등장 차례 k 가 k 턴 시작에 나온다. 편 2(나중에 합류하는 아군)는 그때 우리 편으로 든다.
+/// 수(능력치 · 명중 · 피해 · 필살 · 두 번 치기 · 되받아치기 · 경험치 · 레벨업 · 상태 · 떨굼 · 이기고 짐)는 원작 규칙
+/// <see cref="Battle"/>(FD2.EXE 의 표와 식, 분석-전투)이 셈하고 여기는 화면 · 차례 흐름만 맡는다.
+/// 적은 장면 정보의 등장 차례 k 가 k 턴 시작에 나온다(원작은 판마다 사건 함수가 부른다 — 그 코드는 아직 못 옮겨 차례 번호로 갈음한 짐작).
+/// 편 2(나중에 합류하는 아군)는 그때 우리 편으로 든다.
 /// </remarks>
 internal sealed partial class GameWindow
 {
@@ -20,7 +21,15 @@ internal sealed partial class GameWindow
     private const double FigTick = 0.055;
 
     private BattleState _bs = BattleState.None;
-    private int _turn, _lastPhase;
+
+    /// <summary>지금 장면의 원작 규칙(LoadScene 이 만든다) — 차례 수 · 돈 · 난수도 여기 있다.</summary>
+    private Battle _battle = null!;
+
+    /// <summary>이름 · 물건 글 표(FDTXT 0) — 처음 쓸 때 읽는다.</summary>
+    private NameTable? _names;
+
+    private int Turn => _battle.Turn;
+
     private Unit? _actor;
     private (int X, int Y) _origin;
     private Dictionary<(int X, int Y), (int X, int Y)>? _reach;
@@ -36,16 +45,31 @@ internal sealed partial class GameWindow
     private bool _centerCursor;
 
     private string _banner = "";
+    /// <summary>알림 앞에 원본 글꼴로 그릴 이름 줄(FDTXT 0, -1 없음).</summary>
+    private int _bannerName = -1;
     private double _bannerLeft;
     private Action? _afterBanner;
 
-    // 컷인 — 공격 한 번(반격은 그다음 한 번)
+    // 컷인 — 한 번 치기씩. 두 번 치기는 같은 짝을 한 번 더, 되받아치기는 첫 공격이 다 끝난 뒤
     private readonly Queue<(Unit A, Unit D, Spell? S)> _strikes = new();
     private Action? _afterStrikes;
     private (Unit A, Unit D, Spell? S) _strike;
     private Motion? _strikeMotion;
     private int _strikeFrame, _strikeHeld, _strikeDamage = -1;
+    private bool _strikeMiss, _strikeCrit;
     private double _strikeClock, _strikeTail;
+
+    /// <summary>첫 공격이 끝나면 되받아칠 짝(맞은 쪽, 친 쪽) — 없으면 null.</summary>
+    private (Unit D, Unit A)? _counter;
+
+    /// <summary>이번 무리(한 사람의 치기들)에서 얻은 경험 — 원작은 대입이라 마지막 한 대 몫만 남는다.</summary>
+    private (Unit Who, int Exp)? _groupExp;
+
+    /// <summary>이번 공격에서 쓰러진 사람과 쓰러뜨린 사람 — 다 끝나면 떨굼을 처리한다.</summary>
+    private readonly List<(Unit Dead, Unit Killer)> _fallen = new();
+
+    /// <summary>공격이 끝나면 보일 알림(레벨업 · 독 · 떨굼).</summary>
+    private readonly List<Notice> _strikeNotes = new();
 
     private readonly Dictionary<int, Motion?> _motions = new(), _stands = new();
 
@@ -78,10 +102,13 @@ internal sealed partial class GameWindow
     private Spell? _pendingSpell;
     private MenuStage _targetFrom;
 
-    // 적군 턴 — 한 명씩
+    // 컴퓨터 차례 — 한 명씩(컴퓨터 아군 → 적)
     private readonly Queue<Unit> _enemyQueue = new();
     private Unit? _enemyNow;
     private double _enemyWait;
+
+    /// <summary>지금 도는 컴퓨터 차례가 컴퓨터 아군(편 1) 차례인가 — 끝나면 적 차례로.</summary>
+    private bool _alliesPhase;
 
     private bool InBattle => _bs != BattleState.None;
 
@@ -93,14 +120,12 @@ internal sealed partial class GameWindow
     private void StartBattle(int scene)
     {
         LoadScene(scene);
-        foreach (var u in _scene.Units) Equip(u, battle: true);
-        _lastPhase = _scene.Roster.Count == 0 ? 0 : _scene.Roster.Max(e => e.Phase);
-        _turn = 0;
+        _battle.Turn = 0;
         _enemyPhase = false;
         // 전투 앞 대사 — 묶음 0. 묶음 k(k ≥ 1)는 등장 차례 k 의 무리가 나올 때 보인다(1장: 1 해적 두목, 2 해적과 마주침,
         // 3 하노 · 하와터, 4 해적 F · G, 5 해적 두목 97, 6 해양순찰대 68 — 대사를 그려 맞춰 본 것).
         _bs = BattleState.Talk;
-        if (Controlled.OrderBy(u => u.Icon).FirstOrDefault() is { } lead) { _cursor = (lead.X, lead.Y); _centerCursor = true; }
+        if (Controlled.OrderBy(u => u.Slot).FirstOrDefault() is { } lead) { _cursor = (lead.X, lead.Y); _centerCursor = true; }
         StartTalk(scene, [0], NextTurn);
     }
 
@@ -110,119 +135,146 @@ internal sealed partial class GameWindow
         LoadScene(_scene.Index);
     }
 
-    /// <summary>
-    /// 직업별 기본 능력치 — 원본 규칙이 아니다. 이름 끝(검사 · 전사 · 기사 · 궁병 · 법사 · 승려 · 무사)으로 나누고,
-    /// 몬스터(그림 68 부터)는 한 가지, 적 우두머리는 체력을 늘린다. 레벨마다 체력 +3, 공격 +1, 방어 +1/2.
-    /// </summary>
-    private static void Equip(Unit u, bool battle)
-    {
-        string name = CharacterNames.Of(u.Icon);
-        (int hp, int atk, int def, int mov, int rmin, int rmax) = name switch
-        {
-            _ when name.Contains("궁병") || name.Contains("사수") || name.Contains("저격") => (22, 8, 3, 4, 2, 3),
-            _ when name.Contains("법사") || name.Contains("소환") || name.Contains("성자") => (20, 10, 2, 4, 1, 2),
-            _ when name.Contains("승려") || name.Contains("제관") => (22, 6, 3, 4, 1, 1),
-            _ when name.Contains("기사") => (28, 9, 7, 6, 1, 1),
-            _ when name.Contains("전사") => (30, 10, 6, 4, 1, 1),
-            _ when name.Contains("무사") || name.Contains("투사") || name.Contains("무성") => (26, 11, 4, 5, 1, 1),
-            _ when u.Icon >= CharacterNames.Heroes => (18, 7, 2, 4, 1, 1),
-            _ => (26, 9, 5, 5, 1, 1),
-        };
-        u.Move = mov;
-        u.RangeMin = rmin;
-        u.RangeMax = rmax;
-        if (!battle) return;
-        int lv = Math.Max(1, u.Level) - 1;
-        u.MaxHp = u.Hp = hp + 3 * lv;
-        u.Atk = atk + lv;
-        u.Def = def + lv / 2;
-        u.MaxMp = u.Mp = SpellsOf(u).Count > 0 ? 12 + 2 * lv : 0;
-        u.Acted = false;
-    }
+    private static int Dist(Unit a, Unit b) => Battle.Dist(a, b);
 
-    private static bool IsMagic(Unit u) => CharacterNames.Of(u.Icon) is var n && (n.Contains("법사") || n.Contains("소환") || n.Contains("성자"));
+    private IEnumerable<Unit> Living(Side side) => _scene.Units.Where(u => u.Side == side && u.Hp > 0);
 
-    private static int Damage(Unit a, Unit d, Spell? s) => s switch
-    {
-        { Heal: true } => s.Power + 2 * a.Level,
-        not null => Math.Max(1, s.Power + a.Atk / 2 - d.Def / 4 + Random.Shared.Next(-2, 3)),
-        _ => Math.Max(1, a.Atk - (IsMagic(a) ? d.Def / 4 : d.Def / 2) + Random.Shared.Next(-2, 3)),
-    };
+    /// <summary>u 가 칠 상대 — 원작의 편으로 편 0 ↔ 편 1 · 2.</summary>
+    private IEnumerable<Unit> Opponents(Unit u) => _scene.Units.Where(o => o.Hp > 0 && o.Team == 0 != (u.Team == 0));
 
-    private static bool InSpellRange(Unit a, Unit b, Spell s) => Dist(a, b) is var d && d >= s.RangeMin && d <= s.RangeMax;
+    /// <summary>내가 움직이는 아군(컴퓨터가 움직이는 아군은 빼고).</summary>
+    private IEnumerable<Unit> Controlled => Living(Side.Player).Where(u => !u.Ai);
+
+    /// <summary>무기로 칠 수 있는 상대(편 0) — 지금 자리에서.</summary>
+    private List<Unit> StrikeTargets(Unit u) => Living(Side.Other).Where(e => _battle.CanStrike(u, (u.X, u.Y), e)).ToList();
 
     /// <summary>그 마법을 걸 수 있는 대상 — 회복은 다친 아군(자기 포함), 공격은 적.</summary>
     private List<Unit> SpellTargets(Unit a, Spell s) => s.Heal
         ? Living(Side.Player).Where(p => p.Hp < p.MaxHp && InSpellRange(a, p, s)).ToList()
         : Living(Side.Other).Where(e => InSpellRange(a, e, s)).ToList();
 
-    private static int Dist(Unit a, Unit b) => Math.Abs(a.X - b.X) + Math.Abs(a.Y - b.Y);
+    private static bool InSpellRange(Unit a, Unit b, Spell s) => Dist(a, b) is var d && d >= s.RangeMin && d <= s.RangeMax;
 
-    private static bool InRange(Unit a, Unit b) => Dist(a, b) is var d && d >= a.RangeMin && d <= a.RangeMax;
+    // ── 차례(sub_1A30B) ─────────────────────────────────────────────────────
 
-    private IEnumerable<Unit> Living(Side side) => _scene.Units.Where(u => u.Side == side && u.Hp > 0);
-
-    /// <summary>u 가 칠 상대 — 다른 편의 살아 있는 사람.</summary>
-    private IEnumerable<Unit> Opponents(Unit u) => Living(u.Side == Side.Player ? Side.Other : Side.Player);
-
-    /// <summary>내가 움직이는 아군(컴퓨터가 움직이는 아군은 빼고).</summary>
-    private IEnumerable<Unit> Controlled => Living(Side.Player).Where(u => !u.Ai);
-
-    // ── 턴 ───────────────────────────────────────────────────────────────────
-
+    /// <summary>
+    /// 우리 편 차례 시작 — 차례 수 +1, 그 차례의 무리가 나오고, 우리 편 독 · 상태 줄이기(sub_1A866(2)), 이기고 짐 확인.
+    /// </summary>
     private void NextTurn()
     {
-        _turn++;
-        foreach (var e in _scene.Roster.Where(e => e.Phase == _turn))
-            if (_scene.Spawn(e) is { } u) Equip(u, battle: true);
-        foreach (var u in Living(Side.Player)) u.Acted = false;
+        _battle.Turn++;
+        int turn = Turn;
+        foreach (var e in _scene.Roster.Where(e => e.Phase == turn))
+            if (_scene.Spawn(e) is { } u) _battle.Setup(u);
+        foreach (var u in _scene.Units) u.Acted = false;
         _enemyPhase = false;
         ClearSelection();
-        if (Controlled.OrderBy(u => u.Icon).FirstOrDefault() is { } lead) { _cursor = (lead.X, lead.Y); _centerCursor = true; }
-        int turn = _turn;
-        void Banner() => ShowBanner($"{turn}턴 — 아군 차례", () => _bs = BattleState.Select);
+        if (Controlled.OrderBy(u => u.Slot).FirstOrDefault() is { } lead) { _cursor = (lead.X, lead.Y); _centerCursor = true; }
+        var notes = Tick(2);
+        void Banner() => ShowBanner($"{turn}턴 — 아군 차례", () =>
+        {
+            _bs = BattleState.Select;
+            if (!Controlled.Any(u => !u.Paralyzed)) EndPlayerTurn();   // 움직일 우리 편이 모두 마비면 저절로 끝(sub_13565)
+        });
+        void Notes() => ShowNotices(notes, () => { if (!CheckOver()) Banner(); });
         if (_scene.Roster.Any(e => e.Phase == turn))
         {
             _bs = BattleState.Talk;
-            StartTalk(_scene.Index, [turn], Banner);   // 이 차례의 무리가 나올 때의 대사(없으면 바로 넘어간다)
+            StartTalk(_scene.Index, [turn], Notes);   // 이 차례의 무리가 나올 때의 대사(없으면 바로 넘어간다)
         }
-        else Banner();
+        else Notes();
     }
 
+    /// <summary>그 편 차례 시작의 독 · 상태 줄이기 — 독으로 쓰러진 사람의 떨굼까지 알림으로.</summary>
+    private List<Notice> Tick(int team)
+    {
+        var died = new List<Unit>();
+        var notes = _battle.StatusTick(team, died);
+        notes.AddRange(_battle.Drops(died, null));
+        return notes;
+    }
+
+    /// <summary>
+    /// 우리 편 차례 끝 — 한 번도 안 움직인 우리 편은 쉬어 최대 HP 의 1/5 회복(독 · 마비 빼고), 컴퓨터 아군 독 · 상태 → 컴퓨터 아군 차례.
+    /// </summary>
     private void EndPlayerTurn()
     {
         ClearSelection();
         _enemyPhase = true;
-        _enemyQueue.Clear();
-        // 컴퓨터가 움직이는 아군이 먼저, 그다음 적
-        foreach (var u in Living(Side.Player).Where(u => u.Ai)) _enemyQueue.Enqueue(u);
-        foreach (var u in Living(Side.Other).OrderBy(u => u.Y).ThenBy(u => u.X)) _enemyQueue.Enqueue(u);
-        ShowBanner($"{_turn}턴 — 적군 차례", () => { _bs = BattleState.Enemy; _enemyNow = null; _enemyWait = 0.2; });
+        foreach (var u in _scene.Units.Where(u => u.Team == 2 && u.Hp > 0 && !u.Acted)) _battle.Rest(u);
+        var notes = Tick(1);
+        ShowNotices(notes, () =>
+        {
+            if (CheckOver()) return;
+            _alliesPhase = true;
+            _enemyQueue.Clear();
+            foreach (var u in _scene.Units.Where(u => u.Team == 1 && u.Hp > 0 && !u.Paralyzed).OrderBy(u => u.Slot)) _enemyQueue.Enqueue(u);
+            _bs = BattleState.Enemy;
+            _enemyNow = null;
+            _enemyWait = 0.2;
+        });
     }
 
-    private void ShowBanner(string text, Action after)
+    /// <summary>적 차례 — 끝냄 표시를 모두 지우고, 적 독 · 상태(sub_1A866(0)), 「적군 차례」 뒤 배열 차례대로.</summary>
+    private void StartEnemyPhase()
+    {
+        foreach (var u in _scene.Units) u.Acted = false;
+        var notes = Tick(0);
+        ShowNotices(notes, () =>
+        {
+            if (CheckOver()) return;
+            ShowBanner($"{Turn}턴 — 적군 차례", () =>
+            {
+                _alliesPhase = false;
+                _enemyQueue.Clear();
+                foreach (var u in _scene.Units.Where(u => u.Team == 0 && u.Hp > 0 && !u.Paralyzed).OrderBy(u => u.Slot)) _enemyQueue.Enqueue(u);
+                _bs = BattleState.Enemy;
+                _enemyNow = null;
+                _enemyWait = 0.2;
+            });
+        });
+    }
+
+    private void ShowBanner(string text, Action after, double seconds = 1.1)
     {
         _banner = text;
-        _bannerLeft = 1.1;
+        _bannerName = -1;
+        _bannerLeft = seconds;
         _afterBanner = after;
         _bs = BattleState.Banner;
     }
 
-    /// <summary>이기고 졌나 — 사울(그림 0)이 쓰러지거나 아군이 다 쓰러지면 패배, 적이 없고 더 나올 적도 없으면 승리.</summary>
+    /// <summary>알림들을 차례로(한 줄씩 짧게, 대사 묶음이면 대사로) 보이고 다 보면 after.</summary>
+    private void ShowNotices(List<Notice> notes, Action after)
+    {
+        if (notes.Count == 0) { after(); return; }
+        var n = notes[0];
+        var rest = notes.GetRange(1, notes.Count - 1);
+        if (n.Talk >= 0)
+        {
+            _bs = BattleState.Talk;
+            StartTalk(_scene.Index, [n.Talk], () => ShowNotices(rest, after));
+            return;
+        }
+        ShowBanner(n.Text, () => ShowNotices(rest, after), 0.9);
+        _bannerName = n.Name;
+    }
+
+    /// <summary>이기고 졌나 — 원작 판정(<see cref="Battle.Judge"/>: 기본은 적 전멸 = 이김, 사울 쓰러짐 = 짐, 판마다 덧붙인 조건).</summary>
     private bool CheckOver()
     {
-        bool saulDown = _scene.Units.Any(u => u.Side == Side.Player && u.Icon == 0 && u.Hp <= 0);
-        if (saulDown || !Controlled.Any())
+        switch (_battle.Judge())
         {
-            _bs = BattleState.Over;
-            _banner = "패배 — 게임 > 1장 전투 시작으로 다시";
-            return true;
-        }
-        if (!Living(Side.Other).Any() && _turn >= _lastPhase)
-        {
-            _bs = BattleState.Over;
-            _banner = $"승리! ({_turn}턴)";
-            return true;
+            case 1:
+                _bs = BattleState.Over;
+                _banner = "패배 — 게임 > 1장 전투 시작으로 다시";
+                _bannerName = -1;
+                return true;
+            case 2:
+                _bs = BattleState.Over;
+                _banner = $"승리! ({Turn}턴)";
+                _bannerName = -1;
+                return true;
         }
         return false;
     }
@@ -269,26 +321,29 @@ internal sealed partial class GameWindow
     {
         _actor = u;
         _origin = (u.X, u.Y);
-        _reach = _scene.Reach(u);
+        _reach = _battle.Reach(u);
         _attackTiles = AttackTiles(u, _scene.Stops(_reach, u));
     }
 
-    /// <summary>멈출 수 있는 칸들에서 사거리 안이지만 이동 범위 밖인 칸 — 공격 가능 범위.</summary>
+    /// <summary>멈출 수 있는 칸들에서 사거리 안이지만 이동 범위 밖인 칸 — 공격 가능 범위(최대 16 이상은 십자 직선).</summary>
     private HashSet<(int X, int Y)> AttackTiles(Unit u, IEnumerable<(int X, int Y)> stands)
     {
         var set = new HashSet<(int X, int Y)>();
         var reach = stands.ToHashSet();
+        int r = u.RangeMax < 16 ? u.RangeMax : u.RangeMax - 16;
         foreach (var (sx, sy) in reach)
-            for (int dy = -u.RangeMax; dy <= u.RangeMax; dy++)
-                for (int dx = -u.RangeMax; dx <= u.RangeMax; dx++)
+            for (int dy = -r; dy <= r; dy++)
+                for (int dx = -r; dx <= r; dx++)
                 {
-                    int d = Math.Abs(dx) + Math.Abs(dy);
-                    if (d < u.RangeMin || d > u.RangeMax) continue;
+                    if ((dx, dy) == (0, 0) || !Battle.InArea(dx, dy, u.RangeMax, u.RangeMin)) continue;
                     var t = (sx + dx, sy + dy);
                     if (_scene.Inside(t.Item1, t.Item2) && !reach.Contains(t)) set.Add(t);
                 }
         return set;
     }
+
+    /// <summary>내가 고를 수 있는 우리 편인가 — 편 2, 아직 안 끝냈고 마비가 아님(sub_117E7).</summary>
+    private static bool Ready(Unit u) => u.Side == Side.Player && !u.Acted && !u.Ai && !u.Paralyzed;
 
     private void BattleClick(int tx, int ty, int mx, int my)
     {
@@ -347,7 +402,7 @@ internal sealed partial class GameWindow
                     else ClearSelection();
                     return;
                 }
-                if (who.Side == Side.Player && !who.Acted && !who.Ai) { _selected = who; OpenUnitMenu(who); return; }
+                if (Ready(who)) { _selected = who; OpenUnitMenu(who); return; }
                 // 적이나 행동을 마친 아군 — 범위만 보여 준다
                 Select(who);
                 _actor = null;
@@ -381,7 +436,7 @@ internal sealed partial class GameWindow
         }
         if (action == KeyAction.NextUnit && _bs == BattleState.Select)
         {
-            var ready = Controlled.Where(u => !u.Acted).OrderBy(u => u.Icon).ToList();
+            var ready = Controlled.Where(Ready).OrderBy(u => u.Slot).ToList();
             if (ready.Count > 0)
             {
                 int at = _actor == null ? -1 : ready.IndexOf(_actor);
@@ -523,15 +578,24 @@ internal sealed partial class GameWindow
         _bs = BattleState.Menu;
     }
 
-    /// <summary>공격(칠 적이 있으면) · 마법(걸 대상이 있으면) · 대기 — 메뉴 단계 stage 에서.</summary>
+    /// <summary>
+    /// 공격(무기가 있고 사거리 안에 적이 있으면) · 마법(걸 대상이 있고 봉쇄가 아니면) · 대기 — 메뉴 단계 stage 에서.
+    /// 대기는 원작의 쉬기/조사: 안 움직였으면 쉬어 최대 HP 의 1/5 회복(독 · 마비 빼고, sub_13FD4). 상자 조사는 아직 없다.
+    /// </summary>
     private void AddActionItems(Unit u, MenuStage stage)
     {
-        var targets = Living(Side.Other).Where(e => InRange(u, e)).ToList();
+        var targets = StrikeTargets(u);
         if (targets.Count > 0) _menu.Add(("공격", () => BeginTarget(u, targets, null, stage), default));
         var spells = SpellsOf(u);
-        if (spells.Any(sp => u.Mp >= sp.Mp && SpellTargets(u, sp).Count > 0))
+        if (!u.Sealed && spells.Any(sp => u.Mp >= sp.Mp && SpellTargets(u, sp).Count > 0))
             _menu.Add(("마법", () => OpenSpellMenu(u, stage), default));
-        _menu.Add(("대기", () => { u.Acted = true; ClearSelection(); AfterPlayerAction(); }, default));
+        _menu.Add(("대기", () =>
+        {
+            if (stage == MenuStage.Unit) _battle.Rest(u);
+            u.Acted = true;
+            ClearSelection();
+            AfterPlayerAction();
+        }, default));
     }
 
     private void OpenSpellMenu(Unit u, MenuStage from)
@@ -590,12 +654,16 @@ internal sealed partial class GameWindow
     {
         if (CheckOver()) return;
         _bs = BattleState.Select;
-        if (!Controlled.Any(u => !u.Acted)) EndPlayerTurn();
+        if (!Controlled.Any(u => !u.Acted && !u.Paralyzed)) EndPlayerTurn();   // 남은 우리 편이 없거나 모두 마비(sub_13565)
     }
+
 
     // ── 공격 · 컷인 ───────────────────────────────────────────────────────────
 
-    /// <summary>a 가 d 를 치고, d 가 살아 있고 사거리 안이면 되받아친다. 다 끝나면 after.</summary>
+    /// <summary>
+    /// a 가 d 를 친다 — 보통 공격은 칠 횟수(1, 3% 로 2, 무기 특수 3 이면 하나 더)만큼, 상대가 쓰러지면 멈추고,
+    /// 다 친 뒤 d 가 되받아칠 수 있으면(바로 옆 · 최소 사거리 1 · 마비 아님) 한 번(그 안에서 다시 두 번 치기 판정). 다 끝나면 after.
+    /// </summary>
     private void Attack(Unit a, Unit d, Action after, Spell? spell = null)
     {
         if (a != d)
@@ -604,8 +672,19 @@ internal sealed partial class GameWindow
             if (spell is not { Heal: true }) d.Facing = FaceTo(d, a);
         }
         _strikes.Clear();
-        _strikes.Enqueue((a, d, spell));
-        _counterPending = spell == null;
+        _fallen.Clear();
+        _strikeNotes.Clear();
+        _groupExp = null;
+        if (spell != null)
+        {
+            _strikes.Enqueue((a, d, spell));
+            _counter = null;
+        }
+        else
+        {
+            for (int n = _battle.StrikeCount(a); n > 0; n--) _strikes.Enqueue((a, d, null));
+            _counter = (d, a);
+        }
         _afterStrikes = after;
         NextStrike();
     }
@@ -618,14 +697,53 @@ internal sealed partial class GameWindow
 
     private void NextStrike()
     {
-        if (!_strikes.TryDequeue(out _strike))
+        while (true)
         {
-            _bs = BattleState.Select;
-            var after = _afterStrikes;
-            _afterStrikes = null;
-            after?.Invoke();
-            return;
+            if (_strikes.TryDequeue(out _strike))
+            {
+                // 친 쪽이나 맞을 쪽이 쓰러졌으면 남은 치기는 없다
+                if (_strike.A.Hp <= 0 || _strike.D.Hp <= 0) continue;
+                BeginStrike();
+                return;
+            }
+            FlushExp();
+            if (_counter is { } pair)
+            {
+                var (d, a) = pair;
+                _counter = null;
+                if (_battle.CanCounter(d, a))
+                {
+                    for (int n = _battle.StrikeCount(d); n > 0; n--) _strikes.Enqueue((d, a, null));
+                    continue;
+                }
+            }
+            break;
         }
+        // 다 쳤다 — 쓰러진 사람의 떨굼(쓰러뜨린 사람마다), 레벨업 · 독 알림 뒤 다음으로
+        _bs = BattleState.Select;
+        var notes = new List<Notice>(_strikeNotes);
+        foreach (var group in _fallen.GroupBy(f => f.Killer))
+            notes.AddRange(_battle.Drops(group.Select(f => f.Dead), group.Key));
+        _strikeNotes.Clear();
+        _fallen.Clear();
+        var after = _afterStrikes;
+        _afterStrikes = null;
+        ShowNotices(notes, () => { _bs = BattleState.Select; after?.Invoke(); });
+    }
+
+    /// <summary>한 사람의 치기가 끝났다 — 모은 경험을 넣고(sub_1E292) 레벨업 알림.</summary>
+    private void FlushExp()
+    {
+        if (_groupExp is not { } g) return;
+        var (who, exp) = g;
+        _groupExp = null;
+        _strikeNotes.AddRange(_battle.GainExp(who, exp));
+    }
+
+    private void BeginStrike()
+    {
+        // 무리가 바뀌면(되받아치기) 앞 무리의 경험을 먼저
+        if (_groupExp is { } g && g.Who != _strike.A) FlushExp();
         if (!_motions.TryGetValue(_strike.A.Icon, out _strikeMotion))
         {
             try { _strikeMotion = Motion.Load(_dir, _strike.A.Icon, 1, _pal); }
@@ -636,7 +754,30 @@ internal sealed partial class GameWindow
         _strikeClock = 0;
         _strikeTail = 0;
         _strikeDamage = -1;
+        _strikeMiss = _strikeCrit = false;
         _bs = BattleState.CutIn;
+    }
+
+    /// <summary>맞는 컷 — 원작 식으로 한 번 치기를 셈해 HP 를 깎는다.</summary>
+    private void ResolveStrike()
+    {
+        var (a, d, spell) = _strike;
+        if (spell == null)
+        {
+            var r = _battle.Strike(a, d);
+            _strikeDamage = r.Damage;
+            _strikeMiss = !r.Hit;
+            _strikeCrit = r.Critical;
+            if (r.Poisoned) _strikeNotes.Add(new Notice(" 독에 걸림", Battle.NameLine(d)));
+            if (a.Team == 2) _groupExp = (a, _battle.AttackExp(a, d, r.Damage));
+        }
+        else
+        {
+            // 마법 — 원작 규칙이 아닌 기본값(마법 표를 옮기기 전)
+            _strikeDamage = spell.Heal ? spell.Power + 2 * a.Level : Math.Max(1, spell.Power + a.Atk / 2 - d.Def / 4 + Random.Shared.Next(-2, 3));
+            d.Hp = spell.Heal ? Math.Min(d.MaxHp, d.Hp + _strikeDamage) : Math.Max(0, d.Hp - _strikeDamage);
+        }
+        if (d.Hp <= 0) _fallen.Add((d, a));
     }
 
     private void CutInTick(double dt)
@@ -657,26 +798,11 @@ internal sealed partial class GameWindow
             if (_strikeFrame < frames - 1) _strikeFrame++;
         }
         bool hitFrame = _strikeMotion == null ? _strikeFrame >= frames / 2 : _strikeMotion.Frames[_strikeFrame].Hit != 0 || _strikeFrame == frames - 1;
-        if (_strikeDamage < 0 && hitFrame)
-        {
-            _strikeDamage = Damage(_strike.A, _strike.D, _strike.S);
-            _strike.D.Hp = _strike.S is { Heal: true }
-                ? Math.Min(_strike.D.MaxHp, _strike.D.Hp + _strikeDamage)
-                : Math.Max(0, _strike.D.Hp - _strikeDamage);
-        }
-        if (_strikeDamage >= 0 && _strikeFrame == frames - 1 && _strikeTail > 0.7)
-        {
-            // 첫 공격 뒤 — 맞은 쪽이 살아 있고 사거리 안이면 한 번 되받아친다
-            var (a, d, _) = _strike;
-            if (_counterPending && d.Hp > 0 && InRange(d, a)) _strikes.Enqueue((d, a, null));
-            _counterPending = false;
-            NextStrike();
-        }
+        if (_strikeDamage < 0 && hitFrame) ResolveStrike();
+        if (_strikeDamage >= 0 && _strikeFrame == frames - 1 && _strikeTail > 0.7) NextStrike();
     }
 
-    private bool _counterPending;
-
-    // ── 적군 턴 ───────────────────────────────────────────────────────────────
+    // ── 컴퓨터 차례 ───────────────────────────────────────────────────────────
 
     private void EnemyTick(double dt)
     {
@@ -687,7 +813,8 @@ internal sealed partial class GameWindow
             // 다 걸었다 — 칠 수 있으면 친다
             var me = _enemyNow;
             _enemyNow = null;
-            var target = Opponents(me).Where(p => InRange(me, p)).OrderBy(p => p.Hp).FirstOrDefault();
+            me.Acted = true;
+            var target = Opponents(me).Where(p => _battle.CanStrike(me, (me.X, me.Y), p)).OrderBy(p => p.Hp).FirstOrDefault();
             if (target != null)
             {
                 Attack(me, target, () =>
@@ -698,28 +825,31 @@ internal sealed partial class GameWindow
                 });
                 return;
             }
+            if (CheckOver()) return;
             _enemyWait = 0.15;
             return;
         }
         while (_enemyQueue.TryDequeue(out var e))
         {
-            if (e.Hp <= 0) continue;
+            if (e.Hp <= 0 || e.Paralyzed) continue;
             EnemyStep(e);
             _enemyNow = e;
             _selected = e;
             return;
         }
-        // 다 움직였다
+        // 다 움직였다 — 컴퓨터 아군 다음은 적, 적 다음은 다음 차례
         _selected = Living(Side.Player).FirstOrDefault();
-        if (!CheckOver()) NextTurn();
+        if (CheckOver()) return;
+        if (_alliesPhase) StartEnemyPhase();
+        else NextTurn();
     }
 
     /// <summary>
-    /// 적 하나의 움직임 — 칠 수 있는 자리가 있으면 그중 가장 약한 아군을 칠 자리로, 없으면 가장 가까운 아군 쪽으로 갈 수 있는 데까지.
+    /// 적 하나의 움직임 — 칠 수 있는 자리가 있으면 그중 가장 약한 상대를 칠 자리로, 없으면 가장 가까운 상대 쪽으로 갈 수 있는 데까지.
     /// </summary>
     private void EnemyStep(Unit e)
     {
-        var reach = _scene.Reach(e);
+        var reach = _battle.Reach(e);
         var players = Opponents(e).ToList();
         if (players.Count == 0) return;
 
@@ -729,15 +859,14 @@ internal sealed partial class GameWindow
         foreach (var spot in stops)
             foreach (var p in players)
             {
-                int d = Math.Abs(spot.X - p.X) + Math.Abs(spot.Y - p.Y);
-                if (d < e.RangeMin || d > e.RangeMax) continue;
+                if (!_battle.CanStrike(e, spot, p)) continue;
                 int score = p.Hp * 10 + Scene.PathTo(reach, spot).Count;
                 if (score < bestScore) { bestScore = score; best = spot; }
             }
         if (best == null)
         {
-            // 땅 거리(아군에게서 퍼져 나간 거리)가 가장 짧은 칸으로
-            var field = DistanceField(players);
+            // 땅 거리(상대에게서 퍼져 나간 거리)가 가장 짧은 칸으로
+            var field = DistanceField(players, _battle.MoveCosts(e));
             foreach (var spot in stops)
                 if (field.TryGetValue(spot, out int d) && d < bestScore) { bestScore = d; best = spot; }
         }
@@ -746,7 +875,7 @@ internal sealed partial class GameWindow
         _enemyWait = 0.1;
     }
 
-    private Dictionary<(int X, int Y), int> DistanceField(List<Unit> from)
+    private Dictionary<(int X, int Y), int> DistanceField(List<Unit> from, int[] costs)
     {
         var dist = new Dictionary<(int X, int Y), int>();
         var q = new PriorityQueue<(int X, int Y), int>();
@@ -758,8 +887,8 @@ internal sealed partial class GameWindow
             foreach (var (dx, dy) in dirs)
             {
                 var n = (c.X + dx, c.Y + dy);
-                int cost = _scene.MoveCost(n.Item1, n.Item2);
-                if (cost < 0) continue;
+                int cost = _scene.MoveCost(n.Item1, n.Item2, costs);
+                if (cost < 0 || cost >= 20) continue;
                 if (dist.TryGetValue(n, out int had) && had <= d + cost) continue;
                 dist[n] = d + cost;
                 q.Enqueue(n, d + cost);
@@ -779,7 +908,7 @@ internal sealed partial class GameWindow
             if (_freeReachFor != (_selected, _selected.X, _selected.Y))
             {
                 _freeReachFor = (_selected, _selected.X, _selected.Y);
-                _freeReach = _scene.Reach(_selected);
+                _freeReach = _battle.Reach(_selected);
                 _freeStops = _scene.Stops(_freeReach, _selected).ToList();
                 _freeAttack = AttackTiles(_selected, _freeStops);
             }
@@ -828,10 +957,10 @@ internal sealed partial class GameWindow
         string top = _bs switch
         {
             BattleState.Talk => TouchUi ? "1장  (누르면 다음 · 뒤로 대사 건너뛰기)" : "1장  (Enter · 클릭 다음 · Esc 대사 건너뛰기)",
-            _ when _enemyPhase && _bs != BattleState.Over => $"1장 전투 · {_turn}턴 · 적군 차례",
-            BattleState.Over => $"1장 전투 · {_turn}턴",
-            _ when TouchUi => $"1장 전투 · {_turn}턴 · 아군 차례   (누르기 고르기 · 길게 누르기/뒤로 물리기 · 빈 칸 누르면 턴 끝)",
-            _ => $"1장 전투 · {_turn}턴 · 아군 차례   (방향키 커서 · Enter 결정 · Esc 물리기 · {KeyBindings.KeyName(_keyMap[KeyAction.Attack])} 공격 · " +
+            _ when _enemyPhase && _bs != BattleState.Over => $"1장 전투 · {Turn}턴 · {(_alliesPhase ? "컴퓨터 아군" : "적군")} 차례",
+            BattleState.Over => $"1장 전투 · {Turn}턴",
+            _ when TouchUi => $"1장 전투 · {Turn}턴 · 아군 차례 · 돈 {_battle.Gold}   (누르기 고르기 · 길게 누르기/뒤로 물리기 · 빈 칸 누르면 턴 끝)",
+            _ => $"1장 전투 · {Turn}턴 · 아군 차례 · 돈 {_battle.Gold}   (방향키 커서 · Enter 결정 · Esc 물리기 · {KeyBindings.KeyName(_keyMap[KeyAction.Attack])} 공격 · " +
                  $"{KeyBindings.KeyName(_keyMap[KeyAction.Wait])} 대기 · {KeyBindings.KeyName(_keyMap[KeyAction.System])} 턴 끝 · {KeyBindings.KeyName(_keyMap[KeyAction.KeyHelp])} 단축키)",
         };
         var title = Text.Render(top, fs, 0xFFFFFFFF);
@@ -845,11 +974,15 @@ internal sealed partial class GameWindow
         if (_bs is BattleState.Select or BattleState.Target or BattleState.Moving && !_mouseMoved) DrawCursor();   // 마우스를 쓰는 동안에는 커서를 숨긴다
         if (_bs == BattleState.Menu) DrawMenu(fs);
 
-        if (_bs is BattleState.Banner or BattleState.Over && _banner.Length > 0)
+        if (_bs is BattleState.Banner or BattleState.Over && (_banner.Length > 0 || _bannerName >= 0))
         {
-            var b = Text.Render(_banner, fs * 2, 0xFFFFE070);
-            FillRect(0, _clientH / 2 - b.H, _clientW, b.H * 2, 0xA0000000);
-            DrawText(b, _clientW / 2 - b.W / 2, _clientH / 2 - b.H / 2);
+            var b = Text.Render(_banner.Length > 0 ? _banner : " ", fs * 2, 0xFFFFE070);
+            var name = _bannerName >= 0 ? NameImage(_bannerName, Math.Max(2, fs * 2 / Font16.Size), 0xFFFFE070) : null;
+            int w = b.W + (name?.W ?? 0), h = Math.Max(b.H, name?.H ?? 0);
+            FillRect(0, _clientH / 2 - h, _clientW, h * 2, 0xA0000000);
+            int x = _clientW / 2 - w / 2;
+            if (name != null) { DrawText(name, x, _clientH / 2 - name.H / 2); x += name.W; }
+            DrawText(b, x, _clientH / 2 - b.H / 2);
         }
 
         if (_bs == BattleState.CutIn) DrawCutIn(fs);
@@ -882,16 +1015,32 @@ internal sealed partial class GameWindow
         FillRect(sx + cell - len, sy + cell - t, len, t, c); FillRect(sx + cell - t, sy + cell - len, t, len, c);
     }
 
+    /// <summary>정보 창 — 이름(몬스터는 원본 글꼴 이름) · 레벨 · 경험, HP · MP, 공격 · 방어 · 명중 · 회피, 이동 · 사거리, 상태.</summary>
     private void DrawInfo(Unit u, int fs)
     {
-        string[] lines =
-        [
-            $"{CharacterNames.Of(u.Icon)}  Lv {u.Level}",
+        string range = u.RangeMax == 0 ? "-" : u.RangeMax >= 16 ? $"직선 {u.RangeMax - 16}" : u.RangeMin == u.RangeMax ? $"{u.RangeMax}" : $"{u.RangeMin}~{u.RangeMax}";
+        string status = string.Join(" ", Enumerable.Range(0, 6).Where(k => u.Status[k] > 0).Select(k => $"{Battle.StatusNames[k]}({u.Status[k]})"));
+        bool monster = u.FormId >= CharacterNames.Heroes;
+        var lines = new List<string>
+        {
+            $"{(monster ? "" : CharacterNames.Of(u.Icon))}  Lv {u.Level}{(u.Team == 2 ? $"  경험 {u.Exp}" : "")}",
             u.MaxMp > 0 ? $"HP {u.Hp} / {u.MaxHp}   MP {u.Mp} / {u.MaxMp}" : $"HP {u.Hp} / {u.MaxHp}",
-            $"공격 {u.Atk}  방어 {u.Def}",
-            $"이동 {u.Move}  사거리 {(u.RangeMin == u.RangeMax ? $"{u.RangeMax}" : $"{u.RangeMin}~{u.RangeMax}")}",
-        ];
-        var imgs = lines.Select((l, i) => Text.Render(l, fs, i == 0 ? (u.Side == Side.Player ? 0xFF90E0FF : 0xFFFF9090) : 0xFFFFFFFF)).ToList();
+            $"공격 {u.Atk}  방어 {u.Def}  명중 {u.Hit}  회피 {u.Evade}",
+            $"이동 {u.Move}  사거리 {range}",
+        };
+        if (status.Length > 0) lines.Add(status);
+        uint nameColor = u.Side == Side.Player ? 0xFF90E0FF : 0xFFFF9090;
+        var imgs = lines.Select((l, i) => Text.Render(l, fs, i == 0 ? nameColor : 0xFFFFFFFF)).ToList();
+        if (monster && NameImage(Battle.NameLine(u), Math.Max(1, fs / Font16.Size), nameColor) is { } glyphs)
+        {
+            // 몬스터 이름은 원본 글꼴로 — 레벨 글 앞에 붙인다
+            var first = imgs[0];
+            int w0 = glyphs.W + first.W, h0 = Math.Max(glyphs.H, first.H);
+            var px = new uint[w0 * h0];
+            for (int r = 0; r < glyphs.H; r++) Array.Copy(glyphs.Px, r * glyphs.W, px, r * w0, glyphs.W);
+            for (int r = 0; r < first.H; r++) Array.Copy(first.Px, r * first.W, px, r * w0 + glyphs.W, first.W);
+            imgs[0] = new Text.Image(px, w0, h0);
+        }
         int w = imgs.Max(i => i.W) + 24, h = imgs.Sum(i => i.H + 2) + 16;
         int x = 12, y = _clientH - h - 12;
         FillRect(x, y, w, h, 0xC0101020);
@@ -1036,10 +1185,44 @@ internal sealed partial class GameWindow
         if (hit)
         {
             var dmg = heal ? Text.Render($"+{_strikeDamage}", fs * 3, 0xFF60FF80)
-                           : Text.Render(d.Hp == 0 ? $"-{_strikeDamage}  쓰러짐!" : $"-{_strikeDamage}", fs * 3, 0xFFFF5050);
+                    : _strikeMiss ? Text.Render("빗나감", fs * 3, 0xFFC0C0C0)
+                    : Text.Render((_strikeCrit ? "필살! " : "") + (d.Hp == 0 ? $"-{_strikeDamage}  쓰러짐!" : $"-{_strikeDamage}"), fs * 3, 0xFFFF5050);
             DrawText(dmg, bx + bw * (defenderSide == 1 ? 3 : 1) / 4 - dmg.W / 2, by + bh / 6);
         }
     }
+
+    private readonly Dictionary<(int, int, uint), Text.Image?> _nameImages = new();
+
+    /// <summary>이름 표(FDTXT 0) 줄을 원본 글꼴로 — 한 점을 g 배로, 오른쪽 아래에 그림자 한 점. 빈 줄이면 null.</summary>
+    private Text.Image? NameImage(int line, int g, uint color)
+    {
+        if (_nameImages.TryGetValue((line, g, color), out var img)) return img;
+        try
+        {
+            _names ??= new NameTable(_dir);
+            _font ??= new Font16(_dir);
+        }
+        catch (Exception e) when (e is IOException or IndexOutOfRangeException or ArgumentOutOfRangeException) { return null; }
+        var font = _font;
+        var codes = _names.Line(line).Where(font.Has).ToArray();
+        if (codes.Length == 0) return _nameImages[(line, g, color)] = null;
+        int s = Font16.Size * g, w = s * codes.Length + g, h = s + g;
+        var px = new uint[w * h];
+        for (int pass = 0; pass < 2; pass++)   // 그림자 먼저, 그 위에 글자
+            for (int i = 0; i < codes.Length; i++)
+                for (int y = 0; y < Font16.Size; y++)
+                    for (int x = 0; x < Font16.Size; x++)
+                    {
+                        if (!font.Pixel(codes[i], x, y)) continue;
+                        int off = pass == 0 ? g : 0;
+                        uint c = pass == 0 ? 0xFF000000 : color | 0xFF000000;
+                        for (int yy = 0; yy < g; yy++)
+                            for (int xx = 0; xx < g; xx++) px[(y * g + yy + off) * w + i * s + x * g + xx + off] = c;
+                    }
+        if (_nameImages.Count > 300) _nameImages.Clear();
+        return _nameImages[(line, g, color)] = new Text.Image(px, w, h);
+    }
+
 
     private readonly Dictionary<int, uint[]?> _backs = new();
 

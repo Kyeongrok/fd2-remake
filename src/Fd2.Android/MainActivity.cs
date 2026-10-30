@@ -124,7 +124,7 @@ public class MainActivity : Activity
         return dir;
     }
 
-    /// <summary>고른 폴더(바로 아래 폴더 하나까지)에서 .DAT · .B24 를 target 으로.</summary>
+    /// <summary>고른 폴더(바로 아래 폴더 하나까지)에서 .DAT · .B24 · FD2.EXE 를 target 으로.</summary>
     private string Import(Android.Net.Uri tree, string target)
     {
         Directory.CreateDirectory(target);
@@ -143,7 +143,7 @@ public class MainActivity : Activity
         {
             if (mime == DocumentsContract.Document.MimeTypeDir) continue;
             string ext = System.IO.Path.GetExtension(name).ToUpperInvariant();
-            if (ext is not (".DAT" or ".B24")) continue;
+            if (ext is not (".DAT" or ".B24") && !name.Equals("FD2.EXE", StringComparison.OrdinalIgnoreCase)) continue;   // 실행 파일은 규칙 표(GameTables)만 읽는다
             var uri = DocumentsContract.BuildDocumentUriUsingTree(tree, id)!;
             using var input = ContentResolver!.OpenInputStream(uri)!;
             using var output = File.Create(System.IO.Path.Combine(target, name.ToUpperInvariant()));
