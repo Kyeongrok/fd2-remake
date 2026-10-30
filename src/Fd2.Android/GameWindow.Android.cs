@@ -65,6 +65,44 @@ internal sealed partial class GameWindow
         _musicPlaying = -1;
     }
 
+    // ── 효과음 — 소리 묶음을 WAV 파일로 만들어 두고 미디어 플레이어 둘(원작 소리 갈래 A · B)로 ──
+
+    private Android.Media.MediaPlayer? _sfxA, _sfxB;
+
+    partial void PlaySfx(int entry, int index) => PlayWav(ref _sfxA, entry, index);
+
+    partial void PlaySfx2(int entry, int index) => PlayWav(ref _sfxB, entry, index);
+
+    private void PlayWav(ref Android.Media.MediaPlayer? player, int entry, int index)
+    {
+        if (!_settings.Sound) return;
+        try
+        {
+            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fd2", "sfx");
+            string path = Path.Combine(dir, $"e{entry}_{index}.wav");
+            if (!File.Exists(path))
+            {
+                var bank = Fd2.Data.Sound.Bank(_dir, entry);
+                if (index < 0 || index >= bank.Count || bank[index].Length == 0) return;
+                Directory.CreateDirectory(dir);
+                File.WriteAllBytes(path, Fd2.Data.Sound.Wav(bank[index]));
+            }
+            player?.Release();
+            player = new Android.Media.MediaPlayer();
+            player.SetDataSource(path);
+            player.Prepare();
+            player.Start();
+        }
+        catch (Exception) { }   // 소리가 안 나도 게임은 계속
+    }
+
+    partial void StopSfx()
+    {
+        _sfxA?.Release();
+        _sfxB?.Release();
+        _sfxA = _sfxB = null;
+    }
+
     private partial bool CanAddVersion() => VersionAdder != null;
 
     private partial void AddVersion() => VersionAdder?.Invoke();
