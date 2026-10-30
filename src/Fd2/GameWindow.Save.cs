@@ -65,6 +65,7 @@ internal sealed partial class GameWindow
             if (c.NextScene < _sceneCount && c.NextScene <= Campaign.FinalScene)
             {
                 _menu.Add(($"다음 장으로 — {ChapterName(c.NextScene)}", PlayCampaign, default));
+                if (HasTown) _menu.Add(($"마을 — 상점 · 교회 (돈 {c.Gold}원)", OpenTownMenu, default));
                 _menu.Add(("기록하기", OpenSlotMenu, default));
             }
             else _menu.Add(("끝 — 이야기를 다 했습니다", ToTitle, default));

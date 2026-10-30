@@ -194,6 +194,17 @@ public sealed class GameTables
     /// <summary>다른 차례(컴퓨터 아군 · 적)의 곡(byte_51E81[장면], sub_1A30B 가 차례 사이에 둘을 바꾼다).</summary>
     public int EnemyMusic(int scene) => U8(0x51E81 + Math.Clamp(scene, 0, 60));
 
+    // ── 마을 ─────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 다음 장면 n17 앞에 마을이 있나(sub_26152) — byte_523E7[n17] 이 0 이면 마을, 아니면 기록 · 편성만(장면 22 · 23 · 24 · 27 · 28 · 29).
+    /// 표는 30 칸이고 n17 = 0(새 게임) · 프롤로그 31 · 32 는 마을을 거치지 않는다.
+    /// </summary>
+    public bool HasTown(int scene) => scene is >= 1 and < 30 && U8(0x523E7 + scene) == 0 && Shops[scene - 1].Weapons.Length + Shops[scene - 1].Tools.Length > 0;
+
+    /// <summary>다음 장면 n17 의 마을 — sub_4E809(n17) = 기록 n17(1부터).</summary>
+    public ShopInfo? ShopFor(int scene) => HasTown(scene) ? Shops[scene - 1] : null;
+
     // ── 이동 대본 ──────────────────────────────────────────────────────────────
 
     public const int MoveScripts = 106;

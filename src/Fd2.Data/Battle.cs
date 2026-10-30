@@ -309,14 +309,7 @@ public sealed partial class Battle
         var notes = new List<Notice>();
         if (Tables == null || u.FormId >= GameTables.Forms) return notes;
         var g = Tables.Growths[u.FormId];
-        int Roll(int min, int max) => max > min ? min + Rng.Next(max - min) : min;
-        int a = Roll(g.StrMin, g.StrMax), d = Roll(g.DefMin, g.DefMax), s = Roll(g.SpdMin, g.SpdMax);
-        int hp = Roll(g.HpMin, g.HpMax), mp = Roll(g.MpMin, g.MpMax);
-        u.BaseAtk += a;
-        u.BaseDef += d;
-        u.Speed += s;
-        u.MaxHp += hp;
-        u.MaxMp += mp;
+        var (a, d, s, hp, mp) = Grow(u);
         var parts = new List<string>();
         if (a > 0) parts.Add($"역량 +{a}");
         if (d > 0) parts.Add($"내력 +{d}");
@@ -333,6 +326,25 @@ public sealed partial class Battle
                 }
         Recompute(u);
         return notes;
+    }
+
+    /// <summary>
+    /// 지금 꼴의 성장표로 한 번 오른다(sub_1E529 다섯 번) — 역량 · 내력 · 속도 · 최대 HP · 최대 MP 에 <c>최소 + 난수 % (최대 − 최소)</c>.
+    /// 레벨업과 교회 전직(sub_2AC7D, 새 꼴 표)이 쓴다. 오른 값.
+    /// </summary>
+    public (int Str, int Def, int Spd, int Hp, int Mp) Grow(Unit u)
+    {
+        if (Tables == null || u.FormId >= GameTables.Forms) return default;
+        var g = Tables.Growths[u.FormId];
+        int Roll(int min, int max) => max > min ? min + Rng.Next(max - min) : min;
+        int a = Roll(g.StrMin, g.StrMax), d = Roll(g.DefMin, g.DefMax), s = Roll(g.SpdMin, g.SpdMax);
+        int hp = Roll(g.HpMin, g.HpMax), mp = Roll(g.MpMin, g.MpMax);
+        u.BaseAtk += a;
+        u.BaseDef += d;
+        u.Speed += s;
+        u.MaxHp += hp;
+        u.MaxMp += mp;
+        return (a, d, s, hp, mp);
     }
 
     // ── 쉬기 · 상태 ─────────────────────────────────────────────────────────
