@@ -355,7 +355,9 @@ internal sealed partial class GameWindow
         int want(double c, int map, int view) =>
             map <= view ? (map - view) / 2 : (int)Math.Clamp(c - view / 2, 0, map - view);
         _camX = want(cx, mapW, _boardW);
-        _camY = want(cy, mapH, _boardH);
+        if (_viewRows is ({ } top, { } bottom))
+            _camY = top * T + want(cy - top * T, (bottom - top) * T, _boardH);   // 프롤로그 — 그 막의 줄들 안에서만
+        else _camY = want(cy, mapH, _boardH);
     }
 
     /// <summary>사람 층을 창 해상도로 찍는다 — 고해상도 그림이 있으면 그것을, 없으면 원본을 점 그대로 배율만큼 키워.</summary>

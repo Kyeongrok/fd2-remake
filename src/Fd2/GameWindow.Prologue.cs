@@ -22,6 +22,12 @@ internal sealed partial class GameWindow
     /// <summary>화면이 볼 칸 — 있으면 고른 사람 대신 여기를 가운데로(Follow).</summary>
     private (int X, int Y)? _lookAt;
 
+    /// <summary>
+    /// 이 막이 쓰는 지도 줄 [위, 아래) — 장면 33 은 위쪽(0 ~ 42)이 알현실, 아래(43 ~ 50)가 풀밭인 한 장이라,
+    /// 원작의 좁은 화면(320x200)에서는 서로 보이지 않는다. 넓은 창에서도 그 막의 줄만 보이게 화면을 그 안에 두고 바깥은 가린다.
+    /// </summary>
+    private (int Top, int Bottom)? _viewRows;
+
     private const int ThroneScene = 32, ForestScene = 31;
 
     private Beat[]? _beats;
@@ -201,6 +207,7 @@ internal sealed partial class GameWindow
         _beats = null;
         _cast.Clear();
         _lookAt = null;
+        _viewRows = null;
         _beatWaiting = false;
         _screen = Screen.Game;
         StartBattle(0);
@@ -239,6 +246,7 @@ internal sealed partial class GameWindow
     private void StageThrone()
     {
         StageScene(ThroneScene);
+        _viewRows = (0, 43);
         for (int r = 5; r < _scene.Roster.Count; r++)
         {
             if (_scene.Roster[r].Phase != 0 || Put(r, Dir.Down, side: Side.Other) is not { } guard) continue;
@@ -255,6 +263,7 @@ internal sealed partial class GameWindow
     private void StageField()
     {
         StageScene(ThroneScene);
+        _viewRows = (43, _scene.Height);
         _selected = Put(3, Dir.Down);
         Put(4, Dir.Left);
         Follow();
@@ -267,6 +276,7 @@ internal sealed partial class GameWindow
     private void StageForest()
     {
         StageScene(ForestScene);
+        _viewRows = null;
         _selected = Put(0, Dir.Left);
         Put(1, Dir.Left);
         Put(3, Dir.Down);
@@ -279,6 +289,13 @@ internal sealed partial class GameWindow
     {
         if (_cpuMap) DrawMapCpu();
         DrawUnits(outline: false);
+        if (_viewRows is ({ } top, { } bottom))
+        {
+            // 그 막의 줄 바깥은 검게
+            int y0 = _offY + (top * T - _camY) * _zoom, y1 = _offY + (bottom * T - _camY) * _zoom;
+            if (y0 > 0) FillRect(0, 0, _clientW, y0, 0xFF000000);
+            if (y1 < _clientH) FillRect(0, y1, _clientW, _clientH - y1, 0xFF000000);
+        }
         int fs = Math.Max(14, 7 * _zoom);
         var skip = Text.Render(TouchUi ? "누르면 다음 · 뒤로 건너뛰기" : "Enter 다음 · Esc 프롤로그 건너뛰기", Math.Max(12, fs * 3 / 4), 0xB0FFFFFF, bold: false);
         FillRect(_clientW - skip.W - 24, 6, skip.W + 16, skip.H + 8, 0x80000000);
