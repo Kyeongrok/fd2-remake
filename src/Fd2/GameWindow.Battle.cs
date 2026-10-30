@@ -52,12 +52,11 @@ internal sealed partial class GameWindow
     private Action? _afterBanner;
 
     /// <summary>
-    /// 한 번 치기 — Spell ≥ 0 이면 그 마법(원작 표), Heal &gt; 0 이면 물건 회복, Old 는 아직 원작 표로 옮기지 않은 아군 마법(기본값),
-    /// 셋 다 없으면 무기.
+    /// 한 번 치기 — Spell ≥ 0 이면 그 마법(원작 표), Heal &gt; 0 이면 물건 회복, 둘 다 없으면 무기.
     /// </summary>
-    private sealed record Hit(Unit A, Unit D, int Spell = -1, int Heal = 0, Spell? Old = null)
+    private sealed record Hit(Unit A, Unit D, int Spell = -1, int Heal = 0)
     {
-        public bool Magic => Spell >= 0 || Heal > 0 || Old != null;
+        public bool Magic => Spell >= 0 || Heal > 0;
     }
 
     // 컷인 — 한 번 치기씩. 두 번 치기는 같은 짝을 한 번 더, 되받아치기는 첫 공격이 다 끝난 뒤, 범위 마법은 대상마다
@@ -91,24 +90,6 @@ internal sealed partial class GameWindow
 
     private readonly Dictionary<int, Motion?> _motions = new(), _stands = new();
 
-    /// <summary>
-    /// 마법 — 원본 규칙이 아니라 기본값. 법사 계열은 공격 마법, 승려 계열은 회복 마법(성자는 둘 다).
-    /// 사거리 최소 0 은 자기 자신도 된다는 뜻.
-    /// </summary>
-    private sealed record Spell(string Name, int Mp, int RangeMin, int RangeMax, bool Heal, int Power);
-
-    private static readonly Spell Fire = new("파이어", 4, 1, 3, false, 6);
-    private static readonly Spell Cure = new("힐", 3, 0, 2, true, 12);
-
-    private static List<Spell> SpellsOf(Unit u)
-    {
-        string n = CharacterNames.Of(u.Icon);
-        var list = new List<Spell>();
-        if (n.Contains("법사") || n.Contains("소환") || n.Contains("성자")) list.Add(Fire);
-        if (n.Contains("승려") || n.Contains("제관") || n.Contains("성자")) list.Add(Cure);
-        return list;
-    }
-
     /// <summary>지금 메뉴가 어느 단계인가 — 취소할 때 어디로 돌아갈지.</summary>
     private enum MenuStage { System, Unit, AfterMove, Spell }
     private MenuStage _stage;
@@ -116,8 +97,8 @@ internal sealed partial class GameWindow
     /// <summary>이동할 칸을 고르는 중인가(메뉴에서 「이동」을 고른 뒤).</summary>
     private bool _choosingMove;
 
-    /// <summary>대상 고르기에 쓸 마법(없으면 보통 공격), 그 앞 메뉴 단계.</summary>
-    private Spell? _pendingSpell;
+    /// <summary>대상 고르기에 쓸 마법(-1 이면 보통 공격), 그 앞 메뉴 단계.</summary>
+    private int _pendingSpell = -1;
     private MenuStage _targetFrom;
 
     // 컴퓨터 차례 — 한 명씩(컴퓨터 아군 → 적). 적은 두 번 훑는다: 첫 번은 마법 · 물건 점수 6 이상만, 둘째 번은 남은 모두(sub_1D8BA)
@@ -169,12 +150,16 @@ internal sealed partial class GameWindow
     /// <summary>무기로 칠 수 있는 상대(편 0) — 지금 자리에서.</summary>
     private List<Unit> StrikeTargets(Unit u) => Living(Side.Other).Where(e => _battle.CanStrike(u, (u.X, u.Y), e)).ToList();
 
-    /// <summary>그 마법을 걸 수 있는 대상 — 회복은 다친 아군(자기 포함), 공격은 적.</summary>
-    private List<Unit> SpellTargets(Unit a, Spell s) => s.Heal
-        ? Living(Side.Player).Where(p => p.Hp < p.MaxHp && InSpellRange(a, p, s)).ToList()
-        : Living(Side.Other).Where(e => InSpellRange(a, e, s)).ToList();
+    /// <summary>
+    /// 그 마법을 걸 수 있는 가운데 칸 — 사거리 안 칸 가운데 범위 안에 대상(표 +6 의 편)이 하나라도 있는 칸.
+    /// 회복 · 풀기는 다쳤거나 걸린 사람이 없어도 원작은 걸 수 있지만, 헛걸음이 없게 대상이 있는 칸만 보인다.
+    /// </summary>
+    private List<(int X, int Y)> SpellCenters(Unit u, int spell) =>
+        _battle.SpellCenters(u, spell).Where(c => _battle.SpellTargets(u, spell, c).Count > 0).ToList();
 
-    private static bool InSpellRange(Unit a, Unit b, Spell s) => Dist(a, b) is var d && d >= s.RangeMin && d <= s.RangeMax;
+    /// <summary>지금 쓸 수 있는 마법 — 아는 마법 가운데 봉쇄가 아니고 MP 가 되며 걸 대상이 있는 것.</summary>
+    private List<int> CastableSpells(Unit u) =>
+        _battle.KnownSpells(u).Where(m => _battle.CanCast(u, m) && SpellCenters(u, m).Count > 0).ToList();
 
     // ── 차례(sub_1A30B) ─────────────────────────────────────────────────────
 
@@ -333,7 +318,7 @@ internal sealed partial class GameWindow
         _actor = null;
         _rangeOf = null;
         _choosingMove = false;
-        _pendingSpell = null;
+        _pendingSpell = -1;
         _reach = null;
         _attackTiles.Clear();
         _menu.Clear();
@@ -390,16 +375,21 @@ internal sealed partial class GameWindow
                 return;
             case BattleState.Target:
             {
-                var t = _scene.UnitAt(tx, ty);
-                if (t != null && _actor != null && _attackTiles.Contains((t.X, t.Y)))
+                if (_actor == null || !_attackTiles.Contains((tx, ty))) return;
+                var a = _actor;
+                int spell = _pendingSpell;
+                if (spell >= 0)
                 {
-                    var a = _actor;
-                    var spell = _pendingSpell;
+                    // 마법 — 고른 칸을 가운데로(사거리 0 이면 자기 칸)
                     a.Acted = true;
-                    if (spell != null) a.Mp -= spell.Mp;
                     ClearSelection();
-                    Attack(a, t, () => AfterPlayerAction(), spell);
+                    CastSpell(a, spell, (tx, ty), AfterPlayerAction);
+                    return;
                 }
+                if (_scene.UnitAt(tx, ty) is not { } t) return;
+                a.Acted = true;
+                ClearSelection();
+                Attack(a, t, AfterPlayerAction);
                 return;
             }
             case BattleState.Select:
@@ -553,7 +543,7 @@ internal sealed partial class GameWindow
                 ReturnToOrigin();
                 break;
             case BattleState.Target:
-                _pendingSpell = null;
+                _pendingSpell = -1;
                 BackTo(_targetFrom);
                 break;
             case BattleState.Select when _choosingMove && _actor != null:
@@ -591,7 +581,7 @@ internal sealed partial class GameWindow
     {
         Select(u);
         _choosingMove = false;
-        _pendingSpell = null;
+        _pendingSpell = -1;
         _menu.Clear();
         _menu.Add(("이동", () => { _menu.Clear(); _choosingMove = true; _bs = BattleState.Select; }, default));
         AddActionItems(u, MenuStage.Unit);
@@ -607,9 +597,9 @@ internal sealed partial class GameWindow
     private void AddActionItems(Unit u, MenuStage stage)
     {
         var targets = StrikeTargets(u);
-        if (targets.Count > 0) _menu.Add(("공격", () => BeginTarget(u, targets, null, stage), default));
-        var spells = SpellsOf(u);
-        if (!u.Sealed && spells.Any(sp => u.Mp >= sp.Mp && SpellTargets(u, sp).Count > 0))
+        if (targets.Count > 0) _menu.Add(("공격", () => BeginTarget(u, targets.Select(t => (t.X, t.Y)).ToList(), -1, stage), default));
+        // 걸은 뒤에도 마법을 연다 — 원작 메뉴(sub_18D8C)가 움직인 뒤 마법을 막는지는 아직 안 봤다(짐작)
+        if (!u.Sealed && CastableSpells(u).Count > 0)
             _menu.Add(("마법", () => OpenSpellMenu(u, stage), default));
         _menu.Add(("대기", () =>
         {
@@ -620,14 +610,14 @@ internal sealed partial class GameWindow
         }, default));
     }
 
+    /// <summary>마법 고르기 — 아는 마법(원작 이름 · MP 표) 가운데 지금 걸 수 있는 것.</summary>
     private void OpenSpellMenu(Unit u, MenuStage from)
     {
         _menu.Clear();
-        foreach (var sp in SpellsOf(u))
+        foreach (int m in CastableSpells(u))
         {
-            var targets = SpellTargets(u, sp);
-            if (u.Mp < sp.Mp || targets.Count == 0) continue;
-            _menu.Add(($"{sp.Name}  (MP {sp.Mp})", () => BeginTarget(u, targets, sp, from), default));
+            int spell = m;
+            _menu.Add(($"{SpellNames.Of(spell)}  (MP {_battle.SpellOf(spell)!.Mp})", () => BeginTarget(u, SpellCenters(u, spell), spell, from), default));
         }
         _targetFrom = from;
         _stage = MenuStage.Spell;
@@ -635,15 +625,16 @@ internal sealed partial class GameWindow
         _bs = BattleState.Menu;
     }
 
-    private void BeginTarget(Unit u, List<Unit> targets, Spell? spell, MenuStage from)
+    /// <summary>칠 · 걸 칸 고르기 — 무기는 상대가 선 칸, 마법은 가운데 칸(spell ≥ 0). 가까운 칸에 커서.</summary>
+    private void BeginTarget(Unit u, List<(int X, int Y)> cells, int spell, MenuStage from)
     {
         _menu.Clear();
         _reach = null;
         _pendingSpell = spell;
         _targetFrom = from;
-        _attackTiles = targets.Select(t => (t.X, t.Y)).ToHashSet();
-        var first = targets.OrderBy(t => Dist(u, t)).First();
-        _cursor = (first.X, first.Y);
+        _attackTiles = cells.ToHashSet();
+        var first = cells.OrderBy(c => Math.Abs(c.X - u.X) + Math.Abs(c.Y - u.Y) == 0 && spell >= 0 && cells.Count > 1 ? 99 : Math.Abs(c.X - u.X) + Math.Abs(c.Y - u.Y)).First();
+        _cursor = first;
         _bs = BattleState.Target;
     }
 
@@ -686,20 +677,16 @@ internal sealed partial class GameWindow
     /// a 가 d 를 친다 — 보통 공격은 칠 횟수(1, 3% 로 2, 무기 특수 3 이면 하나 더)만큼, 상대가 쓰러지면 멈추고,
     /// 다 친 뒤 d 가 되받아칠 수 있으면(바로 옆 · 최소 사거리 1 · 마비 아님) 한 번(그 안에서 다시 두 번 치기 판정). 다 끝나면 after.
     /// </summary>
-    private void Attack(Unit a, Unit d, Action after, Spell? spell = null)
+    private void Attack(Unit a, Unit d, Action after)
     {
         if (a != d)
         {
             a.Facing = FaceTo(a, d);
-            if (spell is not { Heal: true }) d.Facing = FaceTo(d, a);
+            d.Facing = FaceTo(d, a);
         }
         BeginStrikes(after);
-        if (spell != null) _strikes.Enqueue(new Hit(a, d, Old: spell));
-        else
-        {
-            for (int n = _battle.StrikeCount(a); n > 0; n--) _strikes.Enqueue(new Hit(a, d));
-            _counter = (d, a);
-        }
+        for (int n = _battle.StrikeCount(a); n > 0; n--) _strikes.Enqueue(new Hit(a, d));
+        _counter = (d, a);
         NextStrike();
     }
 
@@ -805,7 +792,7 @@ internal sealed partial class GameWindow
         if (_groupExp is { } g && g.Who != _strike.A) FlushExp();
         // 마법 · 물건은 셋째 모션(FIGANI 3c+2 — 마법 몸짓, 17 캐릭터만 있다), 없으면 공격 모션
         _strikeMotion = _strike.Magic ? MotionOf(_strike.A.Icon, 2) ?? MotionOf(_strike.A.Icon, 1) : MotionOf(_strike.A.Icon, 1);
-        _strikeFriendly = _strike.Heal > 0 || _strike.Old is { Heal: true }
+        _strikeFriendly = _strike.Heal > 0
                           || _strike.Spell >= 0 && _battle.SpellOf(_strike.Spell) is { Side: not 0 };
         _strikeFrame = _strikeHeld = 0;
         _strikeClock = 0;
@@ -826,7 +813,7 @@ internal sealed partial class GameWindow
     /// <summary>맞는 컷 — 원작 식으로 한 번 치기 · 마법 · 물건을 셈해 HP 를 바꾼다.</summary>
     private void ResolveStrike()
     {
-        var (a, d, spell) = (_strike.A, _strike.D, _strike.Old);
+        var (a, d) = (_strike.A, _strike.D);
         if (_strike.Spell >= 0)
         {
             var r = _battle.CastOn(a, _strike.Spell, d);
@@ -839,7 +826,7 @@ internal sealed partial class GameWindow
         {
             _strikeDamage = _battle.HealBy(d, _strike.Heal).Amount;
         }
-        else if (spell == null)
+        else
         {
             var r = _battle.Strike(a, d);
             _strikeDamage = r.Damage;
@@ -847,12 +834,6 @@ internal sealed partial class GameWindow
             _strikeCrit = r.Critical;
             if (r.Poisoned) _strikeNotes.Add(new Notice(" 독에 걸림", Battle.NameLine(d)));
             if (a.Team == 2) _groupExp = (a, _battle.AttackExp(a, d, r.Damage));
-        }
-        else
-        {
-            // 마법 — 원작 규칙이 아닌 기본값(마법 표를 옮기기 전)
-            _strikeDamage = spell.Heal ? spell.Power + 2 * a.Level : Math.Max(1, spell.Power + a.Atk / 2 - d.Def / 4 + Random.Shared.Next(-2, 3));
-            d.Hp = spell.Heal ? Math.Min(d.MaxHp, d.Hp + _strikeDamage) : Math.Max(0, d.Hp - _strikeDamage);
         }
         if (d.Hp <= 0) _fallen.Add((d, a));
     }
@@ -995,7 +976,7 @@ internal sealed partial class GameWindow
         }
         if (_reach != null && _actor != null) foreach (var t in _scene.Stops(_reach, _actor)) FillTile(t, _bs == BattleState.Menu ? (ReachColor & 0x00FFFFFF) | 0x30000000 : ReachColor);   // 메뉴가 떠 있으면 흐리게
         else if (_reach != null && _rangeOf != null) foreach (var t in _scene.Stops(_reach, _rangeOf)) FillTile(t, ReachColor);
-        uint target = _pendingSpell is { Heal: true } ? 0x8040E060u : TargetColor;
+        uint target = _pendingSpell >= 0 && _battle.SpellOf(_pendingSpell) is { Side: not 0 } ? 0x8040E060u : TargetColor;
         foreach (var t in _attackTiles) FillTile(t, _bs == BattleState.Target ? target : AttackColor);
     }
 
@@ -1194,7 +1175,7 @@ internal sealed partial class GameWindow
 
         var (a, d) = (_strike.A, _strike.D);
         bool magic = _strike.Magic;
-        string? spellName = _strike.Spell >= 0 ? SpellNames.Of(_strike.Spell) : _strike.Old?.Name;
+        string? spellName = _strike.Spell >= 0 ? SpellNames.Of(_strike.Spell) : _strike.Heal > 0 ? "물건" : null;
         // 배경 — 공격하는 쪽이 선 칸의 지형으로 BG.DAT 를 골라 50줄부터(원본처럼), 위아래는 BG 0번 줄무늬
         if (Back(0) is { } frame)
         {
