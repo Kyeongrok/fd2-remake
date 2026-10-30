@@ -124,7 +124,7 @@ internal sealed partial class GameWindow
         if (_screen == Screen.Opening)
         {
             if (_openingFrame != null) DrawScreen320(_openingFrame);
-            var skip = Text.Render("아무 키나 누르면 건너뜁니다", Math.Max(12, fs * 3 / 4), 0xB0FFFFFF, bold: false);
+            var skip = Text.Render(TouchUi ? "누르면 건너뜁니다" : "아무 키나 누르면 건너뜁니다", Math.Max(12, fs * 3 / 4), 0xB0FFFFFF, bold: false);
             DrawText(skip, _clientW - skip.W - 16, _clientH - skip.H - 12);
             return;
         }
@@ -138,6 +138,15 @@ internal sealed partial class GameWindow
         var imgs = items.Select((it, i) => Text.Render(it.Label, fs * 5 / 4, i == _titleIndex ? 0xFFFFE070 : 0xFFFFFFFF)).ToList();
         int rowH = imgs.Max(i => i.H) + 12, w = imgs.Max(i => i.W) + 80;
         int x = (_clientW - w) / 2, y = Math.Min(ly + 155 * ls, _clientH - rowH * items.Length - 80);
+        if (ly + 155 * ls + rowH * items.Length + 40 > _clientH && _titleBack != null)
+        {
+            // 낮은 화면(폰) — 로고는 왼쪽 절반, 메뉴는 오른쪽 절반 가운데
+            FillRect(0, 0, _clientW, _clientH, 0xFF000000);
+            int sideLx = Math.Max(0, (_clientW / 2 - AfmPlayer.Width * ls) / 2);
+            BlitScaled(_titleBack, AfmPlayer.Width, AfmPlayer.Height, sideLx, (_clientH - AfmPlayer.Height * ls) / 2, ls, 0, 0, _clientW / 2 + AfmPlayer.Width * ls / 2, _clientH);
+            x = Math.Max(_clientW / 2, _clientW * 3 / 4 - w / 2);
+            y = Math.Max(8, (_clientH - rowH * items.Length) / 2 - 16);
+        }
         FillRect(x, y - 10, w, rowH * items.Length + 20, 0xB0101020);
         _titleRects.Clear();
         for (int i = 0; i < items.Length; i++)

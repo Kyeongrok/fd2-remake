@@ -812,9 +812,10 @@ internal sealed partial class GameWindow
         // 위 가운데 — 몇 턴 · 누구 차례
         string top = _bs switch
         {
-            BattleState.Talk => "1장  (Enter · 클릭 다음 · Esc 대사 건너뛰기)",
+            BattleState.Talk => TouchUi ? "1장  (누르면 다음 · 뒤로 대사 건너뛰기)" : "1장  (Enter · 클릭 다음 · Esc 대사 건너뛰기)",
             _ when _enemyPhase && _bs != BattleState.Over => $"1장 전투 · {_turn}턴 · 적군 차례",
             BattleState.Over => $"1장 전투 · {_turn}턴",
+            _ when TouchUi => $"1장 전투 · {_turn}턴 · 아군 차례   (누르기 고르기 · 길게 누르기/뒤로 물리기 · 빈 칸 누르면 턴 끝)",
             _ => $"1장 전투 · {_turn}턴 · 아군 차례   (방향키 커서 · Enter 결정 · Esc 물리기 · {KeyBindings.KeyName(_keyMap[KeyAction.Attack])} 공격 · " +
                  $"{KeyBindings.KeyName(_keyMap[KeyAction.Wait])} 대기 · {KeyBindings.KeyName(_keyMap[KeyAction.System])} 턴 끝 · {KeyBindings.KeyName(_keyMap[KeyAction.KeyHelp])} 단축키)",
         };
