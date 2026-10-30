@@ -91,7 +91,7 @@ internal sealed partial class GameWindow
     private readonly Dictionary<int, Motion?> _motions = new(), _stands = new();
 
     /// <summary>지금 메뉴가 어느 단계인가 — 취소할 때 어디로 돌아갈지.</summary>
-    private enum MenuStage { System, Unit, AfterMove, Spell }
+    private enum MenuStage { System, Unit, AfterMove, Spell, Over }
     private MenuStage _stage;
 
     /// <summary>이동할 칸을 고르는 중인가(메뉴에서 「이동」을 고른 뒤).</summary>
@@ -121,8 +121,10 @@ internal sealed partial class GameWindow
 
     private void StartBattle(int scene)
     {
-        LoadScene(scene);
+        LoadScene(scene, _campaign?.Party);
         _battle.Turn = 0;
+        _battle.Gold = _campaign?.Gold ?? 0;
+        _outcome = 0;
         _enemyPhase = false;
         SetMusic(PlayerMusic);   // 장면에 들어갈 때 곡(byte_51E63[장면])
         // 전투 앞 대사 — 묶음 0. 묶음 k(k ≥ 1)는 등장 차례 k 의 무리가 나올 때 보인다(1장: 1 해적 두목, 2 해적과 마주침,
@@ -285,12 +287,14 @@ internal sealed partial class GameWindow
         {
             case 1:
                 _bs = BattleState.Over;
-                _banner = "패배 — 게임 > 1장 전투 시작으로 다시";
+                OnOutcome(1);
+                _banner = "패배 — 누르면 메뉴";
                 _bannerName = -1;
                 return true;
             case 2:
                 _bs = BattleState.Over;
-                _banner = $"승리! ({Turn}턴)";
+                OnOutcome(2);
+                _banner = $"승리! ({Turn}턴) — 누르면 메뉴";
                 _bannerName = -1;
                 return true;
         }
@@ -367,6 +371,9 @@ internal sealed partial class GameWindow
     {
         switch (_bs)
         {
+            case BattleState.Over:
+                OpenOverMenu();
+                return;
             case BattleState.Menu:
                 foreach (var item in _menu)
                     if (mx >= item.Rect.X && my >= item.Rect.Y && mx < item.Rect.X + item.Rect.W && my < item.Rect.Y + item.Rect.H)
@@ -441,6 +448,11 @@ internal sealed partial class GameWindow
         bool confirm = vk is Win32.VK_RETURN or Win32.VK_SPACE;
         bool cancel = vk == Win32.VK_ESCAPE;
         var action = _keyMap.ActionFor(vk);
+        if (_bs == BattleState.Over)
+        {
+            if (confirm || cancel) OpenOverMenu();
+            return true;
+        }
 
         // 단축 동작 — 메뉴에 그 줄이 있으면 바로 고르고, 걷기 전이면 제자리에서
         if (action is KeyAction.Attack or KeyAction.Wait && _bs is BattleState.Menu or BattleState.Select && _actor is { Acted: false } who && who.Side == Side.Player)
@@ -539,6 +551,8 @@ internal sealed partial class GameWindow
     {
         switch (_bs)
         {
+            case BattleState.Menu when _stage == MenuStage.Over:   // 판정 뒤 메뉴 — 물릴 곳이 없다
+                break;
             case BattleState.Menu when _actor == null || _stage == MenuStage.System:
                 _menu.Clear();
                 _bs = BattleState.Select;
@@ -1026,10 +1040,10 @@ internal sealed partial class GameWindow
         string top = _bs switch
         {
             BattleState.Talk => TouchUi ? "1장  (누르면 다음 · 뒤로 대사 건너뛰기)" : "1장  (Enter · 클릭 다음 · Esc 대사 건너뛰기)",
-            _ when _enemyPhase && _bs != BattleState.Over => $"1장 전투 · {Turn}턴 · {(_alliesPhase ? "컴퓨터 아군" : "적군")} 차례",
-            BattleState.Over => $"1장 전투 · {Turn}턴",
-            _ when TouchUi => $"1장 전투 · {Turn}턴 · 아군 차례 · 돈 {_battle.Gold}   (누르기 고르기 · 길게 누르기/뒤로 물리기 · 빈 칸 누르면 턴 끝)",
-            _ => $"1장 전투 · {Turn}턴 · 아군 차례 · 돈 {_battle.Gold}   (방향키 커서 · Enter 결정 · Esc 물리기 · {KeyBindings.KeyName(_keyMap[KeyAction.Attack])} 공격 · " +
+            _ when _enemyPhase && _bs != BattleState.Over => $"{ChapterName(_scene.Index)} 전투 · {Turn}턴 · {(_alliesPhase ? "컴퓨터 아군" : "적군")} 차례",
+            BattleState.Over => $"{ChapterName(_scene.Index)} 전투 · {Turn}턴",
+            _ when TouchUi => $"{ChapterName(_scene.Index)} 전투 · {Turn}턴 · 아군 차례 · 돈 {_battle.Gold}   (누르기 고르기 · 길게 누르기/뒤로 물리기 · 빈 칸 누르면 턴 끝)",
+            _ => $"{ChapterName(_scene.Index)} 전투 · {Turn}턴 · 아군 차례 · 돈 {_battle.Gold}   (방향키 커서 · Enter 결정 · Esc 물리기 · {KeyBindings.KeyName(_keyMap[KeyAction.Attack])} 공격 · " +
                  $"{KeyBindings.KeyName(_keyMap[KeyAction.Wait])} 대기 · {KeyBindings.KeyName(_keyMap[KeyAction.System])} 턴 끝 · {KeyBindings.KeyName(_keyMap[KeyAction.KeyHelp])} 단축키)",
         };
         var title = Text.Render(top, fs, 0xFFFFFFFF);

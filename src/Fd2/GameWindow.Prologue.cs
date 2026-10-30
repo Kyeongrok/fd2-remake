@@ -129,6 +129,7 @@ internal sealed partial class GameWindow
 
     private void StartGame()
     {
+        NewCampaign();
         // 프롤로그 장면이 없는 판(장면이 33개보다 적은)이나 이동 대본을 읽을 FD2.EXE 가 없으면 바로 1장
         if (_sceneCount <= ThroneScene || _tables == null) { ToChapter1(); return; }
         _cues = Cues();
@@ -300,7 +301,9 @@ internal sealed partial class GameWindow
         _fade = 0;
         _fading = false;
         _screen = Screen.Game;
-        StartBattle(0);
+        _campaign ??= Campaign.NewGame(_battle);
+        _campaign.NextScene = 0;
+        PlayCampaign();
     }
 
     // ── 세우기 ───────────────────────────────────────────────────────────────

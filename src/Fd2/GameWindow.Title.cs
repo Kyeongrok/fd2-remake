@@ -20,9 +20,11 @@ internal sealed partial class GameWindow
     private int _titleIndex;
     private readonly List<(int X, int Y, int W, int H)> _titleRects = new();
 
-    private (string Label, Action Do)[] TitleItems =>
-    [
+    private (string Label, Action Do)[] TitleItems => _continueOpen
+        ? [.. _continueList.Select(s => (s.Label, (Action)(() => ContinueFrom(s.Campaign)))), ("돌아가기", () => { _continueOpen = false; _titleIndex = 0; })]
+        : [
         ("Start — 게임 시작", StartGame),
+        .. ((_hasSaves ??= ContinueSlots().Count > 0) ? new (string, Action)[] { ("이어하기", () => { OpenContinue(); _titleIndex = 0; }) } : []),
         ($"판: {VersionName}", OpenVersions),
         ("지도 둘러보기", () => { _screen = Screen.Game; LoadScene(_scene.Index); }),
         ("오프닝 다시 보기", StartOpening),
@@ -47,6 +49,8 @@ internal sealed partial class GameWindow
         if (InBattle) { _bs = BattleState.None; ClearSelection(); SetMusic(-1); }   // 전투 곡을 끈다
         _screen = Screen.Title;
         _titleIndex = 0;
+        _continueOpen = false;
+        _hasSaves = null;
         _titleBack ??= LogoFrame();
     }
 
@@ -87,6 +91,7 @@ internal sealed partial class GameWindow
             case Win32.VK_UP: _titleIndex = (_titleIndex + items.Length - 1) % items.Length; break;
             case Win32.VK_DOWN: _titleIndex = (_titleIndex + 1) % items.Length; break;
             case Win32.VK_RETURN or Win32.VK_SPACE: items[_titleIndex].Do(); break;
+            case Win32.VK_ESCAPE when _continueOpen: _continueOpen = false; _titleIndex = 0; break;
             case Win32.VK_ESCAPE: _running = false; break;
         }
     }

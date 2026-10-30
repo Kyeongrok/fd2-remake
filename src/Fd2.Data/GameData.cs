@@ -175,6 +175,9 @@ public sealed class Unit
     /// <summary>장면 유닛 표에서 나왔으면 그 줄(장비 · 마법 · AI · 떨굼).</summary>
     public RosterEntry? Entry;
 
+    /// <summary>동료 표에서 나왔으면 그 80바이트 칸 — 표로 채운 뒤 <see cref="HeroRecord.Apply"/> 로 덮는다.</summary>
+    public byte[]? Record;
+
     public int FormId => Form >= 0 ? Form : Icon;
     public int NameId => Id >= 0 ? Id : FormId;
 
@@ -283,7 +286,8 @@ public sealed class Scene
     /// <summary>장면 정보의 유닛 표 전부(등장 차례 상관없이).</summary>
     public List<RosterEntry> Roster { get; } = new();
 
-    public Scene(string dir, int index, uint[] pal, IconBank icons)
+    /// <param name="party">동료 표(80바이트 칸들, <see cref="Campaign"/>) — 있으면 그 차례로 우리 편을 세운다(쓰러진 사람은 빼고). 없으면 <see cref="PartyOrder"/>.</param>
+    public Scene(string dir, int index, uint[] pal, IconBank icons, IReadOnlyList<byte[]>? party = null)
     {
         Index = index;
         _iconCount = icons.Characters;
@@ -330,12 +334,18 @@ public sealed class Scene
         // 원본(sub_1088D → sub_10C50)처럼 우리 편 출전자를 먼저(배열 번호 0 ~ P-1) 세우고, 그다음 유닛 표의 처음부터 나와 있는 줄.
         // 우리 편 그림은 원본에서는 저장 자료가 정한다 — 여기서는 PartyOrder 차례로, 이 장면에서 나중에 합류하는 아군(편 2)은 건너뛴다.
         var joiners = Roster.Where(e => e.Type == 2).Select(e => e.Icon).ToHashSet();
-        var party = PartyOrder.Concat(Enumerable.Range(0, CharacterNames.Heroes)).Distinct().Where(i => !joiners.Contains(i) && i < icons.Characters).ToList();
-        for (int k = 0; k < players && k < party.Count; k++)
+        var lineup = party != null
+            ? party.Where(r => HeroRecord.Hp(r) > 0).Select(r => (Form: HeroRecord.Form(r), Id: HeroRecord.Id(r), Record: (byte[]?)r)).ToList()
+            : PartyOrder.Concat(Enumerable.Range(0, CharacterNames.Heroes)).Distinct().Where(i => !joiners.Contains(i))
+                .Select(i => (Form: i, Id: i, Record: (byte[]?)null)).ToList();
+        lineup.RemoveAll(h => CharacterNames.SpriteOf(h.Form, _royalsMoved) >= icons.Characters);
+        for (int k = 0; k < players && k < lineup.Count; k++)
         {
             int p = 2 + 6 * (others + k);
             if (p + 3 > pos.Length) break;
-            Place(new Unit { Icon = party[k], Form = party[k], Side = Side.Player, Facing = Dir.Up, Slot = _nextSlot++ }, pos[p], pos[p + 2]);
+            var (form, id, record) = lineup[k];
+            Place(new Unit { Icon = CharacterNames.SpriteOf(form, _royalsMoved), Form = form, Id = id, Side = Side.Player, Facing = Dir.Up, Slot = _nextSlot++, Record = record },
+                  pos[p], pos[p + 2]);
         }
         foreach (var e in Roster.Where(e => e.Phase == 0)) Spawn(e);
     }

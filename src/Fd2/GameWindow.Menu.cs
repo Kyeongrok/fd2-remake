@@ -81,7 +81,7 @@ internal sealed partial class GameWindow
     {
         switch (id)
         {
-            case MenuBattle: StartBattle(0); break;
+            case MenuBattle: NewCampaign(); PlayCampaign(); break;
             case MenuBattleStop: if (InBattle) StopBattle(); break;
             case MenuShowRange:
                 _settings.ShowRange = !_settings.ShowRange;

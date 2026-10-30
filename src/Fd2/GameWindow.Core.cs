@@ -256,13 +256,20 @@ internal sealed partial class GameWindow
 
     // ── 장면 ─────────────────────────────────────────────────────────────────
 
-    private void LoadScene(int index)
+    /// <param name="party">이야기의 동료 표 — 있으면 그 사람들을 세우고 세이브 값으로 덮는다(<see cref="HeroRecord.Apply"/>).</param>
+    private void LoadScene(int index, IReadOnlyList<byte[]>? party = null)
     {
         _bs = BattleState.None;
         ClearSelection();
-        _scene = new Scene(_dir, index, _pal, _icons);
+        _scene = new Scene(_dir, index, _pal, _icons, party);
         _battle = new Battle(_scene, _tables);
-        foreach (var u in _scene.Units) _battle.Setup(u);
+        foreach (var u in _scene.Units)
+        {
+            _battle.Setup(u);
+            if (u.Record == null) continue;
+            HeroRecord.Apply(u.Record, u);
+            _battle.Recompute(u);
+        }
         _freeReachFor = default;
         _selected = _scene.Units.Find(u => u.Side == Side.Player);
         _keys.Clear();
