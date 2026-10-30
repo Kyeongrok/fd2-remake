@@ -263,6 +263,12 @@ public sealed class Scene
     public int TileSet { get; }
 
     private readonly ushort[] _cells;
+
+    /// <summary>칸 표시(지도 칸 +2 &amp; 0x1F) — 상자 타일이면 상자 번호, 아니면 땅 칸 사건 번호.</summary>
+    private readonly byte[] _marks;
+
+    /// <summary>장면 정보의 상자 16개 — (종류 0 물건 · 1 돈 · 2~ 사건, 값).</summary>
+    public List<(int Kind, int Value)> Chests { get; } = new();
     private readonly uint[][] _tiles;
     private readonly byte[] _attr;
 
@@ -290,9 +296,16 @@ public sealed class Scene
         Width = (short)Dat.U16(map, 0);
         Height = (short)Dat.U16(map, 2);
         _cells = new ushort[Width * Height];
-        for (int i = 0; i < _cells.Length; i++) _cells[i] = (ushort)(Dat.U16(map, 4 + 4 * i) & 0x3FF);
+        _marks = new byte[Width * Height];
+        for (int i = 0; i < _cells.Length; i++)
+        {
+            _cells[i] = (ushort)(Dat.U16(map, 4 + 4 * i) & 0x3FF);
+            _marks[i] = (byte)(map[4 + 4 * i + 2] & 0x1F);
+        }
 
         TileSet = info[0];
+        // 상자 16개(83 + 3k): 종류(0 물건 · 1 돈 · 2~ 사건), u16 값
+        for (int k = 0; k < 16 && 85 + 3 * k < info.Length; k++) Chests.Add((info[83 + 3 * k], Dat.U16(info, 84 + 3 * k)));
         var tiles = Dat.Load(shap, 2 * TileSet);
         _attr = Dat.Load(shap, 2 * TileSet + 1);
         _tiles = new uint[Dat.U16(tiles, 4)][];
@@ -398,6 +411,12 @@ public sealed class Scene
 
     /// <summary>지형 종류 — 타일 속성 둘째 바이트: 0 평지 · 1 날아서만 · 2 숲 · 3 깊은 숲 · 4 물 · 늪 · 5 못 감(이름은 그림을 보고 붙인 짐작).</summary>
     public int Ground(int x, int y) => Inside(x, y) ? _attr[4 * _cells[y * Width + x] + 1] : 1;
+
+    /// <summary>칸 표시 0~31 — 상자 타일(<see cref="TileFlags"/> &amp; 0x60 이 0x20 · 0x40)이면 상자 번호.</summary>
+    public int Mark(int x, int y) => Inside(x, y) ? _marks[y * Width + x] : 0;
+
+    /// <summary>타일 속성 첫 바이트 — 0x04 · 0x08 · 0x10 움직이는 타일, 0x20 보석상자, 0x40 숨은 보물, 0x80 덮개.</summary>
+    public int TileFlags(int x, int y) => Inside(x, y) ? _attr[4 * _cells[y * Width + x]] : 0;
 
     public Unit? UnitAt(int x, int y) => Units.Find(u => u.X == x && u.Y == y && u.Alive);
 

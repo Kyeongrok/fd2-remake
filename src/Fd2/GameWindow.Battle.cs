@@ -9,7 +9,8 @@ namespace Fd2;
 /// </summary>
 /// <remarks>
 /// 수(능력치 · 명중 · 피해 · 필살 · 두 번 치기 · 되받아치기 · 경험치 · 레벨업 · 상태 · 떨굼 · 이기고 짐)는 원작 규칙
-/// <see cref="Battle"/>(FD2.EXE 의 표와 식, 분석-전투)이 셈하고 여기는 화면 · 차례 흐름만 맡는다.
+/// <see cref="Battle"/>(FD2.EXE 의 표와 식, 분석-전투)이 셈하고, 컴퓨터 아군 · 적의 생각은 <see cref="BattleAi"/>(분석-AI — 갈래 · 공격/마법/물건 점수 · 길),
+/// 여기는 화면 · 차례 흐름만 맡는다.
 /// 적은 장면 정보의 등장 차례 k 가 k 턴 시작에 나온다(원작은 판마다 사건 함수가 부른다 — 그 코드는 아직 못 옮겨 차례 번호로 갈음한 짐작).
 /// 편 2(나중에 합류하는 아군)는 그때 우리 편으로 든다.
 /// </remarks>
@@ -50,10 +51,27 @@ internal sealed partial class GameWindow
     private double _bannerLeft;
     private Action? _afterBanner;
 
-    // 컷인 — 한 번 치기씩. 두 번 치기는 같은 짝을 한 번 더, 되받아치기는 첫 공격이 다 끝난 뒤
-    private readonly Queue<(Unit A, Unit D, Spell? S)> _strikes = new();
+    /// <summary>
+    /// 한 번 치기 — Spell ≥ 0 이면 그 마법(원작 표), Heal &gt; 0 이면 물건 회복, Old 는 아직 원작 표로 옮기지 않은 아군 마법(기본값),
+    /// 셋 다 없으면 무기.
+    /// </summary>
+    private sealed record Hit(Unit A, Unit D, int Spell = -1, int Heal = 0, Spell? Old = null)
+    {
+        public bool Magic => Spell >= 0 || Heal > 0 || Old != null;
+    }
+
+    // 컷인 — 한 번 치기씩. 두 번 치기는 같은 짝을 한 번 더, 되받아치기는 첫 공격이 다 끝난 뒤, 범위 마법은 대상마다
+    private readonly Queue<Hit> _strikes = new();
     private Action? _afterStrikes;
-    private (Unit A, Unit D, Spell? S) _strike;
+    private Hit _strike = null!;
+
+    /// <summary>지금 컷인이 회복 · 도움 쪽인가(초록 숫자).</summary>
+    private bool _strikeFriendly;
+
+    /// <summary>이번에 건 마법(-1 없음)과 건 사람, 대상마다 결과 — 다 끝나면 마법 경험을 셈한다.</summary>
+    private int _castSpell = -1;
+    private Unit? _castCaster;
+    private readonly List<SpellResult> _spellResults = new();
     private Motion? _strikeMotion;
     private int _strikeFrame, _strikeHeld, _strikeDamage = -1;
     private bool _strikeMiss, _strikeCrit;
@@ -102,9 +120,12 @@ internal sealed partial class GameWindow
     private Spell? _pendingSpell;
     private MenuStage _targetFrom;
 
-    // 컴퓨터 차례 — 한 명씩(컴퓨터 아군 → 적)
-    private readonly Queue<Unit> _enemyQueue = new();
+    // 컴퓨터 차례 — 한 명씩(컴퓨터 아군 → 적). 적은 두 번 훑는다: 첫 번은 마법 · 물건 점수 6 이상만, 둘째 번은 남은 모두(sub_1D8BA)
+    private BattleAi _ai = null!;
+    private readonly List<Unit> _aiOrder = new();
+    private int _aiIndex, _aiPass;
     private Unit? _enemyNow;
+    private AiPlan? _plan;
     private double _enemyWait;
 
     /// <summary>지금 도는 컴퓨터 차례가 컴퓨터 아군(편 1) 차례인가 — 끝나면 적 차례로.</summary>
@@ -206,12 +227,7 @@ internal sealed partial class GameWindow
         ShowNotices(notes, () =>
         {
             if (CheckOver()) return;
-            _alliesPhase = true;
-            _enemyQueue.Clear();
-            foreach (var u in _scene.Units.Where(u => u.Team == 1 && u.Hp > 0 && !u.Paralyzed).OrderBy(u => u.Slot)) _enemyQueue.Enqueue(u);
-            _bs = BattleState.Enemy;
-            _enemyNow = null;
-            _enemyWait = 0.2;
+            StartAi(allies: true);
         });
     }
 
@@ -223,16 +239,22 @@ internal sealed partial class GameWindow
         ShowNotices(notes, () =>
         {
             if (CheckOver()) return;
-            ShowBanner($"{Turn}턴 — 적군 차례", () =>
-            {
-                _alliesPhase = false;
-                _enemyQueue.Clear();
-                foreach (var u in _scene.Units.Where(u => u.Team == 0 && u.Hp > 0 && !u.Paralyzed).OrderBy(u => u.Slot)) _enemyQueue.Enqueue(u);
-                _bs = BattleState.Enemy;
-                _enemyNow = null;
-                _enemyWait = 0.2;
-            });
+            ShowBanner($"{Turn}턴 — 적군 차례", () => StartAi(allies: false));
         });
+    }
+
+    /// <summary>컴퓨터 차례 시작 — 그 편 사람들을 배열 차례로. 컴퓨터 아군(sub_1D80B)은 한 번, 적(sub_1D8BA)은 두 번 훑는다.</summary>
+    private void StartAi(bool allies)
+    {
+        _alliesPhase = allies;
+        _ai = new BattleAi(_battle);
+        _aiOrder.Clear();
+        _aiOrder.AddRange(_scene.Units.Where(u => u.Team == (allies ? 1 : 0)).OrderBy(u => u.Slot));
+        _aiIndex = 0;
+        _aiPass = allies ? 2 : 1;
+        _bs = BattleState.Enemy;
+        _enemyNow = null;
+        _enemyWait = 0.2;
     }
 
     private void ShowBanner(string text, Action after, double seconds = 1.1)
@@ -671,21 +693,55 @@ internal sealed partial class GameWindow
             a.Facing = FaceTo(a, d);
             if (spell is not { Heal: true }) d.Facing = FaceTo(d, a);
         }
+        BeginStrikes(after);
+        if (spell != null) _strikes.Enqueue(new Hit(a, d, Old: spell));
+        else
+        {
+            for (int n = _battle.StrikeCount(a); n > 0; n--) _strikes.Enqueue(new Hit(a, d));
+            _counter = (d, a);
+        }
+        NextStrike();
+    }
+
+    private void BeginStrikes(Action after)
+    {
         _strikes.Clear();
         _fallen.Clear();
         _strikeNotes.Clear();
+        _spellResults.Clear();
         _groupExp = null;
-        if (spell != null)
-        {
-            _strikes.Enqueue((a, d, spell));
-            _counter = null;
-        }
-        else
-        {
-            for (int n = _battle.StrikeCount(a); n > 0; n--) _strikes.Enqueue((a, d, null));
-            _counter = (d, a);
-        }
+        _counter = null;
+        _castSpell = -1;
+        _castCaster = null;
         _afterStrikes = after;
+    }
+
+    /// <summary>
+    /// 마법을 건다 — MP 를 빼고(물건으로 쓰면 안 뺀다), 가운데 칸 둘레 범위 안 대상마다 컷인 한 번씩. 다 끝나면 마법 경험(우리 편만) 뒤 after.
+    /// </summary>
+    private void CastSpell(Unit caster, int spell, (int X, int Y) center, Action after, bool fromItem = false)
+    {
+        if (center != (caster.X, caster.Y)) caster.Facing = DirOf(center.X - caster.X, center.Y - caster.Y);
+        if (!fromItem) _battle.PayMp(caster, spell);
+        BeginStrikes(after);
+        if (!fromItem) (_castSpell, _castCaster) = (spell, caster);   // 물건으로 쓴 마법은 경험이 없다
+        foreach (var t in _battle.SpellTargets(caster, spell, center)) _strikes.Enqueue(new Hit(caster, t, spell));
+        NextStrike();
+    }
+
+    /// <summary>
+    /// 물건을 쓴다(컴퓨터) — 회복(쓰임 5 닳음 · 13 안 닳음)은 범위 안 대상마다 수치의 90~99.9%(sub_211A4 도 회복 마법과 같은 굴림으로 본 짐작),
+    /// 20 · 21 · 24 는 그 마법을 MP 없이. 경험은 없다.
+    /// </summary>
+    private void UseItem(Unit u, int slot, (int X, int Y) center, Action after)
+    {
+        if (_tables == null || slot < 0 || slot >= u.Bag.Count) { after(); return; }
+        var it = _tables.Items[u.Bag[slot].Item];
+        if (it.Use is 20 or 21 or 24) { CastSpell(u, it.UseValue, center, after, fromItem: true); return; }
+        var targets = _ai.ItemTargets(u, it, center);
+        if (it.Use == 5) u.Bag.RemoveAt(slot);
+        BeginStrikes(after);
+        foreach (var t in targets) _strikes.Enqueue(new Hit(u, t, Heal: it.UseValue));
         NextStrike();
     }
 
@@ -713,14 +769,17 @@ internal sealed partial class GameWindow
                 _counter = null;
                 if (_battle.CanCounter(d, a))
                 {
-                    for (int n = _battle.StrikeCount(d); n > 0; n--) _strikes.Enqueue((d, a, null));
+                    for (int n = _battle.StrikeCount(d); n > 0; n--) _strikes.Enqueue(new Hit(d, a));
                     continue;
                 }
             }
             break;
         }
-        // 다 쳤다 — 쓰러진 사람의 떨굼(쓰러뜨린 사람마다), 레벨업 · 독 알림 뒤 다음으로
+        // 다 쳤다 — 마법 경험, 쓰러진 사람의 떨굼(쓰러뜨린 사람마다), 레벨업 · 독 알림 뒤 다음으로
         _bs = BattleState.Select;
+        if (_castSpell >= 0 && _castCaster != null)
+            _strikeNotes.AddRange(_battle.GainExp(_castCaster, _battle.SpellExp(_castCaster, _castSpell, _spellResults)));
+        _castSpell = -1;
         var notes = new List<Notice>(_strikeNotes);
         foreach (var group in _fallen.GroupBy(f => f.Killer))
             notes.AddRange(_battle.Drops(group.Select(f => f.Dead), group.Key));
@@ -744,12 +803,10 @@ internal sealed partial class GameWindow
     {
         // 무리가 바뀌면(되받아치기) 앞 무리의 경험을 먼저
         if (_groupExp is { } g && g.Who != _strike.A) FlushExp();
-        if (!_motions.TryGetValue(_strike.A.Icon, out _strikeMotion))
-        {
-            try { _strikeMotion = Motion.Load(_dir, _strike.A.Icon, 1, _pal); }
-            catch (Exception e) when (e is IndexOutOfRangeException or ArgumentOutOfRangeException) { _strikeMotion = null; }
-            _motions[_strike.A.Icon] = _strikeMotion;
-        }
+        // 마법 · 물건은 셋째 모션(FIGANI 3c+2 — 마법 몸짓, 17 캐릭터만 있다), 없으면 공격 모션
+        _strikeMotion = _strike.Magic ? MotionOf(_strike.A.Icon, 2) ?? MotionOf(_strike.A.Icon, 1) : MotionOf(_strike.A.Icon, 1);
+        _strikeFriendly = _strike.Heal > 0 || _strike.Old is { Heal: true }
+                          || _strike.Spell >= 0 && _battle.SpellOf(_strike.Spell) is { Side: not 0 };
         _strikeFrame = _strikeHeld = 0;
         _strikeClock = 0;
         _strikeTail = 0;
@@ -758,11 +815,31 @@ internal sealed partial class GameWindow
         _bs = BattleState.CutIn;
     }
 
-    /// <summary>맞는 컷 — 원작 식으로 한 번 치기를 셈해 HP 를 깎는다.</summary>
+    private Motion? MotionOf(int icon, int kind)
+    {
+        if (_motions.TryGetValue(icon * 4 + kind, out var m)) return m;
+        try { m = Motion.Load(_dir, icon, kind, _pal); }
+        catch (Exception e) when (e is IndexOutOfRangeException or ArgumentOutOfRangeException) { m = null; }
+        return _motions[icon * 4 + kind] = m;
+    }
+
+    /// <summary>맞는 컷 — 원작 식으로 한 번 치기 · 마법 · 물건을 셈해 HP 를 바꾼다.</summary>
     private void ResolveStrike()
     {
-        var (a, d, spell) = _strike;
-        if (spell == null)
+        var (a, d, spell) = (_strike.A, _strike.D, _strike.Old);
+        if (_strike.Spell >= 0)
+        {
+            var r = _battle.CastOn(a, _strike.Spell, d);
+            _spellResults.Add(r);
+            _strikeDamage = r.Amount;
+            _strikeMiss = !r.Hit;
+            if (r.Hit && r.Note != null) _strikeNotes.Add(new Notice(r.Note, Battle.NameLine(d)));
+        }
+        else if (_strike.Heal > 0)
+        {
+            _strikeDamage = _battle.HealBy(d, _strike.Heal).Amount;
+        }
+        else if (spell == null)
         {
             var r = _battle.Strike(a, d);
             _strikeDamage = r.Damage;
@@ -810,31 +887,16 @@ internal sealed partial class GameWindow
         if (_enemyNow != null)
         {
             if (_enemyNow.Moving || _enemyNow.Path.Count > 0) return;
-            // 다 걸었다 — 칠 수 있으면 친다
             var me = _enemyNow;
             _enemyNow = null;
-            me.Acted = true;
-            var target = Opponents(me).Where(p => _battle.CanStrike(me, (me.X, me.Y), p)).OrderBy(p => p.Hp).FirstOrDefault();
-            if (target != null)
-            {
-                Attack(me, target, () =>
-                {
-                    if (CheckOver()) return;
-                    _bs = BattleState.Enemy;
-                    _enemyWait = 0.25;
-                });
-                return;
-            }
-            if (CheckOver()) return;
-            _enemyWait = 0.15;
+            Arrive(me, _plan ?? new AiPlan());
             return;
         }
-        while (_enemyQueue.TryDequeue(out var e))
+        if (NextAiUnit() is { } next)
         {
-            if (e.Hp <= 0 || e.Paralyzed) continue;
-            EnemyStep(e);
-            _enemyNow = e;
-            _selected = e;
+            next.Acted = true;
+            _selected = next;
+            Run(next, _ai.Decide(next));
             return;
         }
         // 다 움직였다 — 컴퓨터 아군 다음은 적, 적 다음은 다음 차례
@@ -845,56 +907,71 @@ internal sealed partial class GameWindow
     }
 
     /// <summary>
-    /// 적 하나의 움직임 — 칠 수 있는 자리가 있으면 그중 가장 약한 상대를 칠 자리로, 없으면 가장 가까운 상대 쪽으로 갈 수 있는 데까지.
+    /// 다음에 움직일 컴퓨터 유닛 — 살았고 안 끝냈고 마비가 아닌 사람을 배열 차례로. 적 첫 훑기는 마법 · 물건 점수가 6 이상인 사람만.
     /// </summary>
-    private void EnemyStep(Unit e)
+    private Unit? NextAiUnit()
     {
-        var reach = _battle.Reach(e);
-        var players = Opponents(e).ToList();
-        if (players.Count == 0) return;
-
-        (int X, int Y)? best = null;
-        int bestScore = int.MaxValue;
-        var stops = _scene.Stops(reach, e).ToList();
-        foreach (var spot in stops)
-            foreach (var p in players)
-            {
-                if (!_battle.CanStrike(e, spot, p)) continue;
-                int score = p.Hp * 10 + Scene.PathTo(reach, spot).Count;
-                if (score < bestScore) { bestScore = score; best = spot; }
-            }
-        if (best == null)
+        while (true)
         {
-            // 땅 거리(상대에게서 퍼져 나간 거리)가 가장 짧은 칸으로
-            var field = DistanceField(players, _battle.MoveCosts(e));
-            foreach (var spot in stops)
-                if (field.TryGetValue(spot, out int d) && d < bestScore) { bestScore = d; best = spot; }
+            if (_aiIndex >= _aiOrder.Count)
+            {
+                if (_aiPass >= 2) return null;
+                _aiPass = 2;
+                _aiIndex = 0;
+                continue;
+            }
+            var u = _aiOrder[_aiIndex++];
+            if (u.Hp <= 0 || u.Acted || u.Paralyzed) continue;
+            if (_aiPass == 1 && _ai.PriorityScore(u) < 6) continue;
+            return u;
         }
-        if (best is { } to && to != (e.X, e.Y))
-            foreach (var p in Scene.PathTo(reach, to)) e.Path.Enqueue(p);
-        _enemyWait = 0.1;
     }
 
-    private Dictionary<(int X, int Y), int> DistanceField(List<Unit> from, int[] costs)
+    /// <summary>계획대로 — 마법 · 물건은 그 자리에서, 걸을 길이 있으면 걸은 뒤 <see cref="Arrive"/>, 쉬기는 바로.</summary>
+    private void Run(Unit u, AiPlan plan)
     {
-        var dist = new Dictionary<(int X, int Y), int>();
-        var q = new PriorityQueue<(int X, int Y), int>();
-        foreach (var p in from) { dist[(p.X, p.Y)] = 0; q.Enqueue((p.X, p.Y), 0); }
-        ReadOnlySpan<(int, int)> dirs = [(0, 1), (-1, 0), (0, -1), (1, 0)];
-        while (q.TryDequeue(out var c, out int d))
+        if (plan.Spell >= 0)
         {
-            if (dist[c] != d) continue;
-            foreach (var (dx, dy) in dirs)
+            CastSpell(u, plan.Spell, plan.Center, () =>
             {
-                var n = (c.X + dx, c.Y + dy);
-                int cost = _scene.MoveCost(n.Item1, n.Item2, costs);
-                if (cost < 0 || cost >= 20) continue;
-                if (dist.TryGetValue(n, out int had) && had <= d + cost) continue;
-                dist[n] = d + cost;
-                q.Enqueue(n, d + cost);
-            }
+                if (plan.ThenAttack && u.Hp > 0 && !CheckOver()) Run(u, _ai.FollowUp(u));
+                else AiDone();
+            });
+            return;
         }
-        return dist;
+        if (plan.ItemSlot >= 0) { UseItem(u, plan.ItemSlot, plan.Center, AiDone); return; }
+        if (plan.Rest) { _battle.Rest(u); AiDone(); return; }
+        if (plan.Path.Count > 0)
+        {
+            foreach (var c in plan.Path) u.Path.Enqueue(c);
+            _enemyNow = u;
+            _plan = plan;
+            _enemyWait = 0.1;
+            return;
+        }
+        Arrive(u, plan);
+    }
+
+    /// <summary>다 걸었다 — 칠 상대가 사거리 안이면 치고, 도둑은 상자 칸이면 훔치고, 달아나는 사람은 목표 칸이면 사라진다.</summary>
+    private void Arrive(Unit u, AiPlan plan)
+    {
+        if (plan.Target is { Hp: > 0 } t && _battle.CanStrike(u, (u.X, u.Y), t)) { Attack(u, t, AiDone); return; }
+        var notes = new List<Notice>();
+        if (plan.StealChest >= 0 && (u.X, u.Y) == plan.Goal) notes.Add(_ai.Steal(u, plan.StealChest));
+        if (plan.VanishAtGoal && (u.X, u.Y) == plan.Goal)
+        {
+            u.DropKind = 255;   // 판에서 사라짐(sub_32975, +5 = 1) — 쓰러뜨린 것이 아니라 떨굼은 없다
+            u.Hp = 0;
+            notes.Add(new Notice(" 이(가) 사라졌다", Battle.NameLine(u)));
+        }
+        ShowNotices(notes, AiDone);
+    }
+
+    private void AiDone()
+    {
+        if (CheckOver()) return;
+        _bs = BattleState.Enemy;
+        _enemyWait = 0.25;
     }
 
     // ── 그리기 ────────────────────────────────────────────────────────────────
@@ -1115,7 +1192,9 @@ internal sealed partial class GameWindow
         FillRect(bx, by, bw, bh, 0xFF181820);
         var clip = (bx, by, bx + bw, by + bh);
 
-        var (a, d, spell) = _strike;
+        var (a, d) = (_strike.A, _strike.D);
+        bool magic = _strike.Magic;
+        string? spellName = _strike.Spell >= 0 ? SpellNames.Of(_strike.Spell) : _strike.Old?.Name;
         // 배경 — 공격하는 쪽이 선 칸의 지형으로 BG.DAT 를 골라 50줄부터(원본처럼), 위아래는 BG 0번 줄무늬
         if (Back(0) is { } frame)
         {
@@ -1124,9 +1203,9 @@ internal sealed partial class GameWindow
         }
         if (Back(_scene.Terrain(a.X, a.Y)) is { } back)
             BlitFrame(back, Motion.ScreenWidth, back.Length / Motion.ScreenWidth, bx, by + 50 * s, s, false, 0, 0, clip);
-        bool heal = spell is { Heal: true };
+        bool heal = _strikeFriendly;
         bool hit = _strikeDamage >= 0;
-        bool ranged = spell != null || Dist(a, d) >= 2;
+        bool ranged = magic || Dist(a, d) >= 2;
         bool showAttacker = !ranged || !hit || a == d;
         bool showDefender = (!ranged || hit) && a != d || a == d && hit;
 
@@ -1164,7 +1243,7 @@ internal sealed partial class GameWindow
                 var big = _icons.Frame(a.Icon, (int)Dir.Left * 3 + _strikeFrame % 3);
                 BlitFrame(big, T, T, bx + bw * 2 / 3 - T * s, by + bh / 3, s * 3, false, 0, 0, clip);
             }
-            if (spell != null && !hit)
+            if (magic && !hit)
             {
                 // 마법을 모으는 빛 — 공격하는 쪽 둘레에 깜박이는 빛
                 uint glow = heal ? 0x3040FF80u : 0x30FF8040u;
@@ -1172,7 +1251,7 @@ internal sealed partial class GameWindow
             }
         }
 
-        string what = spell != null ? $"  [{spell.Name}]" : "";
+        string what = spellName != null ? $"  [{spellName}]" : "";
         var who = Text.Render($"{CharacterNames.Of(a.Icon)}  →  {CharacterNames.Of(d.Icon)}{what}", fs, 0xFFFFFFFF);
         DrawText(who, _clientW / 2 - who.W / 2, by - who.H - 8);
 
