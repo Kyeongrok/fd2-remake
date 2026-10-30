@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;
-using System.Diagnostics;
+
 using Android.Content;
 using Android.Graphics;
 using Android.Views;
@@ -71,7 +71,7 @@ public sealed class GameView : SurfaceView, ISurfaceHolderCallback
         Bitmap? bitmap = null;
         int[] pixels = [];
         using var paint = new Paint { FilterBitmap = false };
-        var clock = Stopwatch.StartNew();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
         double last = 0;
         int sizedW = 0, sizedH = 0;
         try
@@ -171,7 +171,7 @@ public sealed class GameView : SurfaceView, ISurfaceHolderCallback
     }
 
     /// <summary>손가락 누른 때를 재는 시계 — UI 스레드와 게임 스레드가 함께 본다.</summary>
-    private static readonly Stopwatch Clock = Stopwatch.StartNew();
+    private static readonly System.Diagnostics.Stopwatch Clock = System.Diagnostics.Stopwatch.StartNew();
 
     /// <summary>안드로이드 키 → 게임 키(Win32 가상 키 번호). 받았으면 참.</summary>
     public bool Key(Keycode code, bool down)
