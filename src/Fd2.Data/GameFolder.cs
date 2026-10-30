@@ -5,14 +5,14 @@ public static class GameFolder
 {
     public static readonly string[] Required = ["FDFIELD.DAT", "FDSHAP.DAT", "FDOTHER.DAT", "FDICON.B24", "FIGANI.DAT"];
 
-    /// <summary>첫 인자 → 환경 변수 FD2_DIR → 바탕화면의 모션패치 폴더.</summary>
+    /// <summary>첫 인자 → 환경 변수 FD2_DIR → 바탕화면 「용의기사2 런처」의 원본 판 폴더.</summary>
     public static string Find(string[] args)
     {
         if (args.Length > 0) return args[0];
         var env = Environment.GetEnvironmentVariable("FD2_DIR");
         if (!string.IsNullOrEmpty(env)) return env;
         var desk = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-        return Path.Combine(desk, "용의기사2 모션패치5", "용의기사2 모션패치5");
+        return Path.Combine(desk, "용의기사2 런처", "용의기사2_original");
     }
 
     /// <summary>
@@ -27,7 +27,7 @@ public static class GameFolder
     }
 
     /// <summary>
-    /// 자동으로 찾기 — 실행 파일 옆 · 바탕화면 · 다운로드 · 문서에서. 여럿이면 이름에 「모션패치」가 든 판, 그다음 이름 차례.
+    /// 자동으로 찾기 — 실행 파일 옆 · 바탕화면 · 다운로드 · 문서에서. 여럿이면 원본 판(이름에 「original」 · 「원본」), 그다음 고친 판이 아닌 것(「모션패치」가 없는 것), 그다음 찾은 차례.
     /// 못 찾으면 null.
     /// </summary>
     public static string? Search()
@@ -36,7 +36,16 @@ public static class GameFolder
         var extra = new[] { here, Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(here)) ?? here }
             .Where(Directory.Exists).SelectMany(d => SafeDirs(d).Prepend(d));
         var found = GameVersions.Discover(extra);
-        return found.OrderByDescending(v => v.Name.Contains("모션패치")).Select(v => v.Dir).FirstOrDefault();
+        return found.OrderByDescending(v => IsOriginal(v.Dir))
+                    .ThenBy(v => v.Dir.Contains("모션패치"))
+                    .Select(v => v.Dir).FirstOrDefault();
+    }
+
+    /// <summary>원본 판 폴더로 보이는가 — 폴더 이름에 「original」 이나 「원본」.</summary>
+    public static bool IsOriginal(string dir)
+    {
+        string name = Path.GetFileName(Path.TrimEndingDirectorySeparator(dir));
+        return name.Contains("original", StringComparison.OrdinalIgnoreCase) || name.Contains("원본");
     }
 
     private static IEnumerable<string> SafeDirs(string dir)

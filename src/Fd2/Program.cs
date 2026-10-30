@@ -8,16 +8,17 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
-        // 인자 → FD2_DIR → 게임 > 판 고르기로 고른 판 → 바탕화면의 모션패치 폴더 → 자동으로 찾기 → 폴더 고르기 창
+        // 인자 → FD2_DIR → 게임 > 판 고르기 · 폴더 고르기 창으로 고른 판 → 바탕화면의 원본 판 폴더 → 자동으로 찾기(원본 먼저) → 폴더 고르기 창
         var settings = Settings.Load();
         bool told = args.Length > 0 || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("FD2_DIR"));
         string? dir = told ? GameFolder.Accept(GameFolder.Find(args))
                            : GameFolder.Accept(settings.GameDir) ?? GameFolder.Accept(GameFolder.Find(args));
-        dir ??= GameFolder.Search() ?? AskFolder();
-        if (dir == null) return;
-        if (!told && !string.Equals(dir, settings.GameDir, StringComparison.OrdinalIgnoreCase))
+        dir ??= GameFolder.Search();
+        if (dir == null)
         {
-            settings.GameDir = dir;   // 찾은 · 고른 폴더는 다음에 켤 때도 그대로
+            dir = AskFolder();
+            if (dir == null) return;
+            settings.GameDir = dir;   // 손으로 고른 폴더는 다음에 켤 때도 그대로(자동으로 찾은 것은 남기지 않는다 — 기본 판이 바뀌면 따라가게)
             settings.Save();
         }
         try

@@ -9,7 +9,7 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        // 인자 · FD2_DIR · 바탕화면의 모션패치 폴더 → 자동으로 찾기 → 폴더 고르기 창
+        // 인자 · FD2_DIR · 바탕화면의 원본 판 폴더 → 자동으로 찾기(원본 먼저) → 폴더 고르기 창
         string? dir = GameFolder.Accept(GameFolder.Find(e.Args)) ?? GameFolder.Search() ?? AskFolder();
         if (dir == null) { Shutdown(); return; }
         new MainWindow(dir).Show();
