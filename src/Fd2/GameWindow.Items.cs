@@ -128,3 +128,34 @@ internal sealed partial class GameWindow
         static string? Cure(Unit t, int k, string text) { if (t.Status[k] == 0) return null; t.Status[k] = 0; return text; }
     }
 }
+
+/// <summary>
+/// 전송술(마법 23, sub_2218A · sub_22253) — 1단계 사거리 안 우리 편 한 명, 2단계 그 사람이 갈 빈 칸. MP 를 내고 옮긴 뒤 경험(대상 레벨' × 10).
+/// </summary>
+internal sealed partial class GameWindow
+{
+    private Unit? _teleportWho;
+
+    private void BeginTeleportDest(Unit caster, Unit who)
+    {
+        var cells = new List<(int X, int Y)>();
+        for (int y = 0; y < _scene.Height; y++)
+            for (int x = 0; x < _scene.Width; x++)
+                if (_scene.Free(x, y)) cells.Add((x, y));
+        BeginTarget(caster, cells, 23, _targetFrom);
+        _teleportWho = who;
+    }
+
+    private void Teleport(Unit caster, Unit who, (int X, int Y) to, Action after)
+    {
+        _teleportWho = null;
+        _battle.PayMp(caster, 23);
+        PlaySpellFx(23, [(who.X, who.Y)], () =>
+        {
+            (who.X, who.Y, who.FromX, who.FromY) = (to.X, to.Y, to.X, to.Y);
+            var notes = new List<Notice> { new(" 전송", Battle.NameLine(who)) };
+            notes.AddRange(_battle.GainExp(caster, _battle.SpellExp(caster, 23, [new SpellResult(who, true, 0, false)])));
+            ShowNotices(notes, after);
+        });
+    }
+}

@@ -426,6 +426,20 @@ internal sealed partial class GameWindow
                     UsePlayerItem(a, slot, (tx, ty), AfterPlayerAction);
                     return;
                 }
+                if (spell == 23 && _teleportWho == null)
+                {
+                    // 전송술 1단계 — 옮길 우리 편을 골랐다, 이제 갈 칸
+                    if (_scene.UnitAt(tx, ty) is not { Team: 2 } who) return;
+                    BeginTeleportDest(a, who);
+                    return;
+                }
+                if (spell == 23 && _teleportWho is { } moved)
+                {
+                    a.Acted = true;
+                    ClearSelection();
+                    Teleport(a, moved, (tx, ty), AfterPlayerAction);
+                    return;
+                }
                 if (spell >= 0)
                 {
                     // 마법 — 고른 칸을 가운데로(사거리 0 이면 자기 칸)
@@ -612,6 +626,7 @@ internal sealed partial class GameWindow
             case BattleState.Target:
                 _pendingSpell = -1;
                 _pendingItem = -1;
+                _teleportWho = null;
                 BackTo(_targetFrom);
                 break;
             case BattleState.Select when _choosingMove && _actor != null:
@@ -749,6 +764,7 @@ internal sealed partial class GameWindow
         _menu.Clear();
         _reach = null;
         _pendingItem = -1;
+        _teleportWho = null;
         _pendingSpell = spell;
         _targetFrom = from;
         _attackTiles = cells.ToHashSet();

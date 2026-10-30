@@ -11,8 +11,8 @@ public sealed partial class Battle
 {
     public const int SpellCount = GameTables.SpellCount;
 
-    /// <summary>원작이 쓰는 사람 쪽에서 안 다루는 마법 — 23 전송술(대상과 갈 칸을 두 번 고른다)은 아직 고르기 화면이 없어 뺐다.</summary>
-    public static bool Unsupported(int spell) => spell == 23;
+    /// <summary>원작이 쓰는 사람 쪽에서 안 다루는 마법 — 지금은 없다(23 전송술은 GameWindow 가 두 번 고르기로 다룬다).</summary>
+    public static bool Unsupported(int spell) => false;
 
     /// <summary>아는 마법(sub_1C269) — 비트 차례대로.</summary>
     public IEnumerable<int> KnownSpells(Unit u)
@@ -192,6 +192,7 @@ public sealed partial class Battle
                 22 or 26 or 27 or 35 => 8 * t.Level,
                 20 or 21 => 4 * lv,
                 25 => 8 * lv,
+                23 => 10 * lv,   // 전송술 — 대상 레벨' × 10(sub_2218A)
                 _ => 0,
             };
         }
