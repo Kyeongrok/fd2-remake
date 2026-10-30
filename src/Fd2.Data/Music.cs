@@ -25,6 +25,22 @@ public static class Music
     }
 
     /// <summary>
+    /// MT-32 기본 음색 번호 → GM 악기 번호(널리 쓰는 대응표, ScummVM 의 MT-32 → GM 표와 같은 값). 원작 곡은 MT-32 음색으로 짜여 있어
+    /// GM 신시사이저에서 번호 그대로 틀면 악기가 엉뚱하게 들린다(분석-음악). 곡이 따로 올리는 음색(TIMB)은 대응이 없어 가까운 기본 음색으로 남는다.
+    /// </summary>
+    public static readonly byte[] MtToGm =
+    [
+        0, 1, 0, 2, 4, 4, 5, 3, 16, 17, 18, 16, 16, 19, 20, 21,
+        6, 6, 6, 7, 7, 7, 8, 112, 62, 62, 63, 63, 38, 38, 39, 39,
+        88, 95, 52, 98, 97, 99, 14, 54, 102, 96, 53, 102, 81, 100, 14, 80,
+        48, 48, 49, 45, 41, 40, 42, 42, 43, 46, 45, 24, 25, 28, 27, 104,
+        32, 32, 34, 33, 36, 37, 35, 35, 79, 73, 72, 72, 74, 75, 64, 65,
+        66, 67, 71, 71, 68, 69, 70, 22, 56, 59, 57, 57, 60, 60, 58, 61,
+        61, 11, 11, 98, 14, 9, 14, 13, 12, 107, 107, 77, 78, 78, 76, 76,
+        47, 117, 127, 118, 118, 116, 115, 119, 115, 112, 55, 124, 123, 0, 14, 117,
+    ];
+
+    /// <summary>
     /// 그 곡의 MIDI 파일을 cacheDir 에 만들어 두고 경로를 준다(이미 있으면 그대로) — 곡이 아니면 null.
     /// 파일 이름에 원본 크기를 넣어, 판이 바뀌어 곡이 달라지면 새로 만든다.
     /// </summary>
@@ -32,7 +48,7 @@ public static class Music
     {
         if (!Has(dir, index)) return null;
         var xmi = Dat.Load(Path.Combine(dir, "FDMUS.DAT"), index);
-        string path = Path.Combine(cacheDir, $"fdmus{index:D2}-{xmi.Length}.mid");
+        string path = Path.Combine(cacheDir, $"fdmus{index:D2}-{xmi.Length}-gm.mid");
         if (!File.Exists(path))
         {
             Directory.CreateDirectory(cacheDir);
@@ -72,6 +88,9 @@ public static class Music
                     events.Add((time + dur, 0, [(byte)(0x80 | b & 0x0F), note, 0x40]));
                     break;
                 }
+                case 0xC0 when (b & 0x0F) != 9:   // 악기 — MT-32 번호를 GM 번호로(드럼 갈래 10 은 그대로)
+                    events.Add((time, 1, [b, MtToGm[xmi[p++] & 0x7F]]));
+                    break;
                 case 0xC0 or 0xD0:
                     events.Add((time, 1, [b, xmi[p++]]));
                     break;
@@ -158,7 +177,7 @@ public static class Music
             {
                 case 0x90: p += 2; VarLen(xmi, ref p); break;
                 case 0xC0:
-                    if ((b & 0x0F) != 9 && !list.Contains(xmi[p])) list.Add(xmi[p]);
+                    if ((b & 0x0F) != 9 && !list.Contains(MtToGm[xmi[p] & 0x7F])) list.Add(MtToGm[xmi[p] & 0x7F]);   // GM 으로 옮긴 번호
                     p++;
                     break;
                 case 0xD0: p++; break;
