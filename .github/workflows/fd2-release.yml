@@ -150,12 +150,25 @@ jobs:
           echo "version=$version" >> $env:GITHUB_OUTPUT
           echo "code=$code" >> $env:GITHUB_OUTPUT
 
+      # 서명 — 저장소 비밀값 ANDROID_KEYSTORE_B64(키 파일 base64) · ANDROID_KEYSTORE_PASS 가 있으면 늘 같은 키로 서명한다
+      # (그래야 폰에서 지우지 않고 업데이트된다). 없으면 그때그때 만든 디버그 키 — 판마다 키가 달라 업데이트가 안 된다.
       - name: Publish APK
         shell: pwsh
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
         run: |
           $v = "${{ steps.version.outputs.version }}"
+          $sign = @()
+          if ($env:KEYSTORE_B64) {
+            $ks = Join-Path $env:RUNNER_TEMP "fd2-release.keystore"
+            [IO.File]::WriteAllBytes($ks, [Convert]::FromBase64String($env:KEYSTORE_B64))
+            $sign = @("-p:AndroidKeyStore=true", "-p:AndroidSigningKeyStore=$ks", "-p:AndroidSigningKeyAlias=fd2",
+                      "-p:AndroidSigningKeyPass=$env:KEYSTORE_PASS", "-p:AndroidSigningStorePass=$env:KEYSTORE_PASS")
+            Write-Host "고정 키로 서명합니다"
+          } else { Write-Host "비밀값이 없어 디버그 키로 서명합니다 — 폰에서 업데이트하려면 지우고 다시 깔아야 합니다" }
           dotnet publish src/Fd2.Android/Fd2.Android.csproj -c Release -f net10.0-android -o apk `
-            -p:ApplicationDisplayVersion=$v -p:ApplicationVersion=${{ steps.version.outputs.code }}
+            -p:ApplicationDisplayVersion=$v -p:ApplicationVersion=${{ steps.version.outputs.code }} @sign
           if ($LASTEXITCODE -ne 0) { throw "안드로이드 publish 실패" }
           $signed = Get-ChildItem apk -Filter "*-Signed.apk" | Select-Object -First 1
           if (-not $signed) { throw "서명된 APK 가 없습니다" }
