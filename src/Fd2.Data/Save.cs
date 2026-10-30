@@ -113,6 +113,68 @@ public sealed class SaveFile
 
     /// <summary>싸움 중 기록의 장면 — 없으면 null.</summary>
     public int? BattleSceneIndex => Data[BattleScene] is var s and not Empty ? s : null;
+
+    /// <summary>
+    /// 싸움 중 기록을 쓴다(sub_19DF7) — 슬롯은 그대로 두고 0 ~ 12500 만. 처음 쓰는 파일이면 슬롯 장면 넷은 0xFF(빈 칸) 그대로.
+    /// </summary>
+    public void WriteBattle(BattleRecord b)
+    {
+        Array.Clear(Data, 0, SlotBase);
+        b.Info.AsSpan(0, Math.Min(b.Info.Length, BattleInfoSize)).CopyTo(Data.AsSpan(BattleInfo));
+        for (int i = 0; i < b.Party.Count && i < Campaign.MaxParty; i++) b.Party[i].CopyTo(Data, BattleParty + HeroRecord.Size * i);
+        int n = Math.Min(b.Units.Count, BattleUnitMax);
+        for (int i = 0; i < n; i++)
+        {
+            var r = b.Units[i] ?? HeroRecord.Absent();
+            r.CopyTo(Data, BattleUnits + HeroRecord.Size * i);
+        }
+        foreach (int k in b.Chests) if (k is >= 0 and < 32) Data[BattleChests + k] = 1;
+        Data[BattleTurn] = (byte)b.Turn;
+        Data[BattleUnitCount] = (byte)n;
+        Data[BattleScene] = (byte)b.Scene;
+        (Data[BattleView], Data[BattleView + 1]) = ((byte)b.ViewX, (byte)b.ViewY);
+        (Data[BattleCursor], Data[BattleCursor + 1]) = ((byte)b.CursorX, (byte)b.CursorY);
+        (Data[BattleCursor + 2], Data[BattleCursor + 3]) = ((byte)Math.Max(0, b.CursorX - b.ViewX), (byte)Math.Max(0, b.CursorY - b.ViewY));
+        Data[BattlePartyCount] = (byte)Math.Min(b.Party.Count, Campaign.MaxParty);
+        BinaryPrimitives.WriteInt32LittleEndian(Data.AsSpan(BattleGold), b.Gold);
+        (Data[12497], Data[12498], Data[12499], Data[12500]) = (b.Option3, b.TerrainWindow, b.Music, b.Sound);
+    }
+
+    /// <summary>싸움 중 기록을 읽는다(sub_10010) — 없거나 검사합이 틀리면 null(원작은 글 436 「전황기록훼손됨」).</summary>
+    public BattleRecord? ReadBattle()
+    {
+        if (BattleSceneIndex is not { } scene || !SumOk) return null;
+        var b = new BattleRecord
+        {
+            Scene = scene, Turn = Data[BattleTurn], Gold = BinaryPrimitives.ReadInt32LittleEndian(Data.AsSpan(BattleGold)),
+            ViewX = Data[BattleView], ViewY = Data[BattleView + 1], CursorX = Data[BattleCursor], CursorY = Data[BattleCursor + 1],
+            Info = Data.AsSpan(BattleInfo, BattleInfoSize).ToArray(),
+            Option3 = Data[12497], TerrainWindow = Data[12498], Music = Data[12499], Sound = Data[12500],
+        };
+        int party = Math.Min(Campaign.MaxParty, (int)Data[BattlePartyCount]);
+        for (int i = 0; i < party; i++) b.Party.Add(Data.AsSpan(BattleParty + HeroRecord.Size * i, HeroRecord.Size).ToArray());
+        int n = Math.Min(BattleUnitMax, (int)Data[BattleUnitCount]);
+        for (int i = 0; i < n; i++) b.Units.Add(Data.AsSpan(BattleUnits + HeroRecord.Size * i, HeroRecord.Size).ToArray());
+        for (int k = 0; k < 32; k++) if (Data[BattleChests + k] == 1) b.Chests.Add(k);
+        return b;
+    }
+}
+
+/// <summary>싸움 중 기록(「전황기록」) 한 벌 — 장면 · 차례 · 지도 위 사람(배열 번호 차례) · 동료 표 · 연 상자 · 돈 · 화면 · 커서.</summary>
+public sealed class BattleRecord
+{
+    public int Scene, Turn, Gold, ViewX, ViewY, CursorX, CursorY;
+
+    /// <summary>장면 정보(FDFIELD 3n+1) — 원작은 실행 중 바뀐 값(상자 내용 · 사건 줄)까지 담는다.</summary>
+    public byte[] Info = [];
+
+    public readonly List<byte[]> Party = new();
+
+    /// <summary>배열 번호 i 의 사람 칸 — 없는 번호(못 세운 줄)는 null 로 써도 된다(쓸 때 「없음」 칸으로).</summary>
+    public readonly List<byte[]?> Units = new();
+
+    public readonly HashSet<int> Chests = new();
+    public byte TerrainWindow = 1, Option3 = 1, Music = 1, Sound = 1;
 }
 
 /// <summary>장 사이에 이어지는 것 — 동료 표(80바이트 × 32), 돈, 다음에 할 장면, 설정 네 바이트.</summary>
@@ -130,6 +192,9 @@ public sealed class Campaign
     public int Gold;
     public int NextScene;
     public byte TerrainWindow = 1, Option3 = 1, Music = 1, Sound = 1;
+
+    /// <summary>싸움 중 기록에서 왔으면 그 기록(이어하기가 장면 처음이 아니라 그 차례부터 연다).</summary>
+    public BattleRecord? Battle;
 
     /// <summary>처음 동료 — 프롤로그 끝(sub_3231B)에 넣는 사울(0) · 유니(9) · 아래스(4) · 카일(30), 합류 레벨 그대로.</summary>
     public static Campaign NewGame(Battle battle)
@@ -179,13 +244,45 @@ public static class HeroRecord
     public static int Form(byte[] r) => r[7];
     public static int Hp(byte[] r) => BinaryPrimitives.ReadUInt16LittleEndian(r.AsSpan(64));
 
+    /// <summary>쓰러져 없는 칸(+5 비트 0, HP 0) — 싸움 중 기록에서 못 세운 배열 번호를 채운다.</summary>
+    public static byte[] Absent()
+    {
+        var r = new byte[Size];
+        r[5] = 1;
+        for (int k = 0; k < 8; k++) (r[10 + 2 * k], r[11 + 2 * k]) = (0x80, 0xFF);
+        r[49] = 255;
+        return r;
+    }
+
+    /// <summary>쓰러졌거나 없는 칸인가(+5 비트 0 이고 HP 0).</summary>
+    public static bool Gone(byte[] r) => (r[5] & 1) != 0 && Hp(r) == 0;
+
+    /// <summary>싸움 중 기록의 사람을 되살린다 — 표로 채우고(<see cref="Battle.Setup"/>) 세이브 값으로 덮은 뒤 자리 · 편 · AI · 떨굼 · 행동 끝까지.</summary>
+    public static Unit Restore(byte[] r, int slot, bool royalsMoved, Battle battle)
+    {
+        int team = r[6];
+        var u = new Unit
+        {
+            Icon = CharacterNames.SpriteOf(r[7], royalsMoved), Form = r[7], Id = r[8], Side = team == 0 ? Side.Other : Side.Player, Ai = team == 1,
+            Slot = slot, Level = Math.Max(1, (int)r[33]), X = r[0], Y = r[1], Facing = Enum.IsDefined((Dir)r[3]) ? (Dir)r[3] : Dir.Down,
+        };
+        battle.Setup(u);
+        Apply(r, u);
+        (u.DropKind, u.DropValue) = (r[49], BinaryPrimitives.ReadUInt16LittleEndian(r.AsSpan(50)));
+        (u.AiByte, u.AiX, u.AiY, u.Chest) = (r[52], r[53], r[54], r[61]);
+        u.Acted = (r[5] & 0x80) != 0;
+        battle.Recompute(u);
+        (u.FromX, u.FromY) = (u.X, u.Y);
+        return u;
+    }
+
     public static byte[] From(Unit u)
     {
         var r = new byte[Size];
         r[0] = (byte)u.X;
         r[1] = (byte)u.Y;
         r[3] = (byte)u.Facing;
-        r[5] = (byte)(u.Hp <= 0 ? 1 : 0);
+        r[5] = (byte)((u.Hp <= 0 ? 1 : 0) | (u.Acted ? 0x80 : 0));
         r[6] = (byte)u.Team;
         r[7] = (byte)u.FormId;
         r[8] = (byte)u.NameId;

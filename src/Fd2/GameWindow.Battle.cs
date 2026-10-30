@@ -669,6 +669,7 @@ internal sealed partial class GameWindow
         _stage = MenuStage.System;
         _menu.Clear();
         _menu.Add(("턴 끝", EndPlayerTurn, default));
+        if (!_enemyPhase) _menu.Add(("전황 기록", SaveBattleRecord, default));
         _menu.Add(("타이틀로", ToTitle, default));
         _menu.Add(("취소", () => { _menu.Clear(); _bs = BattleState.Select; }, default));
         _menuIndex = 0;

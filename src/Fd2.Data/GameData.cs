@@ -295,6 +295,7 @@ public sealed class Scene
         string field = Path.Combine(dir, "FDFIELD.DAT"), shap = Path.Combine(dir, "FDSHAP.DAT");
         var map = Dat.Load(field, 3 * index);
         var info = Dat.Load(field, 3 * index + 1);
+        Info = info;
         var pos = Dat.Load(field, 3 * index + 2);
 
         Width = (short)Dat.U16(map, 0);
@@ -373,6 +374,23 @@ public sealed class Scene
         Place(u, e.X, e.Y);
         return Units.Contains(u) ? u : null;
     }
+
+    /// <summary>싸움 중 기록에서 되살린 사람들로 바꾼다 — 배열 번호는 기록의 유닛 수부터 이어 붙인다.</summary>
+    public void Restore(IEnumerable<Unit> units, int slots)
+    {
+        Units.Clear();
+        Units.AddRange(units);
+        _nextSlot = slots;
+    }
+
+    /// <summary>지금까지 쓴 배열 번호 수(원작 유닛 수 `n6_0`) — 못 세운 줄도 번호를 쓴다.</summary>
+    public int SlotCount => _nextSlot;
+
+    /// <summary>판에 따라 왕 · 왕비 그림을 옮겼나(<see cref="IconBank.RoyalsMoved"/>).</summary>
+    public bool RoyalsMoved => _royalsMoved;
+
+    /// <summary>장면 정보(FDFIELD 3n+1) 원본 바이트 — 싸움 중 기록에 넣는다.</summary>
+    public byte[] Info { get; private set; } = [];
 
     /// <summary>같은 칸에 여럿이 겹치면(입장 연출 자리) 가장 가까운 빈 칸으로 — 원본 sub_10C50 처럼.</summary>
     private void Place(Unit u, int x, int y)

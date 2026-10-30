@@ -117,16 +117,76 @@ internal sealed partial class GameWindow
 
     // ── 타이틀의 이어하기 ────────────────────────────────────────────────────
 
+    // ── 싸움 중 기록(전황기록) ───────────────────────────────────────────────
+
+    /// <summary>
+    /// 지금 싸움을 기록한다(원작 시스템 메뉴의 전황기록, sub_19DF7) — 우리 차례에만. 마을 슬롯은 그대로 둔다.
+    /// </summary>
+    private void SaveBattleRecord()
+    {
+        var b = new BattleRecord
+        {
+            Scene = _scene.Index, Turn = Turn, Gold = _battle.Gold, ViewX = Math.Max(0, _camX / T), ViewY = Math.Max(0, _camY / T),
+            CursorX = _cursor.X, CursorY = _cursor.Y, Info = _scene.Info, Music = (byte)(_settings.Music ? 1 : 0),
+        };
+        if (_campaign != null) b.Party.AddRange(_campaign.Party);
+        else b.Party.AddRange(_scene.Units.Where(u => u.Side == Side.Player && !u.Ai).Select(HeroRecord.From));
+        var bySlot = _scene.Units.Where(u => u.Slot >= 0).ToDictionary(u => u.Slot);
+        for (int i = 0; i < _scene.SlotCount; i++) b.Units.Add(bySlot.TryGetValue(i, out var u) ? HeroRecord.From(u) : null);
+        b.Chests.UnionWith(_battle.OpenedChests);
+        var save = SaveFile.Load(SavePath);
+        save.WriteBattle(b);
+        try
+        {
+            save.Save(SavePath);
+            _hasSaves = null;
+            ShowBanner("전황을 기록했습니다", () => _bs = BattleState.Select, 0.9);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            ShowBanner($"기록하지 못했습니다 — {e.Message}", () => _bs = BattleState.Select, 1.5);
+        }
+    }
+
+    /// <summary>싸움 중 기록을 불러온다(sub_10010) — 그 장면을 띄우고 사람들을 기록대로, 우리 차례부터.</summary>
+    private void LoadBattleRecord(BattleRecord b)
+    {
+        _continueOpen = false;
+        _campaign = new Campaign { NextScene = b.Scene, Gold = b.Gold };
+        _campaign.Party.AddRange(b.Party);
+        _screen = Screen.Game;
+        LoadScene(b.Scene, new List<byte[]>());
+        var units = b.Units.Select((r, i) => (r, i))
+            .Where(x => x.r != null && !HeroRecord.Gone(x.r))
+            .Select(x => HeroRecord.Restore(x.r!, x.i, _scene.RoyalsMoved, _battle))
+            .Where(u => _scene.Inside(u.X, u.Y) && u.Icon < _icons.Characters)
+            .ToList();
+        _scene.Restore(units, b.Units.Count);
+        _battle.Turn = Math.Max(1, b.Turn);
+        _battle.Gold = b.Gold;
+        _battle.OpenedChests.Clear();
+        _battle.OpenedChests.UnionWith(b.Chests);
+        _enemyPhase = false;
+        _outcome = 0;
+        SetMusic(PlayerMusic);
+        _selected = units.Find(u => u.Side == Side.Player);
+        _cursor = (b.CursorX, b.CursorY);
+        _centerCursor = true;
+        _bs = BattleState.Select;
+    }
+
     /// <summary>이어 할 수 있는 슬롯 — 리메이크 기록 넷, 그다음 원작 폴더의 기록 넷(있는 것만).</summary>
     private List<(string Label, Campaign Campaign)> ContinueSlots()
     {
         var list = new List<(string, Campaign)>();
         var mine = SaveFile.Load(SavePath);
+        if (mine.ReadBattle() is { } mb && mb.Scene < _sceneCount) list.Add(($"전황 불러오기 — {ChapterName(mb.Scene)} {mb.Turn}턴", BattleCampaign(mb)));
         for (int k = 0; k < SaveFile.Slots; k++)
             if (mine.ReadSlot(k) is { } c && c.NextScene < _sceneCount) list.Add(($"기록 {k + 1} — {SlotLabel(mine, k)}", c));
         if (File.Exists(OriginalSavePath))
         {
             var orig = SaveFile.Load(OriginalSavePath);
+            if (orig.ReadBattle() is { } ob && ob.Scene < _sceneCount) list.Add(($"원작 전황 — {ChapterName(ob.Scene)} {ob.Turn}턴", BattleCampaign(ob)));
             for (int k = 0; k < SaveFile.Slots; k++)
                 if (orig.ReadSlot(k) is { } c && c.NextScene < _sceneCount) list.Add(($"원작 기록 {k + 1} — {SlotLabel(orig, k)}", c));
         }
@@ -145,8 +205,12 @@ internal sealed partial class GameWindow
         _continueOpen = true;
     }
 
+    /// <summary>싸움 중 기록을 이어하기 목록에 넣는 꼴 — <see cref="Campaign.Battle"/> 이 있으면 그 싸움부터.</summary>
+    private static Campaign BattleCampaign(BattleRecord b) => new() { NextScene = b.Scene, Gold = b.Gold, Battle = b };
+
     private void ContinueFrom(Campaign c)
     {
+        if (c.Battle is { } b) { LoadBattleRecord(b); return; }
         _continueOpen = false;
         _campaign = c;
         PlayCampaign();
