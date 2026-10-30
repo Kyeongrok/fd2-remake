@@ -36,6 +36,18 @@ internal sealed partial class GameWindow
         _talkShown = 0;
         _afterTalk = after;
         if (!Talking) EndTalk();
+        else FocusSpeaker();
+    }
+
+    /// <summary>말하는 사람이 지도에 있으면 커서를 그리로 — 화면이 그 사람을 비춘다.</summary>
+    private void FocusSpeaker()
+    {
+        if (!Talking || _talk[_talkPage].Speaker < 0) return;
+        if (_scene.Units.FirstOrDefault(u => u.Icon == _talk[_talkPage].Speaker && u.Alive) is { } who)
+        {
+            _cursor = (who.X, who.Y);
+            _centerCursor = true;
+        }
     }
 
     private void EndTalk()
@@ -60,6 +72,7 @@ internal sealed partial class GameWindow
         if (_talkShown < PageChars(_talk[_talkPage])) { _talkShown = 9999; return; }
         if (++_talkPage >= _talk.Count) { EndTalk(); return; }
         _talkShown = 0;
+        FocusSpeaker();
     }
 
     private bool TalkKey(int vk)

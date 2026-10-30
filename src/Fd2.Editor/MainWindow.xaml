@@ -23,6 +23,9 @@
         <Menu DockPanel.Dock="Top">
             <MenuItem Header="파일(_F)">
                 <MenuItem Header="게임 폴더 열기(_O)..." Click="OnOpenFolder" />
+                <MenuItem x:Name="VersionMenu" Header="판 고르기(_V)" SubmenuOpened="OnVersionMenuOpened">
+                    <MenuItem Header="(찾는 중…)" IsEnabled="False" />
+                </MenuItem>
                 <Separator />
                 <MenuItem Header="끝내기(_X)" Click="OnExit" />
             </MenuItem>
@@ -144,6 +147,32 @@
                             </ItemsControl>
                         </StackPanel>
                     </ScrollViewer>
+                </DockPanel>
+            </TabItem>
+            <!-- 여러 판: 기준 판과 비교 판의 다른 파일 · DAT 안 바뀐 항목, 고른 파일만 비교 판 것으로 바꿔 새 폴더로 합치기 -->
+            <TabItem Header="판 비교 · 합치기">
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="기준 판" VerticalAlignment="Center" Margin="0,0,6,0" />
+                        <ComboBox x:Name="BaseVersion" Width="320" DisplayMemberPath="Label" />
+                        <TextBlock Text="비교 판" VerticalAlignment="Center" Margin="16,0,6,0" />
+                        <ComboBox x:Name="OtherVersion" Width="320" DisplayMemberPath="Label" />
+                        <Button Content="비교" Click="OnCompare" Margin="12,0,0,0" Padding="14,2" />
+                        <Button Content="판 폴더 더하기..." Click="OnAddVersion" Margin="8,0,0,0" Padding="10,2" />
+                    </StackPanel>
+                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
+                        <TextBlock Text="체크한 파일은 비교 판 것으로, 나머지는 기준 판 것으로 — 새 판 이름" VerticalAlignment="Center" Margin="0,0,6,0" />
+                        <TextBox x:Name="MergeName" Width="220" Text="용의기사2 합본" VerticalContentAlignment="Center" />
+                        <Button Content="합치기 (새 폴더로)" Click="OnMerge" Margin="8,0,0,0" Padding="14,2" />
+                    </StackPanel>
+                    <DataGrid x:Name="DiffGrid" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column">
+                        <DataGrid.Columns>
+                            <DataGridCheckBoxColumn Header="비교 판 것" Binding="{Binding UseOther, UpdateSourceTrigger=PropertyChanged}" />
+                            <DataGridTextColumn Header="파일" Binding="{Binding File}" IsReadOnly="True" Width="140" />
+                            <DataGridTextColumn Header="상태" Binding="{Binding Status}" IsReadOnly="True" Width="100" />
+                            <DataGridTextColumn Header="바뀐 항목(DAT 안 번호)" Binding="{Binding Entries}" IsReadOnly="True" Width="*" />
+                        </DataGrid.Columns>
+                    </DataGrid>
                 </DockPanel>
             </TabItem>
         </TabControl>

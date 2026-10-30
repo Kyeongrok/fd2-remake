@@ -14,6 +14,9 @@ internal sealed class Settings
 
     public bool Fullscreen { get; set; }
 
+    /// <summary>게임 > 판 고르기로 고른 게임 폴더 — 인자 · FD2_DIR 가 없을 때 쓴다. 비면 바탕화면의 모션패치 폴더.</summary>
+    public string GameDir { get; set; } = "";
+
     /// <summary>모드 > 고해상도 — 기본 켬. 처음에는 이 PC 에서 차례로 만들어 다 된 것부터 갈아 끼운다.</summary>
     public bool HiRes { get; set; } = true;
 

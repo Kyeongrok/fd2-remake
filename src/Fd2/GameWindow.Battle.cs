@@ -97,10 +97,11 @@ internal sealed partial class GameWindow
         _lastPhase = _scene.Roster.Count == 0 ? 0 : _scene.Roster.Max(e => e.Phase);
         _turn = 0;
         _enemyPhase = false;
-        // 전투 앞 대사 — 1장은 묶음 0 · 1 · 2(배에서 내린 일행, 해적 두목, 해적과 마주침)
+        // 전투 앞 대사 — 묶음 0. 묶음 k(k ≥ 1)는 등장 차례 k 의 무리가 나올 때 보인다(1장: 1 해적 두목, 2 해적과 마주침,
+        // 3 하노 · 하와터, 4 해적 F · G, 5 해적 두목 97, 6 해양순찰대 68 — 대사를 그려 맞춰 본 것).
         _bs = BattleState.Talk;
-        if (Living(Side.Player).OrderBy(u => u.Icon).FirstOrDefault() is { } lead) { _cursor = (lead.X, lead.Y); _centerCursor = true; }
-        StartTalk(scene, scene == 0 ? [0, 1, 2] : [0], NextTurn);
+        if (Controlled.OrderBy(u => u.Icon).FirstOrDefault() is { } lead) { _cursor = (lead.X, lead.Y); _centerCursor = true; }
+        StartTalk(scene, [0], NextTurn);
     }
 
     private void StopBattle()
@@ -161,6 +162,12 @@ internal sealed partial class GameWindow
 
     private IEnumerable<Unit> Living(Side side) => _scene.Units.Where(u => u.Side == side && u.Hp > 0);
 
+    /// <summary>u 가 칠 상대 — 다른 편의 살아 있는 사람.</summary>
+    private IEnumerable<Unit> Opponents(Unit u) => Living(u.Side == Side.Player ? Side.Other : Side.Player);
+
+    /// <summary>내가 움직이는 아군(컴퓨터가 움직이는 아군은 빼고).</summary>
+    private IEnumerable<Unit> Controlled => Living(Side.Player).Where(u => !u.Ai);
+
     // ── 턴 ───────────────────────────────────────────────────────────────────
 
     private void NextTurn()
@@ -171,8 +178,15 @@ internal sealed partial class GameWindow
         foreach (var u in Living(Side.Player)) u.Acted = false;
         _enemyPhase = false;
         ClearSelection();
-        if (Living(Side.Player).OrderBy(u => u.Icon).FirstOrDefault() is { } lead) { _cursor = (lead.X, lead.Y); _centerCursor = true; }
-        ShowBanner($"{_turn}턴 — 아군 차례", () => _bs = BattleState.Select);
+        if (Controlled.OrderBy(u => u.Icon).FirstOrDefault() is { } lead) { _cursor = (lead.X, lead.Y); _centerCursor = true; }
+        int turn = _turn;
+        void Banner() => ShowBanner($"{turn}턴 — 아군 차례", () => _bs = BattleState.Select);
+        if (_scene.Roster.Any(e => e.Phase == turn))
+        {
+            _bs = BattleState.Talk;
+            StartTalk(_scene.Index, [turn], Banner);   // 이 차례의 무리가 나올 때의 대사(없으면 바로 넘어간다)
+        }
+        else Banner();
     }
 
     private void EndPlayerTurn()
@@ -180,6 +194,8 @@ internal sealed partial class GameWindow
         ClearSelection();
         _enemyPhase = true;
         _enemyQueue.Clear();
+        // 컴퓨터가 움직이는 아군이 먼저, 그다음 적
+        foreach (var u in Living(Side.Player).Where(u => u.Ai)) _enemyQueue.Enqueue(u);
         foreach (var u in Living(Side.Other).OrderBy(u => u.Y).ThenBy(u => u.X)) _enemyQueue.Enqueue(u);
         ShowBanner($"{_turn}턴 — 적군 차례", () => { _bs = BattleState.Enemy; _enemyNow = null; _enemyWait = 0.2; });
     }
@@ -196,7 +212,7 @@ internal sealed partial class GameWindow
     private bool CheckOver()
     {
         bool saulDown = _scene.Units.Any(u => u.Side == Side.Player && u.Icon == 0 && u.Hp <= 0);
-        if (saulDown || !Living(Side.Player).Any())
+        if (saulDown || !Controlled.Any())
         {
             _bs = BattleState.Over;
             _banner = "패배 — 게임 > 1장 전투 시작으로 다시";
@@ -330,7 +346,7 @@ internal sealed partial class GameWindow
                     else ClearSelection();
                     return;
                 }
-                if (who.Side == Side.Player && !who.Acted) { _selected = who; OpenUnitMenu(who); return; }
+                if (who.Side == Side.Player && !who.Acted && !who.Ai) { _selected = who; OpenUnitMenu(who); return; }
                 // 적이나 행동을 마친 아군 — 범위만 보여 준다
                 Select(who);
                 _actor = null;
@@ -364,7 +380,7 @@ internal sealed partial class GameWindow
         }
         if (action == KeyAction.NextUnit && _bs == BattleState.Select)
         {
-            var ready = Living(Side.Player).Where(u => !u.Acted).OrderBy(u => u.Icon).ToList();
+            var ready = Controlled.Where(u => !u.Acted).OrderBy(u => u.Icon).ToList();
             if (ready.Count > 0)
             {
                 int at = _actor == null ? -1 : ready.IndexOf(_actor);
@@ -559,7 +575,7 @@ internal sealed partial class GameWindow
     {
         if (CheckOver()) return;
         _bs = BattleState.Select;
-        if (!Living(Side.Player).Any(u => !u.Acted)) EndPlayerTurn();
+        if (!Controlled.Any(u => !u.Acted)) EndPlayerTurn();
     }
 
     // ── 공격 · 컷인 ───────────────────────────────────────────────────────────
@@ -656,7 +672,7 @@ internal sealed partial class GameWindow
             // 다 걸었다 — 칠 수 있으면 친다
             var me = _enemyNow;
             _enemyNow = null;
-            var target = Living(Side.Player).Where(p => InRange(me, p)).OrderBy(p => p.Hp).FirstOrDefault();
+            var target = Opponents(me).Where(p => InRange(me, p)).OrderBy(p => p.Hp).FirstOrDefault();
             if (target != null)
             {
                 Attack(me, target, () =>
@@ -689,7 +705,7 @@ internal sealed partial class GameWindow
     private void EnemyStep(Unit e)
     {
         var reach = _scene.Reach(e);
-        var players = Living(Side.Player).ToList();
+        var players = Opponents(e).ToList();
         if (players.Count == 0) return;
 
         (int X, int Y)? best = null;
@@ -789,7 +805,7 @@ internal sealed partial class GameWindow
             int bh = Math.Max(3, _zoom);
             FillRect(sx + 2, sy + cell - bh - 1, cell - 4, bh, 0xC0000000);
             FillRect(sx + 2, sy + cell - bh - 1, (cell - 4) * u.Hp / u.MaxHp, bh,
-                     u.Side == Side.Player ? 0xFF40D060 : 0xFFE04040);
+                     u.Ai ? 0xFFE0C040 : u.Side == Side.Player ? 0xFF40D060 : 0xFFE04040);
         }
 
         int fs = Math.Max(14, 7 * _zoom);
@@ -900,12 +916,21 @@ internal sealed partial class GameWindow
         var clip = (bx, by, bx + bw, by + bh);
 
         var (a, d, spell) = _strike;
+        // 배경 — 공격하는 쪽이 선 칸의 지형으로 BG.DAT 를 골라 50줄부터(원본처럼), 위아래는 BG 0번 줄무늬
+        if (Back(0) is { } frame)
+        {
+            BlitFrame(frame, Motion.ScreenWidth, 50, bx, by, s, false, 0, 0, clip);
+            BlitFrame(frame[(50 * Motion.ScreenWidth)..], Motion.ScreenWidth, 50, bx, by + 150 * s, s, false, 0, 0, clip);
+        }
+        if (Back(_scene.Terrain(a.X, a.Y)) is { } back)
+            BlitFrame(back, Motion.ScreenWidth, back.Length / Motion.ScreenWidth, bx, by + 50 * s, s, false, 0, 0, clip);
         bool heal = spell is { Heal: true };
         bool hit = _strikeDamage >= 0;
         bool ranged = spell != null || Dist(a, d) >= 2;
         bool showAttacker = !ranged || !hit || a == d;
         bool showDefender = (!ranged || hit) && a != d || a == d && hit;
 
+        int defenderSide = 0;   // 맞는 쪽이 선 쪽(오른쪽 1) — 피해 숫자를 그 위에
         if (showDefender)
         {
             int shake = hit && !heal && _strikeTail < 0.4 ? (int)(Math.Sin(_strikeTail * 70) * 3 * s) : 0;
@@ -914,8 +939,10 @@ internal sealed partial class GameWindow
             if (stand != null)
             {
                 var f = stand.Frames[(int)(_time * 6) % stand.Frames.Count];
-                // 맞는 쪽은 왼쪽 — 서기 모션(오른쪽 자리)을 좌우로 뒤집는다. 자기에게 건 회복이면 제자리에.
-                bool mirror = a != d;
+                // 원본 모션은 편마다 자리가 정해져 있다(주인공은 오른쪽, 몬스터는 왼쪽).
+                // 공격하는 쪽 모션과 같은 쪽에 서 있을 때만 좌우로 뒤집어 맞은편에 세운다.
+                bool mirror = a != d && SideOf(stand) == (_strikeMotion != null ? SideOf(_strikeMotion) : 1);
+                defenderSide = mirror ? 1 - SideOf(stand) : SideOf(stand);
                 int fx = mirror ? Motion.ScreenWidth - f.X - f.Width : f.X;
                 BlitFrame(f.Pixels, f.Width, f.Height, bx + fx * s + shake, by + f.Y * s, s, mirror, tint, amount, clip);
             }
@@ -959,9 +986,27 @@ internal sealed partial class GameWindow
         {
             var dmg = heal ? Text.Render($"+{_strikeDamage}", fs * 3, 0xFF60FF80)
                            : Text.Render(d.Hp == 0 ? $"-{_strikeDamage}  쓰러짐!" : $"-{_strikeDamage}", fs * 3, 0xFFFF5050);
-            DrawText(dmg, bx + bw / 4 - dmg.W / 2, by + bh / 6);
+            DrawText(dmg, bx + bw * (defenderSide == 1 ? 3 : 1) / 4 - dmg.W / 2, by + bh / 6);
         }
     }
+
+    private readonly Dictionary<int, uint[]?> _backs = new();
+
+    /// <summary>전투 배경 BG.DAT 번호 i — 320x100 RLE(너비 · 높이 머리). 없으면 null.</summary>
+    private uint[]? Back(int i)
+    {
+        if (_backs.TryGetValue(i, out var px)) return px;
+        try
+        {
+            var e = Dat.Load(Path.Combine(_dir, "BG.DAT"), i);
+            px = e.Length > 8 && Dat.U16(e, 0) == Motion.ScreenWidth ? Rle.Decode(e, 4, Motion.ScreenWidth, Dat.U16(e, 2), _pal) : null;
+        }
+        catch (Exception ex) when (ex is IOException or IndexOutOfRangeException or ArgumentOutOfRangeException) { px = null; }
+        return _backs[i] = px;
+    }
+
+    /// <summary>모션이 화면 어느 쪽에 서 있나 — 오른쪽 1, 왼쪽 0(컷들의 가운데 x 로).</summary>
+    private static int SideOf(Motion m) => m.Frames.Average(f => f.X + f.Width / 2.0) > Motion.ScreenWidth / 2.0 ? 1 : 0;
 
     private Motion? StandOf(int icon)
     {

@@ -155,6 +155,9 @@ public sealed class Unit
     // 전투(게임의 GameWindow.Battle.cs 가 채운다) — 능력치는 원본 규칙이 아니라 직업별 기본값이다.
     public int Hp, MaxHp, Mp, MaxMp, Atk, Def, Move = 4, RangeMin = 1, RangeMax = 1;
     public bool Acted;
+
+    /// <summary>컴퓨터가 움직이는 우리 편(장면 정보의 편 1 — 1장의 해양순찰대 같은).</summary>
+    public bool Ai;
     /// <summary>쓰러지지 않았나 — 전투 능력치가 없는(전투 밖) 사람은 늘 서 있다.</summary>
     public bool Alive => Hp > 0 || MaxHp == 0;
 
@@ -240,10 +243,13 @@ public sealed class Scene
     /// </summary>
     public static readonly int[] PartyOrder = [0, 4, 9, 10, 2, 5, 6, 7, 8, 11];
 
-    /// <summary>유닛 표의 한 줄을 지도에 세운다 — 편 2 는 우리 편, 나머지는 적. 놓을 자리가 없으면 null.</summary>
+    /// <summary>
+    /// 유닛 표의 한 줄을 지도에 세운다 — 편 2 는 합류하는 우리 편, 편 1 은 컴퓨터가 움직이는 우리 편, 편 0 은 적.
+    /// (1장 대사로 맞춰 본 뜻.) 놓을 자리가 없으면 null.
+    /// </summary>
     public Unit? Spawn(RosterEntry e)
     {
-        var u = new Unit { Icon = e.Icon, Side = e.Type == 2 ? Side.Player : Side.Other, Level = e.Level };
+        var u = new Unit { Icon = e.Icon, Side = e.Type is 1 or 2 ? Side.Player : Side.Other, Ai = e.Type == 1, Level = e.Level };
         Place(u, e.X, e.Y);
         return Units.Contains(u) ? u : null;
     }
@@ -293,6 +299,9 @@ public sealed class Scene
     public Unit? UnitAt(int x, int y) => Units.Find(u => u.X == x && u.Y == y && u.Alive);
 
     public bool Free(int x, int y) => Walkable(x, y) && UnitAt(x, y) == null;
+
+    /// <summary>지형 — 타일 속성 셋째 바이트(4 풀밭 · 5 숲 · 6 모래 · 0 물 …). 원본은 이것을 전투 배경 BG.DAT 번호로 쓴다(sub_12E38).</summary>
+    public int Terrain(int x, int y) => Inside(x, y) ? _attr[4 * _cells[y * Width + x] + 2] : 0;
 
     /// <summary>이 칸에 들어가는 데 드는 이동력 — 못 가면 -1, 숲(속성 2)은 2, 나머지 1.</summary>
     public int MoveCost(int x, int y)

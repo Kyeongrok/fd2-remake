@@ -28,8 +28,13 @@ internal sealed class HiRes
     private static string Folder =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fd2", "hires");
     private static string ModelPath => Path.Combine(Folder, "model", ModelFile);
-    private static string MapPath(int scene) => Path.Combine(Folder, "map", $"{scene:D2}.bin.gz");
-    private static string IconPath(int icon) => Path.Combine(Folder, "icon", $"{icon:D3}.bin.gz");
+    // 판마다 지도 · 캐릭터 그림이 다를 수 있다(모션패치는 FDFIELD · FDICON 이 다르다) — 캐시 이름에 원본 파일 크기를 붙여 판끼리 섞이지 않게.
+    private static string _mapKey = "", _iconKey = "";
+    private static string MapPath(int scene) => Path.Combine(Folder, "map", $"{_mapKey}{scene:D2}.bin.gz");
+    private static string IconPath(int icon) => Path.Combine(Folder, "icon", $"{_iconKey}{icon:D3}.bin.gz");
+
+    private static string SizeKey(string dir, params string[] files) =>
+        string.Concat(files.Select(f => $"{new FileInfo(Path.Combine(dir, f)).Length:x}-"));
 
     private readonly string _dir;
     private readonly uint[] _pal;
@@ -55,6 +60,8 @@ internal sealed class HiRes
     {
         _dir = dir;
         _pal = pal;
+        _mapKey = SizeKey(dir, "FDFIELD.DAT", "FDSHAP.DAT");
+        _iconKey = SizeKey(dir, "FDICON.B24");
         _scenes = scenes;
         _icons = icons;
         Enabled = enabled;

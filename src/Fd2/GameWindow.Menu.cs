@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Fd2.Data;
 using Fd2.Native;
 
 namespace Fd2;
@@ -18,7 +19,7 @@ internal sealed partial class GameWindow
     private const int MenuScenePrev = 1001, MenuSceneNext = 1002, MenuSceneBase = 1100;
     private const int MenuResBase = 1300, MenuZoomBase = 1400, MenuFullscreen = 1500, MenuResetView = 1501, MenuKeys = 1502;
     private const int MenuEditor = 1600, MenuExit = 1601, MenuHiRes = 1700, MenuShowRange = 1701;
-    private const int MenuBattle = 1003, MenuBattleStop = 1004;
+    private const int MenuBattle = 1003, MenuBattleStop = 1004, MenuVersions = 1005;
 
     private static readonly (int W, int H)[] ResChoices =
         [(640, 480), (800, 600), (960, 624), (1024, 768), (1280, 720), (1280, 960), (1440, 936), (1600, 900), (1920, 1080), (2560, 1440)];
@@ -52,6 +53,8 @@ internal sealed partial class GameWindow
         Win32.AppendMenuW(game, Win32.MF_SEPARATOR, 0, null);
         Win32.AppendMenuW(game, Win32.MF_STRING, MenuBattle, "1장 전투 시작(&B)");
         Win32.AppendMenuW(game, Win32.MF_STRING, MenuBattleStop, "전투 그만두기(&Q)");
+        Win32.AppendMenuW(game, Win32.MF_SEPARATOR, 0, null);
+        Win32.AppendMenuW(game, Win32.MF_STRING, MenuVersions, "판 고르기(&V)...");
         Win32.AppendMenuW(game, Win32.MF_SEPARATOR, 0, null);
         Win32.AppendMenuW(game, Win32.MF_STRING, MenuExit, "끝내기(&X)\tEsc");
         Win32.AppendMenuW(bar, Win32.MF_POPUP, (nuint)game, "게임(&G)");
@@ -133,6 +136,7 @@ internal sealed partial class GameWindow
                 _keysRow = 0;
                 _keysCapture = -1;
                 break;
+            case MenuVersions: PickVersion(); break;
             case MenuEditor: OpenEditor(); break;
             case MenuExit: _running = false; break;
         }
@@ -209,6 +213,29 @@ internal sealed partial class GameWindow
         if (st == _titleStatus || _scene == null) return;
         _titleStatus = st;
         Win32.SetWindowTextW(_hwnd, $"용의기사2 — 장면 {_scene.Index + 1}/{_sceneCount}" + (st.Length > 0 ? $"  · {st}" : "  (F11 전체화면)"));
+    }
+
+    /// <summary>
+    /// 게임 > 판 고르기 — 이 PC 의 용의기사2 판들(바탕화면 · 다운로드 · 문서)을 찾아 띄우고, 고르면 그 판으로 다시 켠다.
+    /// </summary>
+    private void PickVersion()
+    {
+        var versions = GameVersions.Discover(_settings.GameDir.Length > 0 ? [_settings.GameDir] : null);
+        IntPtr popup = Win32.CreatePopupMenu();
+        for (int i = 0; i < versions.Count; i++)
+        {
+            bool now = string.Equals(Path.GetFullPath(versions[i].Dir), Path.GetFullPath(_dir), StringComparison.OrdinalIgnoreCase);
+            Win32.AppendMenuW(popup, Win32.MF_STRING | (now ? Win32.MF_CHECKED : 0), (nuint)(i + 1), $"{versions[i].Name}   —   {versions[i].Dir}");
+        }
+        if (versions.Count == 0) Win32.AppendMenuW(popup, Win32.MF_STRING | Win32.MF_GRAYED, 0, "(찾은 판이 없습니다)");
+        Win32.GetCursorPos(out var at);
+        int pick = Win32.TrackPopupMenuEx(popup, Win32.TPM_RETURNCMD, at.X, at.Y, _hwnd, IntPtr.Zero);
+        Win32.DestroyMenu(popup);
+        if (pick <= 0) return;
+        _settings.GameDir = versions[pick - 1].Dir;
+        _settings.Save();
+        Process.Start(new ProcessStartInfo(Environment.ProcessPath!) { ArgumentList = { versions[pick - 1].Dir }, UseShellExecute = false });
+        _running = false;
     }
 
     /// <summary>도구 > 편집기 열기 — 같은 폴더의 Fd2.Editor.exe 를 게임 폴더를 주어 띄운다.</summary>

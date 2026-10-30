@@ -60,6 +60,7 @@ public partial class MainWindow : Window
         MotionList.SelectedIndex = 0;
         _walkTimer.Start();
         Title = $"용의기사2 편집기 — {dir}";
+        FillVersionBoxes();
         Status.Text = $"캐릭터 그림 {_icons.Characters}명 · 전투 모션 {motions}명  ·  ←/→ 한 컷씩, 스페이스 재생/정지";
     }
 
@@ -70,6 +71,73 @@ public partial class MainWindow : Window
     }
 
     private void OnExit(object sender, RoutedEventArgs e) => Close();
+
+    // ── 여러 판 ────────────────────────────────────────────────────────────
+
+    private readonly List<string> _extraVersions = new();
+
+    private List<VersionItem> FindVersions() =>
+        GameVersions.Discover(_extraVersions.Append(_dir).Where(d => d.Length > 0))
+            .Select(v => new VersionItem(v.Dir, $"{v.Name}  —  {v.Dir}")).ToList();
+
+    private void OnVersionMenuOpened(object sender, RoutedEventArgs e)
+    {
+        VersionMenu.Items.Clear();
+        foreach (var v in FindVersions())
+        {
+            var item = new MenuItem { Header = v.Label, IsCheckable = true, IsChecked = string.Equals(v.Dir, _dir, StringComparison.OrdinalIgnoreCase) };
+            item.Click += (_, _) => Open(v.Dir);
+            VersionMenu.Items.Add(item);
+        }
+        if (VersionMenu.Items.Count == 0) VersionMenu.Items.Add(new MenuItem { Header = "(찾은 판이 없습니다)", IsEnabled = false });
+    }
+
+    private void FillVersionBoxes()
+    {
+        var list = FindVersions();
+        BaseVersion.ItemsSource = list;
+        OtherVersion.ItemsSource = list;
+        BaseVersion.SelectedItem = list.FirstOrDefault(v => v.Dir.Contains("original", StringComparison.OrdinalIgnoreCase)) ?? list.FirstOrDefault();
+        OtherVersion.SelectedItem = list.FirstOrDefault(v => v != BaseVersion.SelectedItem && string.Equals(v.Dir, _dir, StringComparison.OrdinalIgnoreCase))
+                                    ?? list.FirstOrDefault(v => v != BaseVersion.SelectedItem);
+    }
+
+    private void OnAddVersion(object sender, RoutedEventArgs e)
+    {
+        var dlg = new OpenFolderDialog { Title = "판 폴더(FDFIELD.DAT 가 있는 곳)" };
+        if (dlg.ShowDialog(this) != true) return;
+        if (GameFolder.Missing(dlg.FolderName) is { } f) { Status.Text = $"{dlg.FolderName} 에 {f} 가 없습니다."; return; }
+        _extraVersions.Add(dlg.FolderName);
+        FillVersionBoxes();
+    }
+
+    private void OnCompare(object sender, RoutedEventArgs e)
+    {
+        if (BaseVersion.SelectedItem is not VersionItem a || OtherVersion.SelectedItem is not VersionItem b) return;
+        Status.Text = "비교하는 중…";
+        var rows = GameVersions.Diff(a.Dir, b.Dir)
+            .Where(d => d.Status != "같음")
+            .Select(d => new DiffRow(d.File, d.Status,
+                d.ChangedEntries.Count == 0 ? "" : $"{d.ChangedEntries.Count}개: " + string.Join(", ", d.ChangedEntries.Take(40)) + (d.ChangedEntries.Count > 40 ? " …" : "")))
+            .ToList();
+        DiffGrid.ItemsSource = rows;
+        Status.Text = $"다른 파일 {rows.Count}개 — 「비교 판 것」을 체크하고 합치면, 기준 판에 그 파일만 바꿔 넣은 새 폴더를 만듭니다.";
+    }
+
+    private void OnMerge(object sender, RoutedEventArgs e)
+    {
+        if (BaseVersion.SelectedItem is not VersionItem a || OtherVersion.SelectedItem is not VersionItem b || DiffGrid.ItemsSource is not List<DiffRow> rows) return;
+        var picks = rows.Where(r => r.UseOther).ToDictionary(r => r.File, _ => b.Dir);
+        string target = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(a.Dir)!, MergeName.Text.Trim());
+        try
+        {
+            GameVersions.Merge(a.Dir, picks, target);
+            _extraVersions.Add(target);
+            FillVersionBoxes();
+            Status.Text = $"합쳤습니다 — {target} (비교 판 것 {picks.Count}개). 게임의 게임 > 판 고르기에서 고르실 수 있습니다.";
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException) { Status.Text = $"못 합쳤습니다: {ex.Message}"; }
+    }
 
     // ── 맵 캐릭터 ───────────────────────────────────────────────────────────
 
@@ -259,5 +327,15 @@ public partial class MainWindow : Window
 }
 
 public sealed record CharItem(int Index, string Label, ImageSource? Thumb);
+
+public sealed record VersionItem(string Dir, string Label);
+
+public sealed class DiffRow(string file, string status, string entries)
+{
+    public string File { get; } = file;
+    public string Status { get; } = status;
+    public string Entries { get; } = entries;
+    public bool UseOther { get; set; }
+}
 
 public sealed record FrameItem(int Index, string Label, ImageSource Image, double Size);

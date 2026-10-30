@@ -154,6 +154,17 @@ internal static class Win32
     [DllImport("user32.dll")]
     public static extern bool DrawMenuBar(IntPtr hWnd);
 
+    public const uint TPM_RETURNCMD = 0x0100;
+
+    [DllImport("user32.dll")]
+    public static extern int TrackPopupMenuEx(IntPtr menu, uint flags, int x, int y, IntPtr hWnd, IntPtr tpm);
+
+    [DllImport("user32.dll")]
+    public static extern bool DestroyMenu(IntPtr menu);
+
+    [DllImport("user32.dll")]
+    public static extern bool GetCursorPos(out Point p);
+
     [DllImport("user32.dll")]
     public static extern IntPtr SetWindowLongPtrW(IntPtr hWnd, int index, IntPtr value);
 
