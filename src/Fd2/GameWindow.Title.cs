@@ -44,7 +44,7 @@ internal sealed partial class GameWindow
     {
         _opening = null;
         _openingFrame = null;
-        if (InBattle) { _bs = BattleState.None; ClearSelection(); }
+        if (InBattle) { _bs = BattleState.None; ClearSelection(); SetMusic(-1); }   // 전투 곡을 끈다
         _screen = Screen.Title;
         _titleIndex = 0;
         _titleBack ??= LogoFrame();

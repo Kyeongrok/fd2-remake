@@ -124,6 +124,7 @@ internal sealed partial class GameWindow
         LoadScene(scene);
         _battle.Turn = 0;
         _enemyPhase = false;
+        SetMusic(PlayerMusic);   // 장면에 들어갈 때 곡(byte_51E63[장면])
         // 전투 앞 대사 — 묶음 0. 묶음 k(k ≥ 1)는 등장 차례 k 의 무리가 나올 때 보인다(1장: 1 해적 두목, 2 해적과 마주침,
         // 3 하노 · 하와터, 4 해적 F · G, 5 해적 두목 97, 6 해양순찰대 68 — 대사를 그려 맞춰 본 것).
         _bs = BattleState.Talk;
@@ -134,8 +135,16 @@ internal sealed partial class GameWindow
     private void StopBattle()
     {
         _bs = BattleState.None;
+        SetMusic(-1);
         LoadScene(_scene.Index);
     }
+
+    /// <summary>
+    /// 그 장면의 우리 차례 곡(byte_51E63[장면]) · 다른 차례 곡(byte_51E81[장면]) — FDMUS 곡 번호, 표가 없으면 -1.
+    /// 원작(sub_1A30B)은 컴퓨터 아군 차례 뒤 적 차례 앞에서 다른 차례 곡으로, 차례 수가 오른 뒤 우리 차례 곡으로 바꾼다(둘이 다를 때만 멈췄다 튼다).
+    /// </summary>
+    private int PlayerMusic => _tables?.SceneMusic(_scene.Index) ?? -1;
+    private int EnemyMusic => _tables?.EnemyMusic(_scene.Index) ?? -1;
 
     private static int Dist(Unit a, Unit b) => Battle.Dist(a, b);
 
@@ -169,6 +178,7 @@ internal sealed partial class GameWindow
     private void NextTurn()
     {
         _battle.Turn++;
+        SetMusic(PlayerMusic);
         int turn = Turn;
         foreach (var e in _scene.Roster.Where(e => e.Phase == turn))
             if (_scene.Spawn(e) is { } u) _battle.Setup(u);
@@ -220,6 +230,7 @@ internal sealed partial class GameWindow
     private void StartEnemyPhase()
     {
         foreach (var u in _scene.Units) u.Acted = false;
+        SetMusic(EnemyMusic);
         var notes = Tick(0);
         ShowNotices(notes, () =>
         {
