@@ -510,17 +510,7 @@ internal sealed partial class GameWindow
         var shot = _shots[_shot];
         _eLight = 0;
         shot.Draw(Math.Min(_shotT, shot.Len));
-        if (_eLight != 0)
-        {
-            // 팔레트 6비트 값에 빼고 더하기 — 8비트로는 4배
-            int d = (int)Math.Round(_eLight * 63) * 4;
-            for (int p = 0; p < _ef.Length; p++)
-            {
-                uint c = _ef[p];
-                int r = Math.Clamp((int)(c >> 16 & 255) + d, 0, 255), g = Math.Clamp((int)(c >> 8 & 255) + d, 0, 255), b = Math.Clamp((int)(c & 255) + d, 0, 255);
-                _ef[p] = 0xFF000000 | (uint)r << 16 | (uint)g << 8 | (uint)b;
-            }
-        }
+        Lighten(_ef, _eLight);
         int s = Math.Max(1, Math.Min(_clientW / EW, _clientH / EH));
         BlitScaled(_ef, EW, EH, (_clientW - EW * s) / 2, (_clientH - EH * s) / 2, s, 0, 0, _clientW, _clientH);
         int fs = Math.Max(14, 7 * _zoom);

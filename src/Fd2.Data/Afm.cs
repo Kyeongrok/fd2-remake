@@ -20,9 +20,14 @@ public sealed class AfmPlayer
     private readonly byte[] _px = new byte[Width * Height];
     private int _film = -1, _cut, _cuts, _pos;
 
-    public AfmPlayer(string dir)
+    public AfmPlayer(string dir) : this(Load(dir)) { }
+
+    /// <summary>ANI.DAT 를 한 번 읽어 두고 편마다 새 플레이어를 만들 때(오프닝은 편 일곱을 차례로).</summary>
+    public static byte[] Load(string dir) => File.ReadAllBytes(Path.Combine(dir, "ANI.DAT"));
+
+    public AfmPlayer(byte[] data)
     {
-        _data = File.ReadAllBytes(Path.Combine(dir, "ANI.DAT"));
+        _data = data;
         int n = (Dat.U32(_data, 6) - 6) / 4 - 1;   // 마지막 칸은 파일 끝 표시
         for (int i = 0; i < n; i++)
         {
@@ -32,7 +37,9 @@ public sealed class AfmPlayer
     }
 
     /// <summary>편 하나만 — film 번째 편을 처음부터 끝까지(엔딩 sub_31529 의 sub_20421(2) 처럼).</summary>
-    public AfmPlayer(string dir, int film) : this(dir)
+    public AfmPlayer(string dir, int film) : this(Load(dir), film) { }
+
+    public AfmPlayer(byte[] data, int film) : this(data)
     {
         if (film < 0 || film >= _films.Count) { _film = _films.Count; return; }
         _film = film - 1;
@@ -43,6 +50,9 @@ public sealed class AfmPlayer
     private int _only;
 
     public int Films => _films.Count;
+
+    /// <summary>film 번째 편의 컷 수(머리 [165]).</summary>
+    public int CutsOf(int film) => film >= 0 && film < _films.Count ? Dat.U16(_data, _films[film] + 165) : 0;
 
     /// <summary>다음 컷을 BGRA 로 — 다 끝났으면 null.</summary>
     public uint[]? Next()
