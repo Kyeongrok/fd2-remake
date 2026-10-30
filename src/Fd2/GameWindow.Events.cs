@@ -312,6 +312,17 @@ internal sealed partial class GameWindow
             }
             return;
         }
+        // 화면 · 커서 칸 쓰기 — g53aa9 · g53aad 화면 왼쪽 위 칸 x · y, g53ab1 · g53ab5 커서 칸 x · y(원작 변수)
+        m = Regex.Match(text, @"^g53(aa9|aad|ab1|ab5)=(\d+)$");
+        if (m.Success)
+        {
+            int v = int.Parse(m.Groups[2].Value);
+            bool view = m.Groups[1].Value is "aa9" or "aad", isX = m.Groups[1].Value is "aa9" or "ab1";
+            int x = isX ? v + (view ? 6 : 0) : _cursor.X, y = isX ? _cursor.Y : v + (view ? 4 : 0);
+            _cursor = (Math.Clamp(x, 0, _scene.Width - 1), Math.Clamp(y, 0, _scene.Height - 1));
+            _centerCursor = true;
+            return;
+        }
         // 승리 연출 자리 잡기 — place i:(x,y,쪽) …; cam(x,y)(sub_233C6, 배열 번호 i 를 그 칸 · 쪽으로)
         if (text.StartsWith("place "))
         {
