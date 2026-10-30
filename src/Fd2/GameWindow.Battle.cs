@@ -785,7 +785,8 @@ internal sealed partial class GameWindow
         var targets = _battle.SpellTargets(caster, spell, center);
         foreach (var t in targets) _strikes.Enqueue(new Hit(caster, t, spell));
         // 원작이 지도에서 보이는 마법이면 대상 칸들 위에 그림을 먼저(FDOTHER 6)
-        if (MapSpell(caster, spell)) PlaySpellFx(spell, targets.Select(t => (t.X, t.Y)), NextStrike);
+        _strikeOnMap = MapSpell(caster, spell);
+        if (_strikeOnMap) PlaySpellFx(spell, targets.Select(t => (t.X, t.Y)), NextStrike);
         else NextStrike();
     }
 
@@ -837,6 +838,7 @@ internal sealed partial class GameWindow
         }
         // 다 쳤다 — 마법 경험, 쓰러진 사람의 떨굼(쓰러뜨린 사람마다), 레벨업 · 독 알림 뒤 다음으로
         _bs = BattleState.Select;
+        _strikeOnMap = false;
         if (_castSpell >= 0 && _castCaster != null)
             _strikeNotes.AddRange(_battle.GainExp(_castCaster, _battle.SpellExp(_castCaster, _castSpell, _spellResults)));
         _castSpell = -1;
@@ -874,8 +876,21 @@ internal sealed partial class GameWindow
         _strikeTail = 0;
         _strikeDamage = -1;
         _strikeMiss = _strikeCrit = false;
+        if (_strikeOnMap)
+        {
+            // 지도 위 마법 — 원작처럼 전투 화면 없이 그 자리에서 셈하고 알림만
+            ResolveStrike();
+            var d = _strike.D;
+            if (_strikeMiss) _strikeNotes.Add(new Notice(" 빗나감", Battle.NameLine(d)));
+            else if (_strikeDamage > 0) _strikeNotes.Add(new Notice(_strikeFriendly ? $" HP {_strikeDamage} 회복" : $" {_strikeDamage} 피해", Battle.NameLine(d)));
+            NextStrike();
+            return;
+        }
         _bs = BattleState.CutIn;
     }
+
+    /// <summary>지금 치기들이 지도 위 마법인가(전투 화면을 안 띄운다).</summary>
+    private bool _strikeOnMap;
 
     private int _strikeSounded = -1;
 
