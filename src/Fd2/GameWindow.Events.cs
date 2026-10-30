@@ -89,9 +89,17 @@ internal sealed partial class GameWindow
             void Go() => RunOps(ops, next, after);
             switch (name)
             {
-                case "spawn" or "spawnfx":
+                case "spawn":
                     SpawnPhase(A(1));
                     break;
+                case "spawnfx":
+                {
+                    // 나타나는 그림(FDOTHER 9, 12장 — sub_32999)과 소리(FDOTHER 95 의 0번, 둘째 장에서)
+                    var born = SpawnPhase(A(1));
+                    if (born.Count == 0) break;
+                    PlayTileFx(9, 0, 12, born.Select(u => (u.X, u.Y)), Go, n => { if (n == 1) PlaySfx(95, 0); });
+                    return;
+                }
                 case "script":
                     if (_tables == null) break;
                     StartBattleScript(_tables.MoveScript(A(1)), Go);
@@ -158,10 +166,12 @@ internal sealed partial class GameWindow
     private Unit? BySlot(int slot) => _scene.Units.Find(u => u.Slot == slot && u.Alive);
 
     /// <summary>등장 차례 k 의 유닛 표 줄들을 세운다(sub_10B4E).</summary>
-    private void SpawnPhase(int k)
+    private List<Unit> SpawnPhase(int k)
     {
+        var born = new List<Unit>();
         foreach (var e in _scene.Roster.Where(e => e.Phase == k))
-            if (_scene.Spawn(e) is { } u) _battle.Setup(u);
+            if (_scene.Spawn(e) is { } u) { _battle.Setup(u); born.Add(u); }
+        return born;
     }
 
     /// <summary>캐릭터 c 를 동료 표 끝에(sub_112A5) — 지도에 그 사람이 있으면 그 상태로, 없으면 동료 표의 합류 값으로.</summary>

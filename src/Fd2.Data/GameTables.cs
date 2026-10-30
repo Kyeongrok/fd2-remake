@@ -159,6 +159,14 @@ public sealed class GameTables
                             Bytes(a + 14, 4).Select(b => (int)b).ToArray(), S16(a + 18), S16(a + 20), S16(a + 22));
     }
 
+    // ── 지도 위 마법 그림 ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 지도에서 보이는 마법의 그림(sub_1C4CC) — FDOTHER 6 의 시작 장(0x51F33) · 장 수(0x51F54) · 첫 장 소리(0x51F75, FDOTHER 80 묶음, 0 없음). 마법 0~32.
+    /// </summary>
+    public (int Start, int Count, int Sound) MapSpellFx(int spell) =>
+        spell is >= 0 and < 33 ? (U8(0x51F33 + spell), U8(0x51F54 + spell), U8(0x51F75 + spell)) : (0, 0, 0);
+
     // ── 물결 색 ─────────────────────────────────────────────────────────────
 
     /// <summary>

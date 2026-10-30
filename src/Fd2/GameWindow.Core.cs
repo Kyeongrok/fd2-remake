@@ -398,6 +398,7 @@ internal sealed partial class GameWindow
         DrawRanges();
         DrawUnits(outline: true);
         DrawCovers();
+        DrawTileFx();
         DrawBattleHud();
         DrawKeysWindow();
     }

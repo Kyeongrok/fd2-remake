@@ -117,3 +117,93 @@ internal sealed partial class GameWindow
         }
     }
 }
+
+/// <summary>
+/// 칸 위 효과 그림 — 지도에서 보이는 마법(FDOTHER 6, sub_1C4CC)과 나타나는 그림(FDOTHER 9, sub_32999).
+/// 장마다 대상 칸들 위에 같은 장을(칸 왼쪽 위에서 6점 위로) 얹고 다음 장으로. 다 그리면 after.
+/// </summary>
+internal sealed partial class GameWindow
+{
+    private const double FxFrame = 1 / 12.0;
+
+    private readonly Dictionary<int, EffectFrames?> _fxBanks = new();
+    private EffectFrames? _fx;
+    private List<(int X, int Y)> _fxCells = new();
+    private int _fxStart, _fxCount, _fxAt;
+    private double _fxClock;
+    private Action? _fxAfter;
+    private BattleState _fxResume;
+    private Action<int>? _fxSound;
+
+    private EffectFrames? FxBank(int entry)
+    {
+        if (_fxBanks.TryGetValue(entry, out var b)) return b;
+        try { b = new EffectFrames(_dir, entry, _pal); }
+        catch (Exception e) when (e is IOException or IndexOutOfRangeException or ArgumentOutOfRangeException) { b = null; }
+        return _fxBanks[entry] = b is { Count: > 0 } ? b : null;
+    }
+
+    /// <summary>효과 그림을 돌린다 — sound(장 번호) 는 장이 바뀔 때마다 불린다.</summary>
+    private void PlayTileFx(int entry, int start, int count, IEnumerable<(int X, int Y)> cells, Action after, Action<int>? sound = null)
+    {
+        var bank = FxBank(entry);
+        var list = cells.ToList();
+        if (bank == null || count <= 0 || list.Count == 0) { after(); return; }
+        (_fx, _fxCells, _fxStart, _fxCount, _fxAt, _fxClock, _fxAfter, _fxSound) = (bank, list, start, count, 0, 0, after, sound);
+        _fxResume = _bs;
+        _bs = BattleState.Fx;
+        sound?.Invoke(0);
+    }
+
+    private void FxTick(double dt)
+    {
+        if (_fx == null) return;
+        if ((_fxClock += dt) < FxFrame) return;
+        _fxClock -= FxFrame;
+        if (++_fxAt < _fxCount) { _fxSound?.Invoke(_fxAt); return; }
+        _fx = null;
+        _bs = _fxResume;
+        var a = _fxAfter;
+        _fxAfter = null;
+        a?.Invoke();
+    }
+
+    private void DrawTileFx()
+    {
+        if (_fx == null) return;
+        var (px, w, h) = _fx[_fxStart + _fxAt];
+        foreach (var (x, y) in _fxCells)
+        {
+            int sx = _offX + (x * T - _camX) * _zoom, sy = _offY + (y * T - 6 - _camY) * _zoom;
+            BlitScaled(px, w, h, sx, sy, _zoom, 0, 0, _fbW, _fbH);
+        }
+    }
+
+    /// <summary>
+    /// 원작이 지도 위에서 보이는 마법인가 — 우리 편의 9 · 10~23 · 25~27(0~8 · 24 · 28~35 는 전투 화면). 컴퓨터 편은 10 이상(분석-마법 §6.1).
+    /// </summary>
+    private static bool MapSpell(Unit caster, int spell) =>
+        caster.Team == 2 ? spell is 9 or (>= 10 and <= 23) or (>= 25 and <= 27) : spell >= 10 && spell != 24 && spell < 28;
+
+    /// <summary>지도 위 마법 그림 — 첫 장 소리는 표의 값, 몇 마법은 원작처럼 가운데 장에서 한 번 더(sub_1C4CC).</summary>
+    private void PlaySpellFx(int spell, IEnumerable<(int X, int Y)> cells, Action after)
+    {
+        if (_tables == null) { after(); return; }
+        var (start, count, first) = _tables.MapSpellFx(spell);
+        void Sound(int n)
+        {
+            int s = n == 0 ? first : spell switch
+            {
+                22 when n == 7 => 3,
+                25 when n is 3 or 6 => 5,
+                18 when n == 4 => 7,
+                19 when n is 3 or 6 => 8,
+                8 when n is 3 or 6 => 10,
+                9 when n is 15 or 19 => 15,
+                _ => 0,
+            };
+            if (s > 0) PlaySfx(80, s);
+        }
+        PlayTileFx(6, start, count, cells, after, Sound);
+    }
+}

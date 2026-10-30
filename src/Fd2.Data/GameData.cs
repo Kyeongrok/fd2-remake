@@ -637,3 +637,36 @@ public sealed class Buttons
         return (px, w, h);
     }
 }
+
+/// <summary>
+/// LMI1 묶음(FDOTHER 6 지도 위 마법 그림 · 9 나타나는 그림) — 「LMI1」 + u16 장 수 + u32 오프셋, 장마다 u16 w · u16 h 뒤
+/// PCX 꼴 RLE(sub_4EBAB → sub_4EC66): 0xC0 보다 큰 바이트는 (b − 0xC0) 번 되풀이할 다음 바이트, 아니면 그 바이트 하나. 줄을 넘어 이어진다. 0 = 투명.
+/// </summary>
+public sealed class EffectFrames
+{
+    private readonly (uint[] Px, int W, int H)[] _frames;
+
+    public EffectFrames(string dir, int entry, uint[] pal)
+    {
+        var d = Dat.Load(Path.Combine(dir, "FDOTHER.DAT"), entry);
+        if (d.Length < 6 || !d.AsSpan(0, 4).SequenceEqual("LMI1"u8)) { _frames = []; return; }
+        int n = Dat.U16(d, 4);
+        _frames = new (uint[], int, int)[n];
+        for (int i = 0; i < n; i++)
+        {
+            int o = Dat.U32(d, 6 + 4 * i), w = Dat.U16(d, o), h = Dat.U16(d, o + 2), p = o + 4;
+            var px = new uint[w * h];
+            for (int k = 0; k < px.Length && p < d.Length;)
+            {
+                int b = d[p++], run = 1;
+                if (b > 0xC0 && p < d.Length) { run = b - 0xC0; b = d[p++]; }
+                for (; run > 0 && k < px.Length; run--) px[k++] = b == 0 ? 0 : pal[b];
+            }
+            _frames[i] = (px, w, h);
+        }
+    }
+
+    public int Count => _frames.Length;
+
+    public (uint[] Px, int W, int H) this[int i] => _frames[Math.Clamp(i, 0, _frames.Length - 1)];
+}

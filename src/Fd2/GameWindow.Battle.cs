@@ -16,7 +16,7 @@ namespace Fd2;
 /// </remarks>
 internal sealed partial class GameWindow
 {
-    private enum BattleState { None, Select, Moving, Menu, Target, CutIn, Enemy, Banner, Over, Talk, Script }
+    private enum BattleState { None, Select, Moving, Menu, Target, CutIn, Enemy, Banner, Over, Talk, Script, Fx }
 
     private const uint ReachColor = 0x5A3C78FF, AttackColor = 0x5AFF4646, TargetColor = 0x80FF3030;
     private const double FigTick = 0.055;
@@ -334,6 +334,9 @@ internal sealed partial class GameWindow
                 break;
             case BattleState.Script:
                 BattleScriptTick(dt);
+                break;
+            case BattleState.Fx:
+                FxTick(dt);
                 break;
             case BattleState.Enemy:
                 EnemyTick(dt);
@@ -779,8 +782,11 @@ internal sealed partial class GameWindow
         if (!fromItem) _battle.PayMp(caster, spell);
         BeginStrikes(after);
         if (!fromItem) (_castSpell, _castCaster) = (spell, caster);   // 물건으로 쓴 마법은 경험이 없다
-        foreach (var t in _battle.SpellTargets(caster, spell, center)) _strikes.Enqueue(new Hit(caster, t, spell));
-        NextStrike();
+        var targets = _battle.SpellTargets(caster, spell, center);
+        foreach (var t in targets) _strikes.Enqueue(new Hit(caster, t, spell));
+        // 원작이 지도에서 보이는 마법이면 대상 칸들 위에 그림을 먼저(FDOTHER 6)
+        if (MapSpell(caster, spell)) PlaySpellFx(spell, targets.Select(t => (t.X, t.Y)), NextStrike);
+        else NextStrike();
     }
 
     /// <summary>
