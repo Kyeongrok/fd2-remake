@@ -393,6 +393,20 @@ internal sealed partial class GameWindow
             return true;
         }
 
+        if (_bs == BattleState.Menu && CrossMenu)
+        {
+            // 십자 메뉴 — 방향키는 그쪽 단추로, Enter 로 고른다
+            if (vk is Win32.VK_UP or Win32.VK_DOWN or Win32.VK_LEFT or Win32.VK_RIGHT)
+            {
+                var dir = vk switch { Win32.VK_UP => Dir.Up, Win32.VK_DOWN => Dir.Down, Win32.VK_LEFT => Dir.Left, _ => Dir.Right };
+                int i = _menu.FindIndex(m => SlotOf(m.Label) == dir);
+                if (i >= 0) _menuIndex = i;
+            }
+            else if (confirm && _menuIndex < _menu.Count) _menu[_menuIndex].Do();
+            else if (cancel) BattleCancel();
+            else return false;
+            return true;
+        }
         if (_bs == BattleState.Menu)
         {
             if (vk == Win32.VK_UP) _menuIndex = (_menuIndex + _menu.Count - 1) % _menu.Count;
@@ -885,8 +899,44 @@ internal sealed partial class GameWindow
         foreach (var img in imgs) { DrawText(img, x + 12, cy); cy += img.H + 2; }
     }
 
+    /// <summary>원작처럼 사람 둘레 네모 단추로 보이는 메뉴인가 — 고른 뒤 · 걸은 뒤의 행동 메뉴.</summary>
+    private bool CrossMenu => _stage is MenuStage.Unit or MenuStage.AfterMove;
+
+    /// <summary>
+    /// 십자 메뉴의 자리 — 원작(원본 판 화면): 위 공격, 왼쪽 마법, 오른쪽 물건, 아래 하나 더.
+    /// 이 게임은 물건이 없어 오른쪽에 이동, 아래에 대기를 둔다.
+    /// </summary>
+    private static Dir SlotOf(string label) => label switch
+    {
+        "공격" => Dir.Up, "마법" => Dir.Left, "이동" => Dir.Right, _ => Dir.Down,
+    };
+
+    /// <summary>
+    /// 십자 메뉴 — 사람의 위 · 왼쪽 · 오른쪽 · 아래 칸에 네모 단추(원작처럼 노란 테두리, 바탕 빨강, 고른 단추는 파랑).
+    /// 원작 단추 그림(공격 · 마법 · 물건 그림)은 자료에서 아직 못 찾아 글자로 쓴다.
+    /// </summary>
+    private void DrawCrossMenu(int fs)
+    {
+        if (_actor is not { } u) return;
+        var (sx, sy) = TileScreen(u.X, u.Y);
+        int cell = T * _zoom, border = Math.Max(2, _zoom);
+        for (int i = 0; i < _menu.Count; i++)
+        {
+            var (dx, dy) = SlotOf(_menu[i].Label) switch { Dir.Up => (0, -1), Dir.Left => (-1, 0), Dir.Right => (1, 0), _ => (0, 1) };
+            var rect = (X: sx + dx * cell, Y: sy + dy * cell, W: cell, H: cell);
+            if (_mouseMoved && _mouseX >= rect.X && _mouseY >= rect.Y && _mouseX < rect.X + cell && _mouseY < rect.Y + cell) _menuIndex = i;
+            bool now = i == _menuIndex;
+            FillRect(rect.X, rect.Y, cell, cell, 0xFFF0B020);                                   // 노란 테두리
+            FillRect(rect.X + border, rect.Y + border, cell - 2 * border, cell - 2 * border, now ? 0xFF28458Au : 0xFFA01818u);
+            var label = Text.Render(_menu[i].Label, Math.Max(12, cell * 3 / 10), now ? 0xFFFFFFFF : 0xFFFFE070);
+            DrawText(label, rect.X + (cell - label.W) / 2, rect.Y + (cell - label.H) / 2);
+            _menu[i] = (_menu[i].Label, _menu[i].Do, rect);
+        }
+    }
+
     private void DrawMenu(int fs)
     {
+        if (CrossMenu) { DrawCrossMenu(fs); return; }
         var (sx, sy) = _actor is { } u ? TileScreen(u.X, u.Y) : TileScreen(_cursor.X, _cursor.Y);
         int cell = T * _zoom;
         var imgs = _menu.Select(m => Text.Render(m.Label, fs, 0xFFFFFFFF)).ToList();

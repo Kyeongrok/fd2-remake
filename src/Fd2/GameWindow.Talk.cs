@@ -195,7 +195,7 @@ internal sealed partial class GameWindow
             ty += textLineH;
         }
         if (textLines != null) left = 0;
-        foreach (var line in page.Lines)
+        foreach (var line in Reflow(page, Math.Max(8, (bx + boxW - 24 - textX - (page.Right ? faceW + 24 : 0)) / glyph)))
         {
             int x = textX;
             foreach (int c in line)
@@ -212,6 +212,44 @@ internal sealed partial class GameWindow
             var more = Text.Render("▼", Math.Max(12, glyph / 2), 0xFFFFFFFF);
             DrawText(more, bx + boxW - more.W - 16, by + boxH - more.H - 10);
         }
+    }
+
+    private const int GlyphSpace = 0x9E;
+    private readonly Dictionary<(Dialogue.Page, int), List<List<int>>> _reflowed = new();
+
+    /// <summary>
+    /// 원작 대사를 창 폭에 맞게 다시 줄 나눔 — 원작은 320 폭 창에 맞춰 줄을 끊어 두어(낱말 가운데서도) 넓은 창에서는 오른쪽이 빈다.
+    /// 줄을 이어(이어지는 줄 앞의 들여쓰기 빈칸은 뗀다) 한 줄 width 글자 안에서 빈칸에서 끊는다. 글자 수는 그대로라 한 자씩 보이기와 맞는다.
+    /// </summary>
+    private List<List<int>> Reflow(Dialogue.Page page, int width)
+    {
+        if (_reflowed.TryGetValue((page, width), out var lines)) return lines;
+        var all = new List<int>();
+        for (int i = 0; i < page.Lines.Count; i++)
+        {
+            var l = page.Lines[i];
+            int skip = 0;
+            if (i > 0) while (skip < l.Count && l[skip] == GlyphSpace) skip++;   // 이어지는 줄의 들여쓰기
+            all.AddRange(l.Skip(skip));
+        }
+        lines = new List<List<int>>();
+        int start = 0;
+        while (start < all.Count)
+        {
+            int end = Math.Min(all.Count, start + width);
+            if (end < all.Count)
+            {
+                int cut = all.LastIndexOf(GlyphSpace, end - 1, end - start);
+                if (cut > start) end = cut + 1;
+            }
+            var line = all.GetRange(start, end - start);
+            while (line.Count > 0 && line[^1] == GlyphSpace) line.RemoveAt(line.Count - 1);
+            if (lines.Count > 0) line.Insert(0, GlyphSpace);   // 원작처럼 이어지는 줄은 한 칸 들여서
+            lines.Add(line);
+            start = end;
+        }
+        if (_reflowed.Count > 500) _reflowed.Clear();
+        return _reflowed[(page, width)] = lines;
     }
 
     /// <summary>원본 글꼴 글자 하나 — 그림자를 한 점 아래오른쪽에 깔고 흰 글자.</summary>
