@@ -312,6 +312,60 @@ internal sealed partial class GameWindow
             }
             return;
         }
+        // 승리 연출 자리 잡기 — place i:(x,y,쪽) …; cam(x,y)(sub_233C6, 배열 번호 i 를 그 칸 · 쪽으로)
+        if (text.StartsWith("place "))
+        {
+            foreach (Match pm in Regex.Matches(text, @"(\d+):\((\d+),(\d+),(\d+)\)"))
+                if (AnySlot(int.Parse(pm.Groups[1].Value)) is { } pu)
+                {
+                    int x = int.Parse(pm.Groups[2].Value), y = int.Parse(pm.Groups[3].Value);
+                    if (_scene.Inside(x, y)) (pu.X, pu.Y, pu.FromX, pu.FromY) = (x, y, x, y);
+                    pu.Facing = (Dir)(int.Parse(pm.Groups[4].Value) & 3);
+                }
+            var cam = Regex.Match(text, @"cam\((\d+),(\d+)\)");
+            if (cam.Success)
+            {
+                _cursor = (Math.Clamp(int.Parse(cam.Groups[1].Value) + 6, 0, _scene.Width - 1), Math.Clamp(int.Parse(cam.Groups[2].Value) + 4, 0, _scene.Height - 1));
+                _centerCursor = true;
+            }
+            return;
+        }
+        // 물건 빼기 — dropitem(arg0, …itemslot(arg0, i)) 는 그 사람의 물건 i 하나, 「items a..b from party」는 우리 편에서 하나씩(sub_1B8E7)
+        m = Regex.Match(text, @"^dropitem\(arg0,.*itemslot\(arg0,(\d+)\)\)");
+        if (m.Success)
+        {
+            if (BySlot(_eventArg) is { } du) DropItem(du, int.Parse(m.Groups[1].Value));
+            return;
+        }
+        m = Regex.Match(text, @"^dropitem: remove one each of items (\d+)\.\.(\d+)");
+        if (m.Success)
+        {
+            for (int i = int.Parse(m.Groups[1].Value); i <= int.Parse(m.Groups[2].Value); i++)
+                if (_scene.Units.FirstOrDefault(u => u.Alive && u.Team == 2 && u.Bag.Any(b => b.Item == i)) is { } owner) DropItem(owner, i);
+            return;
+        }
+        // 물건 주기 — sub_1BB8C(arg0, i): 일으킨 사람 가방에
+        m = Regex.Match(text, @"^sub_1BB8C\(arg0,(\d+)\)");
+        if (m.Success)
+        {
+            if (BySlot(_eventArg) is { Bag.Count: < 8 } gu) gu.Bag.Add((int.Parse(m.Groups[1].Value), false));
+            return;
+        }
+        // 행동 끝 표시 — unit(i).5 |= 0x80(sub_13512)
+        m = Regex.Match(text, @"^unit\((\d+)\)\.5\|=0x80");
+        if (m.Success)
+        {
+            if (BySlot(int.Parse(m.Groups[1].Value)) is { } au) au.Acted = true;
+            return;
+        }
+        // AI 바이트 거르기 — unit[a..b]+52 &= v
+        m = Regex.Match(text, @"^unit\[(\d+)\.\.(\d+)\]\+52 *&= *(\d+)");
+        if (m.Success)
+        {
+            int a2 = int.Parse(m.Groups[1].Value), b2 = int.Parse(m.Groups[2].Value), v2 = int.Parse(m.Groups[3].Value);
+            foreach (var u in _scene.Units.Where(u => u.Slot >= a2 && u.Slot <= b2)) u.AiByte &= v2;
+            return;
+        }
         m = Regex.Match(text, @"^giveitem\((\d+)\)");
         if (m.Success)
         {
@@ -330,6 +384,15 @@ internal sealed partial class GameWindow
 
     /// <summary>배열 번호 slot 의 사람 — 숨긴 사람까지.</summary>
     private Unit? AnySlot(int slot) => BySlot(slot) ?? _scene.Hidden.Find(u => u.Slot == slot);
+
+    /// <summary>가방에서 물건 하나를 뺀다 — 장비 중이었으면 능력을 다시 셈한다.</summary>
+    private void DropItem(Unit u, int item)
+    {
+        int k = u.Bag.FindIndex(b => b.Item == item);
+        if (k < 0) return;
+        u.Bag.RemoveAt(k);
+        _battle.Recompute(u);
+    }
 
     private Unit? BySlot(int slot) => _scene.Units.Find(u => u.Slot == slot && u.Alive);
 
