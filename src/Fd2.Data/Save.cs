@@ -229,6 +229,16 @@ public sealed class Campaign
         }
     }
 
+    /// <summary>캐릭터 id 를 동료 표 둘째 자리(사울 다음)로 옮긴다(sub_2B843) — 나머지는 차례대로 밀린다.</summary>
+    public void MoveToSecond(int id)
+    {
+        int i = Party.FindIndex(1, r => HeroRecord.Id(r) == id);
+        if (i < 1) return;
+        var r = Party[i];
+        Party.RemoveAt(i);
+        Party.Insert(1, r);
+    }
+
     /// <summary>출전자 — 동료 표 앞에서부터 쓰러지지 않은 사람(원작은 출전 편성 sub_2AF28 에서 고른다).</summary>
     public IEnumerable<byte[]> Ready => Party.Where(r => HeroRecord.Hp(r) > 0);
 }

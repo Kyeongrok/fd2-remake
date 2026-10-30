@@ -40,9 +40,8 @@ internal sealed partial class GameWindow
     /// <summary>이야기의 다음 장면을 시작한다.</summary>
     private void PlayCampaign()
     {
-        if (_campaign is not { } c) return;
-        _screen = Screen.Game;
-        StartBattle(c.NextScene);
+        if (_campaign is null) return;
+        PlayOrDeploy();
     }
 
     /// <summary>판정이 났다 — 이긴 장면이면 동료 표를 고치고 다음 장면으로 넘길 차례를 정한다.</summary>

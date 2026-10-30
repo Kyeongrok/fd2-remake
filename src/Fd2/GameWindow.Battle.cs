@@ -91,7 +91,7 @@ internal sealed partial class GameWindow
     private readonly Dictionary<int, Motion?> _motions = new(), _stands = new();
 
     /// <summary>지금 메뉴가 어느 단계인가 — 취소할 때 어디로 돌아갈지.</summary>
-    private enum MenuStage { System, Unit, AfterMove, Spell, Over, Ask }
+    private enum MenuStage { System, Unit, AfterMove, Spell, Over, Ask, Deploy }
     private MenuStage _stage;
 
     /// <summary>이동할 칸을 고르는 중인가(메뉴에서 「이동」을 고른 뒤).</summary>
@@ -121,7 +121,7 @@ internal sealed partial class GameWindow
 
     private void StartBattle(int scene)
     {
-        LoadScene(scene, _campaign?.Party);
+        LoadScene(scene, BattleParty);
         _battle.Turn = 0;
         _battle.Gold = _campaign?.Gold ?? 0;
         _outcome = 0;
@@ -576,6 +576,8 @@ internal sealed partial class GameWindow
                 break;
             case BattleState.Menu when _stage == MenuStage.Ask:    // 묻는 메뉴 — 물리면 「아니오」
                 _menu[^1].Do();
+                break;
+            case BattleState.Menu when _stage == MenuStage.Deploy: // 편성 — 물릴 곳이 없다
                 break;
             case BattleState.Menu when _actor == null || _stage == MenuStage.System:
                 _menu.Clear();
@@ -1333,7 +1335,7 @@ internal sealed partial class GameWindow
     /// <summary>메뉴 줄 i 에 원본 글꼴 이름이 붙어 있으면 글 뒤에 이어 붙인다.</summary>
     private Text.Image WithGlyphs(Text.Image text, int i, int fs)
     {
-        if (_stage != MenuStage.Ask || !_menuGlyphs.TryGetValue(i, out int line) || NameImage(line, Math.Max(1, fs / Font16.Size), 0xFFFFE070) is not { } g) return text;
+        if (_stage is not (MenuStage.Ask or MenuStage.Deploy) || !_menuGlyphs.TryGetValue(i, out int line) || NameImage(line, Math.Max(1, fs / Font16.Size), 0xFFFFE070) is not { } g) return text;
         int w = text.W + g.W, h = Math.Max(text.H, g.H);
         var px = new uint[w * h];
         for (int r = 0; r < text.H; r++) Array.Copy(text.Px, r * text.W, px, (r + (h - text.H) / 2) * w, text.W);
