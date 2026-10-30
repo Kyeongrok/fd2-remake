@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      원작 규칙 표 점검 — 게임 폴더의 FD2.EXE · DAT 에서 읽은 표와 규칙 식이 분석 노트(옵시디안 mv 의 Project\fd2-remake\분석)에 적은 값과
+      맞는지 본다. 화면 없이 돈다: 이 폴더에서 dotnet run 게임폴더  (폴더를 안 주면 바탕화면 / 용의기사2 런처 / 용의기사2_original)
+      틀린 것이 있으면 끝 코드 1.
+    -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net8.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>Fd2.Check</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Fd2.Data\Fd2.Data.csproj" />
+    </ItemGroup>
+
+</Project>
