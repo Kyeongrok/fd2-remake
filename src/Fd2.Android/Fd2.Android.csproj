@@ -29,7 +29,7 @@
 
     <!-- 윈도우판과 함께 쓰는 게임 로직 -->
     <ItemGroup>
-        <Compile Include="..\Fd2\GameWindow.Core.cs;..\Fd2\GameWindow.Battle.cs;..\Fd2\GameWindow.Talk.cs;..\Fd2\GameWindow.Title.cs;..\Fd2\GameWindow.Keys.cs;..\Fd2\GameWindow.Versions.cs;..\Fd2\GameWindow.Prologue.cs;..\Fd2\GameWindow.Save.cs;..\Fd2\KeyBindings.cs;..\Fd2\GamePad.cs;..\Fd2\Settings.cs;..\Fd2\Native\Win32.Keys.cs"
+        <Compile Include="..\Fd2\GameWindow.Core.cs;..\Fd2\GameWindow.Battle.cs;..\Fd2\GameWindow.Talk.cs;..\Fd2\GameWindow.Title.cs;..\Fd2\GameWindow.Keys.cs;..\Fd2\GameWindow.Versions.cs;..\Fd2\GameWindow.Prologue.cs;..\Fd2\GameWindow.Save.cs;..\Fd2\GameWindow.Events.cs;..\Fd2\KeyBindings.cs;..\Fd2\GamePad.cs;..\Fd2\Settings.cs;..\Fd2\Native\Win32.Keys.cs"
                  Link="Shared\%(Filename)%(Extension)" />
     </ItemGroup>
 

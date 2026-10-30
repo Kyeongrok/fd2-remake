@@ -23,7 +23,7 @@ public sealed record StrikeResult(bool Hit, bool Critical, int Damage, bool Pois
 /// <summary>
 /// 알림 한 줄 — Name 은 이름 표(FDTXT 0) 줄 번호(-1 없음)로, 원본 글꼴로 Text 앞에 그린다. Talk 는 보일 대사 묶음(-1 없음).
 /// </summary>
-public sealed record Notice(string Text, int Name = -1, int Talk = -1);
+public sealed record Notice(string Text, int Name = -1, int Talk = -1, int Event = -1);
 
 /// <summary>
 /// 전투 규칙 — 분석-전투(FD2.EXE sub_1A30B · sub_1ECC7 · sub_2F7B6 · sub_1E292 · sub_1A866 · sub_205BE …)를 옮긴 것.
@@ -407,12 +407,64 @@ public sealed partial class Battle
                     Gold += value;
                     notes.Add(new Notice($"돈 {value} 획득"));
                     break;
+                case 2:
+                    notes.Add(new Notice("", -1, -1, value));   // 사건 함수 — GameWindow 가 대본으로 건다
+                    break;
                 case 3:
                     notes.Add(new Notice("", -1, value));
                     break;
             }
         }
         return notes;
+    }
+
+    // ── 상자(sub_190AC) ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 그 사람이 선 칸의 안 연 상자 — 타일 속성 &amp; 0x20 보석상자(글 421 「열까요?」) · 0x40 숨은 보물(글 428 「꺼냅니까?」),
+    /// 상자 번호 = 칸 표시(0 도 쓴다). 원작은 쉬기를 고르면 묻는다. 없으면 null.
+    /// </summary>
+    public (int Index, bool Hidden)? ChestAt(Unit u)
+    {
+        int flags = Scene.TileFlags(u.X, u.Y) & 0x60;
+        if (flags == 0) return null;
+        int k = Scene.Mark(u.X, u.Y);
+        if (OpenedChests.Contains(k) || k >= Scene.Chests.Count) return null;
+        return (k, flags == 0x40);
+    }
+
+    /// <summary>
+    /// 상자를 연다 — 종류 0 물건(가방이 차면 못 꺼내고 닫힌 채로 둔다, 원작은 바꾸기를 묻는다), 1 돈(0 이면 빈 상자), 2 이상 사건(그 사건 번호를 돌려준다).
+    /// 연 상자는 표시하고 보석상자 그림을 연 그림으로 바꾼다.
+    /// </summary>
+    public (List<Notice> Notes, int Event) OpenChest(Unit u, int k)
+    {
+        var notes = new List<Notice>();
+        var (kind, value) = Scene.Chests[k];
+        int ev = -1;
+        switch (kind)
+        {
+            case 0 when u.Bag.Count >= 8:
+                notes.Add(new Notice(" — 짐이 가득해 꺼내지 못함", 181 + value));
+                return (notes, -1);
+            case 0:
+                u.Bag.Add((value, false));
+                notes.Add(new Notice(" 획득", 181 + value));
+                break;
+            case 1 when value == 0:
+                notes.Add(new Notice("빈 상자"));
+                break;
+            case 1:
+                Gold += value;
+                notes.Add(new Notice($"돈 {value} 획득"));
+                break;
+            default:
+                ev = value;
+                break;
+        }
+        OpenedChests.Add(k);
+        Scene.ShowOpenedChests(OpenedChests);
+        return (notes, ev);
     }
 
     /// <summary>이름 표(FDTXT 0) 의 그 사람 이름 줄 — 캐릭터 번호 + 1.</summary>

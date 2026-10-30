@@ -7,4 +7,9 @@
         <RootNamespace>Fd2.Data</RootNamespace>
     </PropertyGroup>
 
+    <ItemGroup>
+        <!-- 장면 사건 대본(원작 사건 함수를 낱말로 옮긴 것) — SceneEvents.Load 가 읽는다 -->
+        <EmbeddedResource Include="SceneEvents.json" LogicalName="Fd2.Data.SceneEvents.json" Condition="Exists('SceneEvents.json')" />
+    </ItemGroup>
+
 </Project>

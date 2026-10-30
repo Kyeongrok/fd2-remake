@@ -166,6 +166,9 @@ internal sealed partial class GameWindow
         _battle.Gold = b.Gold;
         _battle.OpenedChests.Clear();
         _battle.OpenedChests.UnionWith(b.Chests);
+        _scene.ShowOpenedChests(_battle.OpenedChests);
+        _forcedOutcome = 0;
+        _groundFired.Clear();
         _enemyPhase = false;
         _outcome = 0;
         SetMusic(PlayerMusic);

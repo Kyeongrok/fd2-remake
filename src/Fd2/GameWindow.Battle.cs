@@ -16,7 +16,7 @@ namespace Fd2;
 /// </remarks>
 internal sealed partial class GameWindow
 {
-    private enum BattleState { None, Select, Moving, Menu, Target, CutIn, Enemy, Banner, Over, Talk }
+    private enum BattleState { None, Select, Moving, Menu, Target, CutIn, Enemy, Banner, Over, Talk, Script }
 
     private const uint ReachColor = 0x5A3C78FF, AttackColor = 0x5AFF4646, TargetColor = 0x80FF3030;
     private const double FigTick = 0.055;
@@ -91,7 +91,7 @@ internal sealed partial class GameWindow
     private readonly Dictionary<int, Motion?> _motions = new(), _stands = new();
 
     /// <summary>지금 메뉴가 어느 단계인가 — 취소할 때 어디로 돌아갈지.</summary>
-    private enum MenuStage { System, Unit, AfterMove, Spell, Over }
+    private enum MenuStage { System, Unit, AfterMove, Spell, Over, Ask }
     private MenuStage _stage;
 
     /// <summary>이동할 칸을 고르는 중인가(메뉴에서 「이동」을 고른 뒤).</summary>
@@ -131,7 +131,9 @@ internal sealed partial class GameWindow
         // 3 하노 · 하와터, 4 해적 F · G, 5 해적 두목 97, 6 해양순찰대 68 — 대사를 그려 맞춰 본 것).
         _bs = BattleState.Talk;
         if (Controlled.OrderBy(u => u.Slot).FirstOrDefault() is { } lead) { _cursor = (lead.X, lead.Y); _centerCursor = true; }
-        StartTalk(scene, [0], NextTurn);
+        _forcedOutcome = 0;
+        _groundFired.Clear();
+        RunStart(NextTurn);   // 장면 시작 함수(대본이 없으면 대사 묶음 0)
     }
 
     private void StopBattle()
@@ -182,8 +184,8 @@ internal sealed partial class GameWindow
         _battle.Turn++;
         SetMusic(PlayerMusic);
         int turn = Turn;
-        foreach (var e in _scene.Roster.Where(e => e.Phase == turn))
-            if (_scene.Spawn(e) is { } u) _battle.Setup(u);
+        bool heuristic = !UseEvents;   // 대본이 없으면 「등장 차례 k 무리는 k 턴에」
+        if (heuristic) SpawnPhase(turn);
         foreach (var u in _scene.Units) u.Acted = false;
         _enemyPhase = false;
         ClearSelection();
@@ -194,8 +196,8 @@ internal sealed partial class GameWindow
             _bs = BattleState.Select;
             if (!Controlled.Any(u => !u.Paralyzed)) EndPlayerTurn();   // 움직일 우리 편이 모두 마비면 저절로 끝(sub_13565)
         });
-        void Notes() => ShowNotices(notes, () => { if (!CheckOver()) Banner(); });
-        if (_scene.Roster.Any(e => e.Phase == turn))
+        void Notes() => ShowNotices(notes, () => RunTiming(2, () => { if (!CheckOver()) Banner(); }));
+        if (heuristic && _scene.Roster.Any(e => e.Phase == turn))
         {
             _bs = BattleState.Talk;
             StartTalk(_scene.Index, [turn], Notes);   // 이 차례의 무리가 나올 때의 대사(없으면 바로 넘어간다)
@@ -221,15 +223,17 @@ internal sealed partial class GameWindow
         _enemyPhase = true;
         foreach (var u in _scene.Units.Where(u => u.Team == 2 && u.Hp > 0 && !u.Acted)) _battle.Rest(u);
         var notes = Tick(1);
-        ShowNotices(notes, () =>
+        ShowNotices(notes, () => RunTiming(1, () =>
         {
             if (CheckOver()) return;
             StartAi(allies: true);
-        });
+        }));
     }
 
     /// <summary>적 차례 — 끝냄 표시를 모두 지우고, 적 독 · 상태(sub_1A866(0)), 「적군 차례」 뒤 배열 차례대로.</summary>
-    private void StartEnemyPhase()
+    private void StartEnemyPhase() => RunTiming(0, () => { if (!CheckOver()) BeginEnemyPhase(); });
+
+    private void BeginEnemyPhase()
     {
         foreach (var u in _scene.Units) u.Acted = false;
         SetMusic(EnemyMusic);
@@ -276,6 +280,11 @@ internal sealed partial class GameWindow
             StartTalk(_scene.Index, [n.Talk], () => ShowNotices(rest, after));
             return;
         }
+        if (n.Event >= 0)
+        {
+            RunEvent(n.Event, () => ShowNotices(rest, after));
+            return;
+        }
         ShowBanner(n.Text, () => ShowNotices(rest, after), 0.9);
         _bannerName = n.Name;
     }
@@ -283,7 +292,8 @@ internal sealed partial class GameWindow
     /// <summary>이기고 졌나 — 원작 판정(<see cref="Battle.Judge"/>: 기본은 적 전멸 = 이김, 사울 쓰러짐 = 짐, 판마다 덧붙인 조건).</summary>
     private bool CheckOver()
     {
-        switch (_battle.Judge())
+        if (_bs == BattleState.Over) return true;
+        switch (_forcedOutcome != 0 ? _forcedOutcome : _battle.Judge())
         {
             case 1:
                 _bs = BattleState.Over;
@@ -293,9 +303,14 @@ internal sealed partial class GameWindow
                 return true;
             case 2:
                 _bs = BattleState.Over;
-                OnOutcome(2);
-                _banner = $"승리! ({Turn}턴) — 누르면 메뉴";
-                _bannerName = -1;
+                int turns = Turn;
+                RunVictory(() =>   // 승리 뒤 함수(대사 · 합류) 뒤 동료 표를 고친다
+                {
+                    OnOutcome(2);
+                    _bs = BattleState.Over;
+                    _banner = $"승리! ({turns}턴) — 누르면 메뉴";
+                    _bannerName = -1;
+                });
                 return true;
         }
         return false;
@@ -316,6 +331,9 @@ internal sealed partial class GameWindow
                 break;
             case BattleState.Talk:
                 TalkTick(dt);
+                break;
+            case BattleState.Script:
+                BattleScriptTick(dt);
                 break;
             case BattleState.Enemy:
                 EnemyTick(dt);
@@ -553,6 +571,9 @@ internal sealed partial class GameWindow
         {
             case BattleState.Menu when _stage == MenuStage.Over:   // 판정 뒤 메뉴 — 물릴 곳이 없다
                 break;
+            case BattleState.Menu when _stage == MenuStage.Ask:    // 묻는 메뉴 — 물리면 「아니오」
+                _menu[^1].Do();
+                break;
             case BattleState.Menu when _actor == null || _stage == MenuStage.System:
                 _menu.Clear();
                 _bs = BattleState.Select;
@@ -630,9 +651,27 @@ internal sealed partial class GameWindow
         {
             if (stage == MenuStage.Unit) _battle.Rest(u);
             u.Acted = true;
+            if (_battle.ChestAt(u) is { } chest) { AskChest(u, chest.Index, chest.Hidden); return; }
             ClearSelection();
             AfterPlayerAction();
         }, default));
+    }
+
+    /// <summary>쉬고 나서 상자 칸이면 묻는다(sub_190AC) — 「예」면 열고, 아니면 그냥 쉰다. 상자가 사건이면 그 사건을 건다.</summary>
+    private void AskChest(Unit u, int k, bool hidden)
+    {
+        _stage = MenuStage.Ask;
+        _menu.Clear();
+        _menu.Add((hidden ? "보물상자 발견 — 꺼낸다" : "보석상자 — 연다", () =>
+        {
+            ClearSelection();
+            var (notes, ev) = _battle.OpenChest(u, k);
+            ShowNotices(notes, () => { if (ev >= 0) RunEvent(ev, AfterPlayerAction); else AfterPlayerAction(); });
+        }, default));
+        _menu.Add(("그냥 둔다", () => { ClearSelection(); AfterPlayerAction(); }, default));
+        _menuIndex = 0;
+        _selected = u;
+        _bs = BattleState.Menu;
     }
 
     /// <summary>마법 고르기 — 아는 마법(원작 이름 · MP 표) 가운데 지금 걸 수 있는 것.</summary>
@@ -896,7 +935,8 @@ internal sealed partial class GameWindow
             if (_enemyNow.Moving || _enemyNow.Path.Count > 0) return;
             var me = _enemyNow;
             _enemyNow = null;
-            Arrive(me, _plan ?? new AiPlan());
+            var plan = _plan ?? new AiPlan();
+            GroundCheck(me, () => { _bs = BattleState.Enemy; Arrive(me, plan); });
             return;
         }
         if (NextAiUnit() is { } next)

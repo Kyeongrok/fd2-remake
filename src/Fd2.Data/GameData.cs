@@ -309,6 +309,9 @@ public sealed class Scene
         }
 
         TileSet = info[0];
+        // 사건 줄 16개(3 + 3k): 차례, 사건 번호, 때 — 땅 칸 사건 16개(51 + 2k): 사건 번호, 편
+        for (int k = 0; k < 16 && 5 + 3 * k < info.Length; k++) EventLines.Add(new EventLine { Turn = info[3 + 3 * k], Event = info[4 + 3 * k], When = info[5 + 3 * k] });
+        for (int k = 0; k < 16 && 52 + 2 * k < info.Length; k++) GroundEvents.Add((info[51 + 2 * k], info[52 + 2 * k]));
         // 상자 16개(83 + 3k): 종류(0 물건 · 1 돈 · 2~ 사건), u16 값
         for (int k = 0; k < 16 && 85 + 3 * k < info.Length; k++) Chests.Add((info[83 + 3 * k], Dat.U16(info, 84 + 3 * k)));
         var tiles = Dat.Load(shap, 2 * TileSet);
@@ -445,6 +448,31 @@ public sealed class Scene
 
     /// <summary>타일 속성 첫 바이트 — 0x04 · 0x08 · 0x10 움직이는 타일, 0x20 보석상자, 0x40 숨은 보물, 0x80 덮개.</summary>
     public int TileFlags(int x, int y) => Inside(x, y) ? _attr[4 * _cells[y * Width + x]] : 0;
+
+    /// <summary>사건 줄 16개 — 그 차례 그 때(0 적 차례 앞 · 1 우리 차례 끝 · 2 우리 차례 시작)에 사건을 건다. 사건이 차례를 고쳐 다음 줄을 켠다.</summary>
+    public readonly List<EventLine> EventLines = new();
+
+    /// <summary>땅 칸 사건 k(칸 표시 k+1): 사건 번호 · 밟는 편(0 적 · 1 컴퓨터 아군).</summary>
+    public readonly List<(int Event, int Team)> GroundEvents = new();
+
+    /// <summary>타일이 바뀐 칸(연 상자) — 지도 텍스처는 처음 것 그대로라 이 칸들은 위에 덧그린다.</summary>
+    public readonly HashSet<int> Patched = new();
+
+    /// <summary>
+    /// 열린 상자 그림으로(sub_12263) — 보석상자(속성 &amp; 0x60 == 0x20)이고 그 상자 번호가 열렸으면 타일 +1, 표시 0.
+    /// 숨은 보물(0x40)은 그림이 그대로다.
+    /// </summary>
+    public void ShowOpenedChests(ICollection<int> opened)
+    {
+        for (int i = 0; i < _cells.Length; i++)
+        {
+            int x = i % Width, y = i / Width;
+            if ((TileFlags(x, y) & 0x60) != 0x20 || !opened.Contains(_marks[i])) continue;
+            if (_cells[i] + 1 < _tiles.Length) _cells[i]++;
+            _marks[i] = 0;
+            Patched.Add(i);
+        }
+    }
 
     public Unit? UnitAt(int x, int y) => Units.Find(u => u.X == x && u.Y == y && u.Alive);
 
