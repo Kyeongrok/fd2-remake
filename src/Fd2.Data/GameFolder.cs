@@ -15,6 +15,36 @@ public static class GameFolder
         return Path.Combine(desk, "용의기사2 모션패치5", "용의기사2 모션패치5");
     }
 
+    /// <summary>
+    /// 그 폴더가 게임 폴더면 그대로, 아니면 바로 아래 폴더 가운데 게임 폴더(겉 폴더를 고른 경우) — 없으면 null.
+    /// </summary>
+    public static string? Accept(string? dir)
+    {
+        if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir)) return null;
+        if (Missing(dir) == null) return Path.GetFullPath(dir);
+        try { return Directory.GetDirectories(dir).FirstOrDefault(d => Missing(d) == null); }
+        catch (Exception e) when (e is UnauthorizedAccessException or IOException) { return null; }
+    }
+
+    /// <summary>
+    /// 자동으로 찾기 — 실행 파일 옆 · 바탕화면 · 다운로드 · 문서에서. 여럿이면 이름에 「모션패치」가 든 판, 그다음 이름 차례.
+    /// 못 찾으면 null.
+    /// </summary>
+    public static string? Search()
+    {
+        string here = AppContext.BaseDirectory;
+        var extra = new[] { here, Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(here)) ?? here }
+            .Where(Directory.Exists).SelectMany(d => SafeDirs(d).Prepend(d));
+        var found = GameVersions.Discover(extra);
+        return found.OrderByDescending(v => v.Name.Contains("모션패치")).Select(v => v.Dir).FirstOrDefault();
+    }
+
+    private static IEnumerable<string> SafeDirs(string dir)
+    {
+        try { return Directory.GetDirectories(dir); }
+        catch (Exception e) when (e is UnauthorizedAccessException or IOException) { return []; }
+    }
+
     /// <summary>빠진 파일 이름, 다 있으면 null.</summary>
     public static string? Missing(string dir) => Required.FirstOrDefault(f => !File.Exists(Path.Combine(dir, f)));
 
