@@ -50,7 +50,7 @@ internal sealed partial class GameWindow
         {
             if (p.Roster < 0 || p.Roster >= _scene.Roster.Count) continue;
             int id = _scene.Roster[p.Roster].Icon;
-            p.Speaker = CharacterNames.SpriteOf(id);
+            p.Speaker = CharacterNames.SpriteOf(id, _icons.RoyalsMoved);
             p.Name ??= id < CharacterNames.Heroes ? CharacterNames.Of(id).Split('-')[0] : "";
         }
     }
@@ -118,6 +118,7 @@ internal sealed partial class GameWindow
         if (_talkShown < PageChars(_talk[_talkPage])) { _talkShown = 9999; return; }
         if (++_talkPage >= _talk.Count) { EndTalk(); return; }
         _talkShown = 0;
+        if (_screen == Screen.Prologue) ProloguePage();
         FocusSpeaker();
     }
 
@@ -155,13 +156,14 @@ internal sealed partial class GameWindow
             textLines = Wrap(page.Text, textSize, boxW - faceW - 24 * 3);
             boxH = Math.Max(boxH, textLines.Count * textLineH + textSize * 2 + 50);
         }
-        // 일행이 화면 아래쪽에 있으면 창을 위로 — 말하는 사람들을 가리지 않게
-        var party = _scene.Units.Where(u => u.Side == Side.Player && u.Alive).ToList();
-        double partyY = party.Count == 0 ? 0 : party.Average(u => _offY + (u.DrawY * T - _camY) * _zoom);
-        int bx = (_clientW - boxW) / 2, by = partyY > _clientH / 2 ? 64 : _clientH - boxH - 24;
-        FillRect(bx, by, boxW, boxH, 0xE0101828);
+        // 원작처럼 오른쪽에 얼굴이 나오는 사람(FFEF · FFED)은 창을 위에, 왼쪽(FFEE · FFEC)은 아래에
+        int bx = (_clientW - boxW) / 2, by = page.Right ? 16 : _clientH - boxH - 16;
+        // 바탕은 얼굴 그림(DATO)의 바탕색 #28458A 과 같게 — 얼굴이 창에 붙어 보이도록. 테두리는 네 변 모두
+        FillRect(bx, by, boxW, boxH, 0xFF28458A);
         FillRect(bx, by, boxW, 3, 0xFF8090C0);
         FillRect(bx, by + boxH - 3, boxW, 3, 0xFF8090C0);
+        FillRect(bx, by, 3, boxH, 0xFF8090C0);
+        FillRect(bx + boxW - 3, by, 3, boxH, 0xFF8090C0);
 
         int textX = bx + 24, faceX = bx + 20;
         if (faces is { Count: > 0 })

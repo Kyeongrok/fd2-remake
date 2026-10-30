@@ -350,8 +350,8 @@ internal sealed partial class GameWindow
             return;
         }
         int mapW = _scene.Width * T, mapH = _scene.Height * T;
-        double cx = _selected != null ? _selected.DrawX * T + T / 2 : mapW / 2;
-        double cy = _selected != null ? _selected.DrawY * T + T / 2 : mapH / 2;
+        double cx = _lookAt is { } at ? at.X * T + T / 2 : _selected != null ? _selected.DrawX * T + T / 2 : mapW / 2;
+        double cy = _lookAt is { } at2 ? at2.Y * T + T / 2 : _selected != null ? _selected.DrawY * T + T / 2 : mapH / 2;
         int want(double c, int map, int view) =>
             map <= view ? (map - view) / 2 : (int)Math.Clamp(c - view / 2, 0, map - view);
         _camX = want(cx, mapW, _boardW);

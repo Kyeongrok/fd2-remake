@@ -9,10 +9,11 @@ public static class CharacterNames
     public const int Heroes = 0x44;
 
     /// <summary>
-    /// 장면 유닛 표 · 대사의 사람 번호 → 그림 번호. 거의 같지만 왕(48 「래터-왕」)과 왕비(66 「미란-왕비」)는
-    /// 옥좌에 앉은 그림 57 · 75 를 쓴다(장면 33 알현실이 원작 화면과 같도록 맞춘 것).
+    /// 장면 유닛 표 · 대사의 사람 번호 → 그림(FDICON · DATO) 번호. 원본 판은 그대로다(48 왕 · 66 왕비 · 75 누운 유니).
+    /// 모션패치 판은 48 · 66 · 75 자리에 다른 캐릭터를 넣고 왕 · 왕비를 57 · 75 로 옮겼다 — royalsMoved 면 그리로
+    /// (판 가리기: <see cref="IconBank.RoyalsMoved"/>).
     /// </summary>
-    public static int SpriteOf(int id) => id switch { 48 => 57, 66 => 75, _ => id };
+    public static int SpriteOf(int id, bool royalsMoved) => !royalsMoved ? id : id switch { 48 => 57, 66 => 75, _ => id };
 
     private static readonly string[] Names =
     [

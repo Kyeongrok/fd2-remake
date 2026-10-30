@@ -123,11 +123,17 @@ public sealed class IconBank
 
     public int Characters { get; }
 
+    /// <summary>
+    /// 왕 · 왕비 그림을 57 · 75 로 옮긴 판인가(모션패치) — 원본은 57 이 빈 그림이고 왕은 48 이다.
+    /// </summary>
+    public bool RoyalsMoved { get; }
+
     public IconBank(string path, uint[] pal)
     {
         _file = File.ReadAllBytes(path);
         _pal = pal;
         Characters = Dat.U16(_file, 4) / FramesPerChar;
+        RoyalsMoved = Characters > 57 && Frame(57, 0).Any(c => c != 0);
     }
 
     public uint[] Frame(int character, int frame)
@@ -194,6 +200,7 @@ public sealed class Scene
     public List<Unit> Units { get; } = new();
 
     private readonly int _iconCount;
+    private readonly bool _royalsMoved;
 
     /// <summary>장면 정보의 유닛 표 전부(등장 차례 상관없이).</summary>
     public List<RosterEntry> Roster { get; } = new();
@@ -202,6 +209,7 @@ public sealed class Scene
     {
         Index = index;
         _iconCount = icons.Characters;
+        _royalsMoved = icons.RoyalsMoved;
         string field = Path.Combine(dir, "FDFIELD.DAT"), shap = Path.Combine(dir, "FDSHAP.DAT");
         var map = Dat.Load(field, 3 * index);
         var info = Dat.Load(field, 3 * index + 1);
@@ -255,8 +263,9 @@ public sealed class Scene
     /// </summary>
     public Unit? Spawn(RosterEntry e)
     {
-        if (CharacterNames.SpriteOf(e.Icon) >= _iconCount) return null;
-        var u = new Unit { Icon = CharacterNames.SpriteOf(e.Icon), Side = e.Type is 1 or 2 ? Side.Player : Side.Other, Ai = e.Type == 1, Level = e.Level };
+        int sprite = CharacterNames.SpriteOf(e.Icon, _royalsMoved);
+        if (sprite >= _iconCount) return null;
+        var u = new Unit { Icon = sprite, Side = e.Type is 1 or 2 ? Side.Player : Side.Other, Ai = e.Type == 1, Level = e.Level };
         Place(u, e.X, e.Y);
         return Units.Contains(u) ? u : null;
     }
