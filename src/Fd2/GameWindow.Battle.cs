@@ -1131,6 +1131,28 @@ internal sealed partial class GameWindow
     }
 
     /// <summary>사람 위에 — 체력 막대, 정보 창, 메뉴, 턴 알림, 컷인.</summary>
+    /// <summary>
+    /// 승패 조건 글(sub_1B41D) — 이름 표 FDTXT 0 의 597 + 2n(승리) · 598 + 2n(패배), n = 장면. 원본 글꼴로 제목 줄 밑에.
+    /// 17장(장면 16)의 「미티사망」은 원작처럼 미티가 동료가 아닐 때만 — 여기서는 늘 원작 글 그대로 보인다.
+    /// </summary>
+    private void DrawGoals(int fs, int y)
+    {
+        if (_scene.Index >= 30) return;
+        int g = Math.Max(1, fs / Font16.Size);
+        var win = NameImage(597 + 2 * _scene.Index, g, 0xFFFFE070);
+        var lose = NameImage(598 + 2 * _scene.Index, g, 0xFFFF9090);
+        if (win == null && lose == null) return;
+        var l1 = Text.Render("승리 ", fs * 4 / 5, 0xFFFFE070);
+        var l2 = Text.Render("  패배 ", fs * 4 / 5, 0xFFFF9090);
+        int w = l1.W + (win?.W ?? 0) + l2.W + (lose?.W ?? 0), h = Math.Max(l1.H, Math.Max(win?.H ?? 0, lose?.H ?? 0));
+        int x = _clientW / 2 - w / 2;
+        FillRect(x - 12, y - 4, w + 24, h + 8, 0x90000000);
+        DrawText(l1, x, y + (h - l1.H) / 2); x += l1.W;
+        if (win != null) { DrawText(win, x, y + (h - win.H) / 2); x += win.W; }
+        DrawText(l2, x, y + (h - l2.H) / 2); x += l2.W;
+        if (lose != null) DrawText(lose, x, y + (h - lose.H) / 2);
+    }
+
     private void DrawBattleHud()
     {
         if (!InBattle) return;
@@ -1149,7 +1171,7 @@ internal sealed partial class GameWindow
         // 위 가운데 — 몇 턴 · 누구 차례
         string top = _bs switch
         {
-            BattleState.Talk => TouchUi ? "1장  (누르면 다음 · 뒤로 대사 건너뛰기)" : "1장  (Enter · 클릭 다음 · Esc 대사 건너뛰기)",
+            BattleState.Talk => TouchUi ? $"{ChapterName(_scene.Index)}  (누르면 다음 · 뒤로 대사 건너뛰기)" : $"{ChapterName(_scene.Index)}  (Enter · 클릭 다음 · Esc 대사 건너뛰기)",
             _ when _enemyPhase && _bs != BattleState.Over => $"{ChapterName(_scene.Index)} 전투 · {Turn}턴 · {(_alliesPhase ? "컴퓨터 아군" : "적군")} 차례",
             BattleState.Over => $"{ChapterName(_scene.Index)} 전투 · {Turn}턴",
             _ when TouchUi => $"{ChapterName(_scene.Index)} 전투 · {Turn}턴 · 아군 차례 · 돈 {_battle.Gold}   (누르기 고르기 · 길게 누르기/뒤로 물리기 · 빈 칸 누르면 턴 끝)",
@@ -1159,6 +1181,7 @@ internal sealed partial class GameWindow
         var title = Text.Render(top, fs, 0xFFFFFFFF);
         FillRect(_clientW / 2 - title.W / 2 - 12, 8, title.W + 24, title.H + 8, 0xA0000000);
         DrawText(title, _clientW / 2 - title.W / 2, 12);
+        DrawGoals(fs, 12 + title.H + 12);
 
         // 왼쪽 아래 — 마우스 밑 사람(없으면 고른 사람)
         var hover = HoverUnit() ?? _actor;
