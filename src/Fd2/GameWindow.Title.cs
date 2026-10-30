@@ -23,6 +23,7 @@ internal sealed partial class GameWindow
     private (string Label, Action Do)[] TitleItems =>
     [
         ("Start — 게임 시작", () => { _screen = Screen.Game; StartBattle(0); }),
+        ($"판: {VersionName}", OpenVersions),
         ("지도 둘러보기", () => { _screen = Screen.Game; LoadScene(_scene.Index); }),
         ("오프닝 다시 보기", StartOpening),
         ("단축키 · 패드 설정", () => { _keysOpen = true; _keysRow = 0; _keysCapture = -1; }),

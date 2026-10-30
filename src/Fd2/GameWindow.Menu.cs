@@ -208,11 +208,24 @@ internal sealed partial class GameWindow
         int pick = Win32.TrackPopupMenuEx(popup, Win32.TPM_RETURNCMD, at.X, at.Y, _hwnd, IntPtr.Zero);
         Win32.DestroyMenu(popup);
         if (pick <= 0) return;
-        _settings.GameDir = versions[pick - 1].Dir;
+        SwitchVersion(versions[pick - 1].Dir);
+    }
+
+    private partial List<(string Name, string Dir)> FindVersions() =>
+        GameVersions.Discover(_settings.GameDir.Length > 0 ? [_settings.GameDir, _dir] : [_dir]).Select(v => (v.Name, v.Dir)).ToList();
+
+    /// <summary>판 바꾸기 — 고른 판을 설정에 적고(다음에 켤 때도 그 판), 그 판으로 다시 켠다.</summary>
+    private partial void SwitchVersion(string dir)
+    {
+        _settings.GameDir = dir;
         _settings.Save();
-        Process.Start(new ProcessStartInfo(Environment.ProcessPath!) { ArgumentList = { versions[pick - 1].Dir }, UseShellExecute = false });
+        if (!Offscreen) Process.Start(new ProcessStartInfo(Environment.ProcessPath!) { ArgumentList = { dir }, UseShellExecute = false });
         _running = false;
     }
+
+    private partial bool CanAddVersion() => false;
+
+    private partial void AddVersion() { }
 
     /// <summary>타이틀 메뉴에 「편집기 열기」를 보이나 — 윈도우는 편집기가 함께 온다.</summary>
     private static readonly bool HasEditor = true;

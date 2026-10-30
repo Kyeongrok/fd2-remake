@@ -119,7 +119,8 @@ internal sealed partial class GameWindow
     {
         (_mouseX, _mouseY) = (x, y);
         _mouseMoved = true;
-        if (_screen == Screen.Title && !_keysOpen) TitleHover(_mouseX, _mouseY);
+        if (_versionsOpen) VersionsHover(_mouseX, _mouseY);
+        else if (_screen == Screen.Title && !_keysOpen) TitleHover(_mouseX, _mouseY);
         MouseToCursor();
     }
 
@@ -128,6 +129,7 @@ internal sealed partial class GameWindow
         (_mouseX, _mouseY) = (x, y);
         _mouseMoved = true;
         if (_keysOpen || _helpOpen) { KeysWindowKey(Win32.VK_ESCAPE); return; }
+        if (VersionsClick(x, y)) return;
         if (_screen != Screen.Game) { TitleClick(_mouseX, _mouseY); return; }
         if (Talking) { TalkNext(); return; }
         MouseToCursor();
@@ -166,6 +168,7 @@ internal sealed partial class GameWindow
         if (vk == Win32.VK_F12) { RequestShot(); return; }
         if (vk == Win32.VK_F11) { ToggleFullscreen(); return; }
         if (KeysWindowKey(vk)) return;
+        if (VersionsKey(vk)) return;
         if (_screen != Screen.Game)
         {
             // 패드 · 바꾼 키로도 메뉴를 고를 수 있게 커서 키는 방향키로
@@ -336,6 +339,7 @@ internal sealed partial class GameWindow
         if (_screen != Screen.Game)
         {
             DrawTitle();
+            DrawVersions();
             DrawKeysWindow();
             return;
         }

@@ -1,0 +1,115 @@
+using Fd2.Native;
+
+namespace Fd2;
+
+/// <summary>
+/// 판 고르기 — 타이틀 메뉴의 「판: 지금 판」 줄에서 연다. 원본 · 모션패치 · 합친 판 들 가운데 고르면 그 판으로 다시 켠다.
+/// 판 목록 · 바꾸기 · 더하기는 플랫폼이 맡는다(윈도우: 바탕화면 · 다운로드 · 문서에서 찾아 다시 켬, 안드로이드: 가져온 폴더들).
+/// </summary>
+internal sealed partial class GameWindow
+{
+    private bool _versionsOpen;
+    private List<(string Name, string Dir)> _versions = new();
+    private int _versionIndex;
+    private readonly List<(int X, int Y, int W, int H)> _versionRects = new();
+
+    /// <summary>찾은 판들(이름, 폴더).</summary>
+    private partial List<(string Name, string Dir)> FindVersions();
+
+    /// <summary>그 판으로 바꾼다 — 고른 판을 기억하고 다시 켠다.</summary>
+    private partial void SwitchVersion(string dir);
+
+    /// <summary>목록 끝에 「판 더하기」가 있나(안드로이드: 폴더 하나 더 가져오기).</summary>
+    private partial bool CanAddVersion();
+
+    private partial void AddVersion();
+
+    /// <summary>지금 판 이름 — 게임 폴더 이름.</summary>
+    private string VersionName => new DirectoryInfo(_dir).Name;
+
+    private int VersionRows => _versions.Count + (CanAddVersion() ? 1 : 0);
+
+    private void OpenVersions()
+    {
+        _versions = FindVersions();
+        _versionIndex = Math.Max(0, _versions.FindIndex(v => SameDir(v.Dir, _dir)));
+        _versionsOpen = true;
+    }
+
+    /// <summary>판 목록이 연 동안 받는 키 — 위아래 · 결정 · Esc. 먹었으면 참.</summary>
+    private bool VersionsKey(int vk)
+    {
+        if (!_versionsOpen) return false;
+        int rows = Math.Max(1, VersionRows);
+        switch (vk)
+        {
+            case Win32.VK_UP: _versionIndex = (_versionIndex + rows - 1) % rows; break;
+            case Win32.VK_DOWN: _versionIndex = (_versionIndex + 1) % rows; break;
+            case Win32.VK_RETURN or Win32.VK_SPACE: PickVersionRow(_versionIndex); break;
+            case Win32.VK_ESCAPE: _versionsOpen = false; break;
+        }
+        return true;
+    }
+
+    private bool VersionsClick(int mx, int my)
+    {
+        if (!_versionsOpen) return false;
+        for (int i = 0; i < _versionRects.Count; i++)
+        {
+            var r = _versionRects[i];
+            if (mx >= r.X && my >= r.Y && mx < r.X + r.W && my < r.Y + r.H) { PickVersionRow(i); return true; }
+        }
+        _versionsOpen = false;   // 목록 밖을 누르면 닫는다
+        return true;
+    }
+
+    private void VersionsHover(int mx, int my)
+    {
+        for (int i = 0; i < _versionRects.Count; i++)
+        {
+            var r = _versionRects[i];
+            if (mx >= r.X && my >= r.Y && mx < r.X + r.W && my < r.Y + r.H) _versionIndex = i;
+        }
+    }
+
+    private void PickVersionRow(int i)
+    {
+        if (i == _versions.Count && CanAddVersion()) { _versionsOpen = false; AddVersion(); return; }
+        if (i < 0 || i >= _versions.Count) return;
+        _versionsOpen = false;
+        if (!SameDir(_versions[i].Dir, _dir)) SwitchVersion(_versions[i].Dir);
+    }
+
+    private static bool SameDir(string a, string b) =>
+        string.Equals(Path.GetFullPath(a).TrimEnd('\\', '/'), Path.GetFullPath(b).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+
+    private void DrawVersions()
+    {
+        if (!_versionsOpen) return;
+        int fs = Math.Max(14, 7 * _zoom);
+        var rows = _versions.Select(v => (Label: v.Name, Sub: v.Dir, Now: SameDir(v.Dir, _dir))).ToList();
+        if (CanAddVersion()) rows.Add(("+ 판 더하기 (게임 폴더 하나 더 가져오기)", "", false));
+        if (rows.Count == 0) rows.Add(("찾은 판이 없습니다", "", false));
+
+        var title = Text.Render("판 고르기 — 고르면 그 판으로 다시 켭니다 · Esc 닫기", fs, 0xFFFFE070);
+        var imgs = rows.Select(r => (L: Text.Render(r.Now ? $"● {r.Label}" : r.Label, fs, r.Now ? 0xFF90E0FF : 0xFFFFFFFF),
+                                     S: Text.Render(r.Sub, Math.Max(11, fs * 2 / 3), 0xFF9098A8, bold: false))).ToList();
+        int rowH = imgs.Max(i => i.L.H + (i.S.W > 1 ? i.S.H : 0)) + 10;
+        int w = Math.Min(_clientW - 20, Math.Max(title.W, imgs.Max(i => Math.Max(i.L.W, i.S.W))) + 60);
+        int h = title.H + 24 + rowH * rows.Count;
+        int x = (_clientW - w) / 2, y = Math.Max(4, (_clientH - h) / 2);
+        FillRect(0, 0, _clientW, _clientH, 0x90000000);
+        FillRect(x, y, w, h, 0xF0181828);
+        DrawText(title, x + 20, y + 10);
+        _versionRects.Clear();
+        int cy = y + title.H + 18;
+        for (int i = 0; i < rows.Count; i++)
+        {
+            _versionRects.Add((x + 8, cy - 2, w - 16, rowH));
+            if (i == _versionIndex) FillRect(x + 8, cy - 2, w - 16, rowH - 2, 0xC0405090);
+            DrawText(imgs[i].L, x + 24, cy);
+            if (imgs[i].S.W > 1) DrawText(imgs[i].S, x + 40, cy + imgs[i].L.H);
+            cy += rowH;
+        }
+    }
+}

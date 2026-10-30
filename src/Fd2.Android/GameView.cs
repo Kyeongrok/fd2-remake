@@ -62,12 +62,18 @@ public sealed class GameView : SurfaceView, ISurfaceHolderCallback
         _thread?.Join(1000);
     }
 
+    /// <summary>게임 — 화면(Surface)이 다시 만들어져도(앱이 잠깐 뒤로 갔다 와도) 이어서 쓴다.</summary>
+    private GameWindow? _game;
+
     private void Loop()
     {
-        GameWindow game;
-        try { game = new GameWindow(_dir); }
-        catch (Exception e) { Fail(e); return; }
-        game.Start();
+        if (_game == null)
+        {
+            try { _game = new GameWindow(_dir); }
+            catch (Exception e) { Fail(e); return; }
+            _game.Start();
+        }
+        var game = _game;
         Bitmap? bitmap = null;
         int[] pixels = [];
         using var paint = new Paint { FilterBitmap = false };
