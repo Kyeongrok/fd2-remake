@@ -10,9 +10,13 @@
         <RootNamespace>Fd2</RootNamespace>
         <!-- 실행 파일 · 창 아이콘: 게임 속 사울(FDICON 0번 앞모습) -->
         <ApplicationIcon>..\..\assets\icons\game.ico</ApplicationIcon>
+        <!-- 64비트로 — 고해상도의 DirectML(그래픽 카드 업스케일)이 x64 일 때만 DirectML.dll 을 실어 준다(창세기전3에서 겪은 것). -->
+        <PlatformTarget>x64</PlatformTarget>
     </PropertyGroup>
 
     <ItemGroup>
+        <!-- 모드 > 고해상도 — 지도 · 캐릭터를 업스케일 모델로 키운다(HiRes.cs). 그래픽 카드(DirectML), 안 되면 CPU. -->
+        <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.17.3" />
         <PackageReference Include="Vortice.D3DCompiler" Version="3.8.3" />
         <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
     </ItemGroup>
@@ -20,5 +24,12 @@
     <ItemGroup>
         <ProjectReference Include="..\Fd2.Data\Fd2.Data.csproj" />
     </ItemGroup>
+
+    <!-- DirectML 꾸러미가 딸려 보내는 디버그판과 기호 파일은 배포에서 뺀다 — 쓰는 것은 DirectML.dll 뿐이다. -->
+    <Target Name="DropDirectMLDebug" AfterTargets="ComputeResolvedFilesToPublishList">
+        <ItemGroup>
+            <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(Filename)' == 'DirectML.Debug' or ('%(Filename)' == 'DirectML' and '%(Extension)' == '.pdb')" />
+        </ItemGroup>
+    </Target>
 
 </Project>

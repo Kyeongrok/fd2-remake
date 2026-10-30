@@ -17,7 +17,7 @@ internal sealed partial class GameWindow
 
     private const int MenuScenePrev = 1001, MenuSceneNext = 1002, MenuSceneBase = 1100;
     private const int MenuResBase = 1300, MenuZoomBase = 1400, MenuFullscreen = 1500, MenuResetView = 1501;
-    private const int MenuEditor = 1600, MenuExit = 1601;
+    private const int MenuEditor = 1600, MenuExit = 1601, MenuHiRes = 1700;
 
     private static readonly (int W, int H)[] ResChoices =
         [(640, 480), (800, 600), (960, 624), (1024, 768), (1280, 720), (1280, 960), (1440, 936), (1600, 900), (1920, 1080), (2560, 1440)];
@@ -28,7 +28,7 @@ internal sealed partial class GameWindow
     private readonly Settings _settings = Settings.Load();
     private IntPtr _menuBar;
 
-    private int _clientW = 960, _clientH = 624;
+    private int _clientW = 1920, _clientH = 1080;
     private int _zoom = 2, _offX, _offY;
 
     private IntPtr CreateMenuBar()
@@ -59,6 +59,10 @@ internal sealed partial class GameWindow
         Win32.AppendMenuW(settings, Win32.MF_SEPARATOR, 0, null);
         Win32.AppendMenuW(settings, Win32.MF_STRING, MenuResetView, "화면 처음 값으로(&D)");
         Win32.AppendMenuW(bar, Win32.MF_POPUP, (nuint)settings, "설정(&S)");
+
+        IntPtr mode = Win32.CreatePopupMenu();
+        Win32.AppendMenuW(mode, Win32.MF_STRING, MenuHiRes, "고해상도(4배, 이 PC 에서 차례로 만듦)(&H)");
+        Win32.AppendMenuW(bar, Win32.MF_POPUP, (nuint)mode, "모드(&M)");
 
         IntPtr tools = Win32.CreatePopupMenu();
         Win32.AppendMenuW(tools, Win32.MF_STRING, MenuEditor, "편집기 열기(&E)...");
@@ -99,6 +103,12 @@ internal sealed partial class GameWindow
                 Layout();
                 break;
             }
+            case MenuHiRes:
+                _settings.HiRes = _hires.Enabled = !_hires.Enabled;
+                _settings.Save();
+                BuildMapTexture();
+                if (_hires.Enabled) _hires.Want(_scene.Index, _scene.Units.Select(u => u.Icon));
+                break;
             case MenuEditor: OpenEditor(); break;
             case MenuExit: _running = false; break;
         }
@@ -114,6 +124,7 @@ internal sealed partial class GameWindow
             check(MenuResBase + i, ResChoices[i] == (_settings.ViewW, _settings.ViewH));
         foreach (int z in ZoomChoices) check(MenuZoomBase + z, z == _settings.Zoom);
         check(MenuFullscreen, _settings.Fullscreen);
+        check(MenuHiRes, _settings.HiRes);
         if (_scene != null)
             for (int i = 0; i < _sceneCount; i++) check(MenuSceneBase + i, i == _scene.Index);
     }
@@ -157,12 +168,21 @@ internal sealed partial class GameWindow
         int bw = Math.Max(1, _clientW / _zoom), bh = Math.Max(1, _clientH / _zoom);
         _offX = (_clientW - bw * _zoom) / 2;
         _offY = (_clientH - bh * _zoom) / 2;
-        if (bw == _boardW && bh == _boardH && _boardTex != null) return;
         _boardW = bw;
         _boardH = bh;
-        _fb = new uint[bw * bh];
-        if (_device != null) CreateBoardTexture();
+        if (_device != null && (_fbW != _clientW || _fbH != _clientH)) CreateBoardTexture();
         if (_scene != null) Follow();
+    }
+
+    private string _titleStatus = "";
+
+    /// <summary>고해상도를 만드는 동안 제목줄 끝에 지금 상태를 붙인다(바뀔 때만 고친다).</summary>
+    private void UpdateTitleStatus()
+    {
+        string st = _hires.Enabled ? _hires.Status : "";
+        if (st == _titleStatus || _scene == null) return;
+        _titleStatus = st;
+        Win32.SetWindowTextW(_hwnd, $"용의기사2 — 장면 {_scene.Index + 1}/{_sceneCount}" + (st.Length > 0 ? $"  · {st}" : "  (F11 전체화면)"));
     }
 
     /// <summary>도구 > 편집기 열기 — 같은 폴더의 Fd2.Editor.exe 를 게임 폴더를 주어 띄운다.</summary>

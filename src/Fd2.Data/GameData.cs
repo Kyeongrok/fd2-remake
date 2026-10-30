@@ -233,6 +233,22 @@ public sealed class Scene
         Units.Add(u);
     }
 
+    /// <summary>지도 전체를 한 장으로(Width·24 x Height·24, BGRA). 사람은 안 그린다.</summary>
+    public uint[] RenderMap()
+    {
+        int w = Width * Rle.Tile;
+        var px = new uint[w * Height * Rle.Tile];
+        for (int ty = 0; ty < Height; ty++)
+            for (int tx = 0; tx < Width; tx++)
+            {
+                var tile = TileAt(tx, ty);
+                for (int y = 0; y < Rle.Tile; y++)
+                    tile.AsSpan(y * Rle.Tile, Rle.Tile).CopyTo(px.AsSpan((ty * Rle.Tile + y) * w + tx * Rle.Tile));
+            }
+        for (int i = 0; i < px.Length; i++) px[i] |= 0xFF000000;
+        return px;
+    }
+
     public bool Inside(int x, int y) => x >= 0 && y >= 0 && x < Width && y < Height;
 
     public uint[] TileAt(int x, int y) => _tiles[Math.Min(_cells[y * Width + x], _tiles.Length - 1)];
