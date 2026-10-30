@@ -266,6 +266,7 @@ internal sealed partial class GameWindow
         _bs = BattleState.None;
         ClearSelection();
         _scene = new Scene(_dir, index, _pal, _icons, party);
+        _backdrop = Backdrop.For(_dir, index, _pal);
         _battle = new Battle(_scene, _tables);
         foreach (var u in _scene.Units)
         {
@@ -470,9 +471,37 @@ internal sealed partial class GameWindow
     }
 
     /// <summary>지도를 <c>_fb</c> 에 — 안드로이드처럼 GPU 지도 텍스처가 없을 때. 보이는 칸만 배율만큼 키워.</summary>
+    /// <summary>이 장면의 지도 밑 배경 — 있으면 지도를 CPU 로 그리며 타일의 빈 점으로 보이게 한다.</summary>
+    private Backdrop? _backdrop;
+    private int[]? _wave;
+
+    /// <summary>
+    /// 밑그림 — 원작 화면(312x192) 크기를 지도 판 크기로 늘린다. 물결은 줄마다 옆으로, 넓은 그림은 화면 왼쪽 위 칸 × (3점, 2줄)만큼 밀린다.
+    /// </summary>
+    private void DrawBackdrop(Backdrop b)
+    {
+        int step = (int)(_time * 18.2) % 16;
+        _wave ??= _tables?.WaveTable() ?? new int[16];
+        int ox = b.Parallax ? _camX / T * 3 : 0, oy = b.Parallax ? _camY / T * 2 : 0;
+        int y1 = Math.Min(_fbH, _offY + _boardH * _zoom), x1 = Math.Min(_fbW, _offX + _boardW * _zoom);
+        for (int yy = Math.Max(0, _offY); yy < y1; yy++)
+        {
+            int sy = (yy - _offY) * 192 / Math.Max(1, _boardH * _zoom);
+            int dx = b.Wave ? _wave[(step + sy) % 16] : 0;
+            int row = Math.Min(b.H - 1, sy + oy) * b.W, drow = yy * _fbW;
+            for (int xx = Math.Max(0, _offX); xx < x1; xx++)
+            {
+                int sx = (xx - _offX) * 312 / Math.Max(1, _boardW * _zoom) + dx + ox;
+                _fb[drow + xx] = b.Px[row + Math.Min(b.W - 1, sx)] | 0xFF000000;
+            }
+        }
+    }
+
     private void DrawMapCpu()
     {
         Array.Fill(_fb, BgColor);
+        var back = _backdrop;
+        if (back != null) DrawBackdrop(back);
         int cell = T * _zoom;
         int x0 = Math.Max(0, (int)Math.Floor(_camX / (double)T)), y0 = Math.Max(0, (int)Math.Floor(_camY / (double)T));
         int x1 = Math.Min(_scene.Width, (_camX + _boardW) / T + 1), y1 = Math.Min(_scene.Height, (_camY + _boardH) / T + 1);
@@ -485,7 +514,11 @@ internal sealed partial class GameWindow
                 for (int yy = yy0; yy < yy1; yy++)
                 {
                     int srow = (yy - sy) / _zoom * T, drow = yy * _fbW;
-                    for (int xx = xx0; xx < xx1; xx++) _fb[drow + xx] = tile[srow + (xx - sx) / _zoom] | 0xFF000000;
+                    for (int xx = xx0; xx < xx1; xx++)
+                    {
+                        uint c = tile[srow + (xx - sx) / _zoom];
+                        if (c != 0 || back == null) _fb[drow + xx] = c | 0xFF000000;   // 밑그림이 있으면 빈 점은 비워 둔다
+                    }
                 }
             }
     }

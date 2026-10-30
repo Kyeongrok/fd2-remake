@@ -683,3 +683,54 @@ public sealed class EffectFrames
 
     public (uint[] Px, int W, int H) this[int i] => _frames[Math.Clamp(i, 0, _frames.Length - 1)];
 }
+
+/// <summary>
+/// 지도 밑 배경(sub_10652 · sub_11EEE) — 몇 장면은 타일의 빈 점(투명)으로 밑그림이 보인다.
+/// 9 · 24 · 25 = FDOTHER 15(용암), 28 · 29 = 55(하늘): 날 그림 320x200, 줄마다 물결 표(0x627C8)만큼 옆으로 흔들며 틱마다 단계 +1(sub_4EEE0).
+/// 17 · 21 · 22 · 27 = 넓은 그림 두 조각(16/17 · 35/36 · 40/41 · 46/47, RLE) — 화면이 한 칸 옮길 때 3점 · 2줄씩 따라 밀린다.
+/// 23 = FDOTHER 42(312x192 RLE, 원작은 그 위에 따로 움직임 sub_24D22 — 여기서는 그림만).
+/// </summary>
+public sealed class Backdrop
+{
+    public required uint[] Px;
+    public int W, H;
+    public bool Wave, Parallax;
+
+    public static Backdrop? For(string dir, int scene, uint[] pal)
+    {
+        string other = Path.Combine(dir, "FDOTHER.DAT");
+        try
+        {
+            switch (scene)
+            {
+                case 9 or 24 or 25 or 28 or 29:
+                {
+                    var d = Dat.Load(other, scene >= 28 ? 55 : 15);
+                    int w = Dat.U16(d, 0), h = Dat.U16(d, 2);
+                    var px = new uint[w * h];
+                    for (int i = 0; i < px.Length && 4 + i < d.Length; i++) px[i] = pal[d[4 + i]];
+                    return new Backdrop { Px = px, W = w, H = h, Wave = true };
+                }
+                case 17 or 21 or 22 or 27:
+                {
+                    int e = scene switch { 21 => 35, 22 => 40, 27 => 46, _ => 16 };
+                    var top = Dat.Load(other, e);
+                    var bottom = Dat.Load(other, e + 1);
+                    int w = Dat.U16(top, 0), h = Dat.U16(top, 2);
+                    var px = new uint[w * h * 2];
+                    Rle.Decode(top, 4, w, h, pal).CopyTo(px, 0);
+                    Rle.Decode(bottom, 4, w, h, pal).CopyTo(px, w * h);
+                    return new Backdrop { Px = px, W = w, H = 2 * h, Parallax = true };
+                }
+                case 23:
+                {
+                    var d = Dat.Load(other, 42);
+                    int w = Dat.U16(d, 0), h = Dat.U16(d, 2);
+                    return new Backdrop { Px = Rle.Decode(d, 4, w, h, pal), W = w, H = h };
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or IndexOutOfRangeException or ArgumentOutOfRangeException) { }
+        return null;
+    }
+}

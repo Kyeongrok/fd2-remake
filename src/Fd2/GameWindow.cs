@@ -163,6 +163,7 @@ internal sealed unsafe partial class GameWindow : IDisposable
 
     partial void OnSceneLoaded()
     {
+        _cpuMap = _backdrop != null;   // 밑그림이 있는 장면은 지도를 CPU 로(타일의 빈 점으로 밑그림이 보이게)
         BuildMapTexture();
         if (_hires.Enabled) _hires.Want(_scene.Index, _scene.Units.Select(u => u.Icon));
         Win32.SetWindowTextW(_hwnd, $"용의기사2 — 장면 {_scene.Index + 1}/{_sceneCount}  " +
@@ -212,7 +213,7 @@ internal sealed unsafe partial class GameWindow : IDisposable
     {
         int lw = _scene.Width * T, lh = _scene.Height * T;
         _mapScale = _hires.Enabled ? HiRes.Scale : 1;
-        _mapHi = _mapScale > 1;
+        _mapHi = _mapScale > 1 && !_cpuMap;
         _mapHiScene = _scene.Index;
         int w = lw * _mapScale, h = lh * _mapScale;
         var px = _mapScale > 1 ? HiRes.LoadMap(_scene.Index, lw, lh) : null;
@@ -361,7 +362,7 @@ internal sealed unsafe partial class GameWindow : IDisposable
         var v = (float*)cb.DataPointer;
         v[0] = _zoom; v[1] = _offX; v[2] = _offY; v[3] = _mapScale;
         v[4] = _boardW; v[5] = _boardH; v[6] = _camX; v[7] = _camY;
-        v[8] = _scene.Width * T * _mapScale; v[9] = _scene.Height * T * _mapScale; v[10] = _mapScale > 1 ? 1 : 0; v[11] = MapShown ? 0 : 1;
+        v[8] = _scene.Width * T * _mapScale; v[9] = _scene.Height * T * _mapScale; v[10] = _mapScale > 1 ? 1 : 0; v[11] = MapShown && !_cpuMap ? 0 : 1;
         _ctx.Unmap(_viewCb, 0);
 
         var map = _ctx.Map(_boardTex, 0, MapMode.WriteDiscard);

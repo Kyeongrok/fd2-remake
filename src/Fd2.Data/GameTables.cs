@@ -167,6 +167,9 @@ public sealed class GameTables
     public (int Start, int Count, int Sound) MapSpellFx(int spell) =>
         spell is >= 0 and < 33 ? (U8(0x51F33 + spell), U8(0x51F54 + spell), U8(0x51F75 + spell)) : (0, 0, 0);
 
+    /// <summary>밑그림 물결 표(byte_627C8, sub_4EEE0) — 줄 y 를 표[(단계 + y) % 16] 점만큼 옆으로.</summary>
+    public int[] WaveTable() => Enumerable.Range(0, 16).Select(i => (int)U8(0x627C8 + i)).ToArray();
+
     // ── 물결 색 ─────────────────────────────────────────────────────────────
 
     /// <summary>
