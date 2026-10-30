@@ -29,13 +29,14 @@ internal static class Win32
     public const uint WM_KILLFOCUS = 0x0008;
     public const uint WM_MOUSEMOVE = 0x0200;
     public const uint WM_LBUTTONDOWN = 0x0201;
+    public const uint WM_RBUTTONDOWN = 0x0204;
     public const uint WM_ERASEBKGND = 0x0014;
 
     public const uint PM_REMOVE = 0x0001;
 
     public const int VK_LEFT = 0x25, VK_UP = 0x26, VK_RIGHT = 0x27, VK_DOWN = 0x28;
     public const int VK_RETURN = 0x0D, VK_SPACE = 0x20, VK_ESCAPE = 0x1B;
-    public const int VK_TAB = 0x09, VK_PRIOR = 0x21, VK_NEXT = 0x22, VK_F11 = 0x7A;
+    public const int VK_TAB = 0x09, VK_PRIOR = 0x21, VK_NEXT = 0x22, VK_F11 = 0x7A, VK_F12 = 0x7B;
 
     public const int IDC_ARROW = 32512;
 

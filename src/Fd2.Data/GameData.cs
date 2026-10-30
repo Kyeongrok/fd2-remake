@@ -149,6 +149,15 @@ public sealed class Unit
     public int X, Y;
     public Dir Facing = Dir.Down;
 
+    /// <summary>장면 정보의 레벨(+4). 우리 편은 1.</summary>
+    public int Level = 1;
+
+    // 전투(게임의 GameWindow.Battle.cs 가 채운다) — 능력치는 원본 규칙이 아니라 직업별 기본값이다.
+    public int Hp, MaxHp, Mp, MaxMp, Atk, Def, Move = 4, RangeMin = 1, RangeMax = 1;
+    public bool Acted;
+    /// <summary>쓰러지지 않았나 — 전투 능력치가 없는(전투 밖) 사람은 늘 서 있다.</summary>
+    public bool Alive => Hp > 0 || MaxHp == 0;
+
     // 칸 사이를 걷는 중이면 0..1 로 나아간다
     public int FromX, FromY;
     public double Step = 1;
@@ -160,6 +169,9 @@ public sealed class Unit
 }
 
 public enum Dir { Down = 0, Left = 1, Up = 2, Right = 3 }
+
+/// <summary>장면 정보의 유닛 한 줄 — 편(0 적 · 1 적 우두머리 · 2 합류하는 아군), 그림, 레벨, 등장 차례, 자리.</summary>
+public sealed record RosterEntry(int Type, int Icon, int Level, int Phase, int X, int Y);
 
 /// <summary>장면 하나 — 지도·타일·속성·처음 배치.</summary>
 public sealed class Scene
@@ -174,6 +186,9 @@ public sealed class Scene
     private readonly byte[] _attr;
 
     public List<Unit> Units { get; } = new();
+
+    /// <summary>장면 정보의 유닛 표 전부(등장 차례 상관없이).</summary>
+    public List<RosterEntry> Roster { get; } = new();
 
     public Scene(string dir, int index, uint[] pal, IconBank icons)
     {
@@ -201,17 +216,36 @@ public sealed class Scene
         for (int i = 0; i < others; i++)
         {
             int u = 131 + 26 * i;
-            if (u + 26 > info.Length || info[u + 21] != 0) continue;
+            if (u + 26 > info.Length || 4 + 6 * i >= pos.Length) break;
             int icon = info[u + 1];
             if (icon >= icons.Characters) continue;
-            Place(new Unit { Icon = icon, Side = Side.Other }, pos[2 + 6 * i], pos[4 + 6 * i]);
+            Roster.Add(new RosterEntry(info[u], icon, Math.Max(1, (int)info[u + 4]), info[u + 21], pos[2 + 6 * i], pos[4 + 6 * i]));
         }
-        for (int k = 0; k < players; k++)
+        foreach (var e in Roster.Where(e => e.Phase == 0)) Spawn(e);
+
+        // 우리 편 그림은 원본에서는 저장 자료가 정한다 — 여기서는 PartyOrder 차례로, 이 장면에서 나중에 합류하는 아군(편 2)은 건너뛴다.
+        var joiners = Roster.Where(e => e.Type == 2).Select(e => e.Icon).ToHashSet();
+        var party = PartyOrder.Concat(Enumerable.Range(0, CharacterNames.Heroes)).Distinct().Where(i => !joiners.Contains(i) && i < icons.Characters).ToList();
+        for (int k = 0; k < players && k < party.Count; k++)
         {
             int p = 2 + 6 * (others + k);
             if (p + 3 > pos.Length) break;
-            Place(new Unit { Icon = k % icons.Characters, Side = Side.Player, Facing = Dir.Up }, pos[p], pos[p + 2]);
+            Place(new Unit { Icon = party[k], Side = Side.Player, Facing = Dir.Up }, pos[p], pos[p + 2]);
         }
+    }
+
+    /// <summary>
+    /// 우리 편 자리를 채우는 차례 — 1장 대사에 나오는 사울 · 아래스 · 유니, 그다음 마린(회복) …
+    /// 원본은 저장 자료가 정하므로 넷째부터는 정한 것이다.
+    /// </summary>
+    public static readonly int[] PartyOrder = [0, 4, 9, 10, 2, 5, 6, 7, 8, 11];
+
+    /// <summary>유닛 표의 한 줄을 지도에 세운다 — 편 2 는 우리 편, 나머지는 적. 놓을 자리가 없으면 null.</summary>
+    public Unit? Spawn(RosterEntry e)
+    {
+        var u = new Unit { Icon = e.Icon, Side = e.Type == 2 ? Side.Player : Side.Other, Level = e.Level };
+        Place(u, e.X, e.Y);
+        return Units.Contains(u) ? u : null;
     }
 
     /// <summary>같은 칸에 여럿이 겹치면(입장 연출 자리) 가장 가까운 빈 칸으로 — 원본 sub_10C50 처럼.</summary>
@@ -256,9 +290,61 @@ public sealed class Scene
     /// <summary>타일 속성 둘째 바이트: 1 못 감(물·집·통나무), 2 숲.</summary>
     public bool Walkable(int x, int y) => Inside(x, y) && _attr[4 * _cells[y * Width + x] + 1] != 1;
 
-    public Unit? UnitAt(int x, int y) => Units.Find(u => u.X == x && u.Y == y);
+    public Unit? UnitAt(int x, int y) => Units.Find(u => u.X == x && u.Y == y && u.Alive);
 
     public bool Free(int x, int y) => Walkable(x, y) && UnitAt(x, y) == null;
+
+    /// <summary>이 칸에 들어가는 데 드는 이동력 — 못 가면 -1, 숲(속성 2)은 2, 나머지 1.</summary>
+    public int MoveCost(int x, int y)
+    {
+        if (!Inside(x, y)) return -1;
+        return _attr[4 * _cells[y * Width + x] + 1] switch { 1 => -1, 2 => 2, _ => 1 };
+    }
+
+    /// <summary>
+    /// 이동 범위 — 칸마다 (남은 이동력이 가장 큰) 앞 칸. 다른 편이 선 칸은 못 지나가고, 같은 편은 지나가되 멈출 수는 없다.
+    /// 같은 편을 지나가는 칸도 들어 있다 — 멈출 수 있는 칸만은 <see cref="Stops"/>.
+    /// </summary>
+    public Dictionary<(int X, int Y), (int X, int Y)> Reach(Unit u)
+    {
+        var best = new Dictionary<(int, int), int> { [(u.X, u.Y)] = u.Move };
+        var prev = new Dictionary<(int X, int Y), (int X, int Y)> { [(u.X, u.Y)] = (u.X, u.Y) };
+        var q = new PriorityQueue<(int X, int Y), int>();
+        q.Enqueue((u.X, u.Y), -u.Move);
+        ReadOnlySpan<(int, int)> dirs = [(0, 1), (-1, 0), (0, -1), (1, 0)];
+        while (q.TryDequeue(out var c, out int negLeft))
+        {
+            int left = -negLeft;
+            if (best[c] != left) continue;
+            foreach (var (dx, dy) in dirs)
+            {
+                var n = (c.X + dx, c.Y + dy);
+                int cost = MoveCost(n.Item1, n.Item2);
+                if (cost < 0 || left - cost < 0) continue;
+                var who = UnitAt(n.Item1, n.Item2);
+                if (who != null && who.Alive && who.Side != u.Side) continue;
+                int remain = left - cost;
+                if (best.TryGetValue(n, out int had) && had >= remain) continue;
+                best[n] = remain;
+                prev[n] = c;
+                q.Enqueue(n, -remain);
+            }
+        }
+        return prev;
+    }
+
+    /// <summary>Reach 에서 멈출 수 있는 칸 — 다른 사람이 서 있지 않은 칸(자기 자리는 된다).</summary>
+    public IEnumerable<(int X, int Y)> Stops(Dictionary<(int X, int Y), (int X, int Y)> reach, Unit u) =>
+        reach.Keys.Where(k => k == (u.X, u.Y) || UnitAt(k.X, k.Y) == null);
+
+    /// <summary>Reach 의 앞 칸 표로 (x, y) 까지 가는 길(출발 칸 빼고).</summary>
+    public static List<(int X, int Y)> PathTo(Dictionary<(int X, int Y), (int X, int Y)> reach, (int X, int Y) to)
+    {
+        var path = new List<(int X, int Y)>();
+        for (var c = to; reach[c] != c; c = reach[c]) path.Add(c);
+        path.Reverse();
+        return path;
+    }
 
     /// <summary>너비 우선으로 가장 짧은 길. 도착 칸은 비어 있어야 한다.</summary>
     public List<(int X, int Y)>? FindPath(int sx, int sy, int tx, int ty)

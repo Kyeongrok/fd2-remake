@@ -17,6 +17,9 @@ internal sealed class Settings
     /// <summary>모드 > 고해상도 — 기본 켬. 처음에는 이 PC 에서 차례로 만들어 다 된 것부터 갈아 끼운다.</summary>
     public bool HiRes { get; set; } = true;
 
+    /// <summary>모드 > 이동 · 공격 범위 보기 — 전투 밖에서도 고른 사람의 이동(파랑) · 공격(빨강) 범위를 보인다.</summary>
+    public bool ShowRange { get; set; } = true;
+
     private static string FilePath =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fd2", "settings.json");
 
@@ -24,7 +27,7 @@ internal sealed class Settings
     {
         try
         {
-            if (File.Exists(FilePath)) return JsonSerializer.Deserialize<Settings>(File.ReadAllText(FilePath)) ?? new();
+            if (!GameWindow.Offscreen && File.Exists(FilePath)) return JsonSerializer.Deserialize<Settings>(File.ReadAllText(FilePath)) ?? new();
         }
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException) { }
         return new();
@@ -32,6 +35,7 @@ internal sealed class Settings
 
     public void Save()
     {
+        if (GameWindow.Offscreen) return;   // 화면 밖 시험은 쓰는 사람의 설정을 안 건드린다
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);

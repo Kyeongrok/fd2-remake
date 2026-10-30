@@ -16,8 +16,9 @@ internal sealed partial class GameWindow
     private const int BaseW = 480, BaseH = 312;
 
     private const int MenuScenePrev = 1001, MenuSceneNext = 1002, MenuSceneBase = 1100;
-    private const int MenuResBase = 1300, MenuZoomBase = 1400, MenuFullscreen = 1500, MenuResetView = 1501;
-    private const int MenuEditor = 1600, MenuExit = 1601, MenuHiRes = 1700;
+    private const int MenuResBase = 1300, MenuZoomBase = 1400, MenuFullscreen = 1500, MenuResetView = 1501, MenuKeys = 1502;
+    private const int MenuEditor = 1600, MenuExit = 1601, MenuHiRes = 1700, MenuShowRange = 1701;
+    private const int MenuBattle = 1003, MenuBattleStop = 1004;
 
     private static readonly (int W, int H)[] ResChoices =
         [(640, 480), (800, 600), (960, 624), (1024, 768), (1280, 720), (1280, 960), (1440, 936), (1600, 900), (1920, 1080), (2560, 1440)];
@@ -26,6 +27,12 @@ internal sealed partial class GameWindow
     private static readonly int[] ZoomChoices = [0, 1, 2, 3, 4, 5, 6];
 
     private readonly Settings _settings = Settings.Load();
+
+    /// <summary>
+    /// 화면 밖 시험(창세기전3 의 DUELDX_OFFSCREEN 과 같은 것) — FD2_OFFSCREEN=1 이면 창을 화면 밖에 포커스 없이 띄우고,
+    /// 전체화면 · 패드를 끄고, 설정 파일을 저장하지 않는다. 사용하는 사람의 화면 · 마우스와 섞이지 않게 시험을 돌릴 때.
+    /// </summary>
+    internal static readonly bool Offscreen = Environment.GetEnvironmentVariable("FD2_OFFSCREEN") == "1";
     private IntPtr _menuBar;
 
     private int _clientW = 1920, _clientH = 1080;
@@ -43,6 +50,9 @@ internal sealed partial class GameWindow
             Win32.AppendMenuW(pick, Win32.MF_STRING, (nuint)(MenuSceneBase + i), $"장면 {i + 1}");
         Win32.AppendMenuW(game, Win32.MF_POPUP, (nuint)pick, "장면 고르기(&S)");
         Win32.AppendMenuW(game, Win32.MF_SEPARATOR, 0, null);
+        Win32.AppendMenuW(game, Win32.MF_STRING, MenuBattle, "1장 전투 시작(&B)");
+        Win32.AppendMenuW(game, Win32.MF_STRING, MenuBattleStop, "전투 그만두기(&Q)");
+        Win32.AppendMenuW(game, Win32.MF_SEPARATOR, 0, null);
         Win32.AppendMenuW(game, Win32.MF_STRING, MenuExit, "끝내기(&X)\tEsc");
         Win32.AppendMenuW(bar, Win32.MF_POPUP, (nuint)game, "게임(&G)");
 
@@ -58,10 +68,13 @@ internal sealed partial class GameWindow
         Win32.AppendMenuW(settings, Win32.MF_STRING, MenuFullscreen, "전체화면(&F)\tF11");
         Win32.AppendMenuW(settings, Win32.MF_SEPARATOR, 0, null);
         Win32.AppendMenuW(settings, Win32.MF_STRING, MenuResetView, "화면 처음 값으로(&D)");
+        Win32.AppendMenuW(settings, Win32.MF_SEPARATOR, 0, null);
+        Win32.AppendMenuW(settings, Win32.MF_STRING, MenuKeys, "단축키 · 패드 설정(&K)...");
         Win32.AppendMenuW(bar, Win32.MF_POPUP, (nuint)settings, "설정(&S)");
 
         IntPtr mode = Win32.CreatePopupMenu();
         Win32.AppendMenuW(mode, Win32.MF_STRING, MenuHiRes, "고해상도(4배, 이 PC 에서 차례로 만듦)(&H)");
+        Win32.AppendMenuW(mode, Win32.MF_STRING, MenuShowRange, "이동 · 공격 범위 보기(&R)");
         Win32.AppendMenuW(bar, Win32.MF_POPUP, (nuint)mode, "모드(&M)");
 
         IntPtr tools = Win32.CreatePopupMenu();
@@ -74,6 +87,12 @@ internal sealed partial class GameWindow
     {
         switch (id)
         {
+            case MenuBattle: StartBattle(0); break;
+            case MenuBattleStop: if (InBattle) StopBattle(); break;
+            case MenuShowRange:
+                _settings.ShowRange = !_settings.ShowRange;
+                _settings.Save();
+                break;
             case MenuScenePrev: LoadScene((_scene.Index + _sceneCount - 1) % _sceneCount); break;
             case MenuSceneNext: LoadScene((_scene.Index + 1) % _sceneCount); break;
             case >= MenuSceneBase and < MenuSceneBase + 200 when id - MenuSceneBase < _sceneCount:
@@ -109,6 +128,11 @@ internal sealed partial class GameWindow
                 BuildMapTexture();
                 if (_hires.Enabled) _hires.Want(_scene.Index, _scene.Units.Select(u => u.Icon));
                 break;
+            case MenuKeys:
+                _keysOpen = true;
+                _keysRow = 0;
+                _keysCapture = -1;
+                break;
             case MenuEditor: OpenEditor(); break;
             case MenuExit: _running = false; break;
         }
@@ -125,6 +149,7 @@ internal sealed partial class GameWindow
         foreach (int z in ZoomChoices) check(MenuZoomBase + z, z == _settings.Zoom);
         check(MenuFullscreen, _settings.Fullscreen);
         check(MenuHiRes, _settings.HiRes);
+        check(MenuShowRange, _settings.ShowRange);
         if (_scene != null)
             for (int i = 0; i < _sceneCount; i++) check(MenuSceneBase + i, i == _scene.Index);
     }
@@ -133,7 +158,7 @@ internal sealed partial class GameWindow
     private void ApplyWindow()
     {
         if (_hwnd == IntPtr.Zero) return;
-        if (_settings.Fullscreen)
+        if (_settings.Fullscreen && !Offscreen)
         {
             Win32.SetMenu(_hwnd, IntPtr.Zero);
             Win32.SetWindowLongPtrW(_hwnd, Win32.GWL_STYLE, Win32.WS_POPUP | Win32.WS_VISIBLE);
@@ -155,9 +180,10 @@ internal sealed partial class GameWindow
         Win32.AdjustWindowRect(ref rect, Win32.WS_OVERLAPPEDWINDOW, true);
         Win32.SetMenu(_hwnd, _menuBar);
         Win32.SetWindowLongPtrW(_hwnd, Win32.GWL_STYLE, Win32.WS_OVERLAPPEDWINDOW | Win32.WS_VISIBLE);
-        Win32.SetWindowPos(_hwnd, IntPtr.Zero, Math.Max(work.Left, work.Left + (work.Width - rect.Width) / 2),
-                           Math.Max(work.Top, work.Top + (work.Height - rect.Height) / 2),
-                           rect.Width, rect.Height, Win32.SWP_NOZORDER | Win32.SWP_FRAMECHANGED);
+        if (Offscreen) { w = _settings.ViewW; h = _settings.ViewH; rect = new Win32.Rect { Right = w, Bottom = h }; Win32.AdjustWindowRect(ref rect, Win32.WS_OVERLAPPEDWINDOW, true); }
+        Win32.SetWindowPos(_hwnd, IntPtr.Zero, Offscreen ? -8000 : Math.Max(work.Left, work.Left + (work.Width - rect.Width) / 2),
+                           Offscreen ? 0 : Math.Max(work.Top, work.Top + (work.Height - rect.Height) / 2),
+                           rect.Width, rect.Height, Win32.SWP_NOZORDER | Win32.SWP_FRAMECHANGED | (Offscreen ? Win32.SWP_NOACTIVATE : 0));
     }
 
     /// <summary>배율과 보이는 판 크기를 창 크기에서 셈한다. 판이 바뀌면 화면 버퍼와 텍스처를 다시 만든다.</summary>
