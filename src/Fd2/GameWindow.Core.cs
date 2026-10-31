@@ -40,6 +40,12 @@ internal sealed partial class GameWindow
     private double _time;
     private int _camX, _camY;
 
+    /// <summary>
+    /// 카메라의 한 점 아래 자리(화면 점, 0 ~ 배율−1) — 카메라가 걷는 사람을 따라갈 때 지도를 원본 한 점(배율 2면 화면 2점)씩이 아니라 화면 한 점씩 민다.
+    /// 지도 · 사람 · 칸 효과를 그릴 때만 _offX · _offY 에서 뺀다. 지도를 CPU 로 그릴 때(폰)만 쓴다 — 적이 걸을 때 화면이 뚝뚝 끊기던 까닭(사용자 요청).
+    /// </summary>
+    private int _subX, _subY;
+
     private readonly HashSet<int> _keys = new();
     private bool _running;
 
@@ -487,6 +493,7 @@ internal sealed partial class GameWindow
     /// <summary>고른 사람을 화면 가운데에. 지도가 화면보다 작으면 지도를 가운데에.</summary>
     private void Follow()
     {
+        (_subX, _subY) = (0, 0);
         if (InBattle && !_enemyPhase)
         {
             if (_centerCursor)
@@ -502,12 +509,21 @@ internal sealed partial class GameWindow
         int mapW = _scene.Width * T, mapH = _scene.Height * T;
         double cx = _lookAt is { } at ? at.X * T + T / 2 : _selected != null ? _selected.DrawX * T + T / 2 : mapW / 2;
         double cy = _lookAt is { } at2 ? at2.Y * T + T / 2 : _selected != null ? _selected.DrawY * T + T / 2 : mapH / 2;
-        int want(double c, int map, int view) =>
-            map <= view ? (map - view) / 2 : (int)Math.Clamp(c - view / 2, 0, map - view);
-        _camX = want(cx, mapW, _boardW);
+        // 화면 점 단위로 — 원본 점은 _camX, 남는 화면 점은 _subX(지도를 CPU 로 그릴 때만)
+        int z = _cpuMap ? Math.Max(1, _zoom) : 1;
+        (int Cam, int Sub) want(double c, int map, int view)
+        {
+            if (map <= view) return ((map - view) / 2, 0);
+            int px = (int)Math.Round(Math.Clamp(c - view / 2.0, 0, map - view) * z);
+            return (px / z, px % z);
+        }
+        (_camX, _subX) = want(cx, mapW, _boardW);
         if (_viewRows is ({ } top, { } bottom))
-            _camY = top * T + want(cy - top * T, (bottom - top) * T, _boardH);   // 프롤로그 — 그 막의 줄들 안에서만
-        else _camY = want(cy, mapH, _boardH);
+        {
+            var (c, sb) = want(cy - top * T, (bottom - top) * T, _boardH);   // 프롤로그 — 그 막의 줄들 안에서만
+            (_camY, _subY) = (top * T + c, sb);
+        }
+        else (_camY, _subY) = want(cy, mapH, _boardH);
     }
 
     /// <summary>사람 층을 창 해상도로 찍는다 — 고해상도 그림이 있으면 그것을, 없으면 원본을 점 그대로 배율만큼 키워.</summary>
@@ -543,12 +559,22 @@ internal sealed partial class GameWindow
             DrawKeysWindow();
             return;
         }
-        if (_cpuMap || PhaseFxOn) DrawMapCpu();   // 차례 넘김 모자이크는 지도까지 CPU 로
-        DrawPatches();
-        DrawRanges();
-        DrawUnits(outline: true);
-        DrawCovers();
-        DrawTileFx();
+        _offX -= _subX;
+        _offY -= _subY;
+        try
+        {
+            if (_cpuMap || PhaseFxOn) DrawMapCpu();   // 차례 넘김 모자이크는 지도까지 CPU 로
+            DrawPatches();
+            DrawRanges();
+            DrawUnits(outline: true);
+            DrawCovers();
+            DrawTileFx();
+        }
+        finally
+        {
+            _offX += _subX;
+            _offY += _subY;
+        }
         DrawBattleHud();
         DrawKeysWindow();
     }
@@ -665,8 +691,9 @@ internal sealed partial class GameWindow
             var key = (_scene, _zoom, _scene.Patched.Count);
             if (_mapAll == null || !key.Equals(_mapAllKey)) BuildMapAll(key);
             int left = _offX - _camX * _zoom, top = _offY - _camY * _zoom;
-            int bx0 = Math.Max(_offX, left), bx1 = Math.Min(Math.Min(_fbW, _offX + _boardW * _zoom), left + _mapAllW);
-            int by0 = Math.Max(_offY, top), by1 = Math.Min(Math.Min(_fbH, _offY + _boardH * _zoom), top + _mapAllH);
+            // 판 경계는 한 점 아래 자리를 빼기 전 것 — 카메라가 반 점 밀려도 오른쪽 · 아래 끝이 비지 않게
+            int bx0 = Math.Max(_offX + _subX, left), bx1 = Math.Min(Math.Min(_fbW, _offX + _subX + _boardW * _zoom), left + _mapAllW);
+            int by0 = Math.Max(_offY + _subY, top), by1 = Math.Min(Math.Min(_fbH, _offY + _subY + _boardH * _zoom), top + _mapAllH);
             if (bx1 > bx0)
                 for (int y = Math.Max(0, by0); y < by1; y++)
                     Array.Copy(_mapAll!, (y - top) * _mapAllW + (bx0 - left), _fb, y * _fbW + bx0, bx1 - bx0);

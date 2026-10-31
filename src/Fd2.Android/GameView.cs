@@ -146,7 +146,9 @@ public sealed unsafe class GameView : SurfaceView, ISurfaceHolderCallback
                 finally { Holder.UnlockCanvasAndPost(canvas); }
 
                 double spent = clock.Elapsed.TotalSeconds - now;
-                if (spent < 1 / 60.0) Thread.Sleep((int)((1 / 60.0 - spent) * 1000));
+                // 화면 넘김(UnlockCanvasAndPost)이 화면 주기에 맞춰 기다려 준다 — 거기에 60분의 1초 잠을 더하면 틀 사이가 들쭉날쭉해
+                // 지도가 밀릴 때 뚝뚝 끊겼다. 기다려 주지 않는 기기에서 너무 돌지 않게 120분의 1초만 지킨다
+                if (spent < 1 / 120.0) Thread.Sleep((int)Math.Ceiling((1 / 120.0 - spent) * 1000));
             }
         }
         catch (Exception e) { Fail(e); return; }

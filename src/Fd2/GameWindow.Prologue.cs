@@ -377,8 +377,12 @@ internal sealed partial class GameWindow
 
     private void DrawPrologue()
     {
+        _offX -= _subX;
+        _offY -= _subY;
         if (_cpuMap) DrawMapCpu();
         DrawUnits(outline: false);
+        _offX += _subX;
+        _offY += _subY;
         if (_viewRows is ({ } top, { } bottom))
         {
             // 그 막의 줄 바깥은 검게
