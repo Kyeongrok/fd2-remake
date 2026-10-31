@@ -36,7 +36,7 @@ internal sealed partial class GameWindow
 
     /// <summary>그 자리가 접기 단추 · ESC 단추인가 — 단추 누르기는 지도 끌기로 받지 않는다.</summary>
     private bool HudHit(int mx, int my) =>
-        new[] { _miniFold, _chestFold, _escIcon, _menuIcon }.Any(r => r.W > 0 && mx >= r.X - 4 && my >= r.Y - 4 && mx < r.X + r.W + 4 && my < r.Y + r.H + 4);
+        new[] { _miniFold, _chestFold, _escIcon, _menuIcon, _touchMini }.Any(r => r.W > 0 && mx >= r.X - 4 && my >= r.Y - 4 && mx < r.X + r.W + 4 && my < r.Y + r.H + 4);
 
     /// <summary>단추를 눌렀으면 그 패널을 접고 펴고(ESC 는 원작 Esc, 메뉴는 모바일 메뉴) true.</summary>
     private bool HudToggleClick(int mx, int my)
@@ -44,6 +44,7 @@ internal sealed partial class GameWindow
         static bool In((int X, int Y, int W, int H) r, int x, int y) => r.W > 0 && x >= r.X - 4 && y >= r.Y - 4 && x < r.X + r.W + 4 && y < r.Y + r.H + 4;
         if (In(_escIcon, mx, my)) { _mouseMoved = false; PlaySfx(Sound.UiBank, Sound.Cursor); BattleKey(Win32.VK_ESCAPE); return true; }
         if (In(_menuIcon, mx, my)) { OpenTouchMenu(); return true; }
+        if (TouchMinimapClick(mx, my)) return true;
         if (In(_miniFold, mx, my)) _settings.ShowMinimap = !_settings.ShowMinimap;
         else if (In(_chestFold, mx, my)) _settings.ShowChests = !_settings.ShowChests;
         else return false;
@@ -100,7 +101,7 @@ internal sealed partial class GameWindow
         Toggle("칸 정보", _settings.TouchTileInfo, () => _settings.TouchTileInfo = !_settings.TouchTileInfo);
         Toggle("상대 정보", _settings.TouchUnitInfo, () => _settings.TouchUnitInfo = !_settings.TouchUnitInfo);
         Toggle("보물상자", _settings.TouchChests, () => _settings.TouchChests = !_settings.TouchChests);
-        Toggle("미니맵", _settings.ShowMinimap, () => _settings.ShowMinimap = !_settings.ShowMinimap);
+        Toggle("미니맵", _settings.TouchMinimap, () => _settings.TouchMinimap = !_settings.TouchMinimap);
         Toggle("승패 조건", _settings.TouchGoals, () => _settings.TouchGoals = !_settings.TouchGoals);
         Toggle("조작법", _settings.TouchHelp, () => _settings.TouchHelp = !_settings.TouchHelp);
         _menu.Add(("파티 정보", () => { _menu.Clear(); _bs = BattleState.Select; OpenParty(); }, default));

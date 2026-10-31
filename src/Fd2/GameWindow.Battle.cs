@@ -500,8 +500,8 @@ internal sealed partial class GameWindow
                 if (_choosingMove) return;   // 범위 밖 — 무시(취소는 Esc · 오른쪽 단추)
                 if (who == null)
                 {
-                    // 빈 칸 — 키(Enter)와 터치면 시스템 메뉴, PC 마우스 클릭은 고른 것만 푼다(시스템 메뉴는 X 키)
-                    if (_actor == null && _reach == null) { if (mx < 0 || TouchUi) OpenSystemMenu(); }
+                    // 빈 칸 — 키(Enter)면 시스템 메뉴, 마우스 · 손가락은 고른 것만 푼다(시스템 메뉴는 X 키 · 폰은 「메뉴」 단추, 사용자 요청)
+                    if (_actor == null && _reach == null) { if (mx < 0) OpenSystemMenu(); }
                     else ClearSelection();
                     return;
                 }
@@ -1483,16 +1483,24 @@ internal sealed partial class GameWindow
             _ => $"{ChapterName(_scene.Index)} 전투 · {Turn}턴 · 아군 차례 · 돈 {_battle.Gold}   (방향키 커서 · Enter 결정 · Esc 물리기 · {KeyBindings.KeyName(_keyMap[KeyAction.Attack])} 공격 · " +
                  $"{KeyBindings.KeyName(_keyMap[KeyAction.Wait])} 대기 · {KeyBindings.KeyName(_keyMap[KeyAction.System])} 턴 끝 · {KeyBindings.KeyName(_keyMap[KeyAction.KeyHelp])} 단축키)",
         };
-        var title = Text.Render(top, fs, 0xFFFFFFFF);
-        FillRect(_clientW / 2 - title.W / 2 - 12, 8, title.W + 24, title.H + 8, 0xA0000000);
-        DrawText(title, _clientW / 2 - title.W / 2, 12);
-        // 폰은 승패 조건 · 보물상자 · 칸 정보 · 사람 정보를 기본으로 숨기고 ESC 단추의 모바일 메뉴에서 켠다
-        if (TouchUi ? _settings.TouchGoals : _settings.ShowGoals) DrawGoals(fs, 12 + title.H + 12);
+        // 폰은 위 가운데 줄을 그리지 않는다(지도를 가리지 않게, 사용자 요청)
+        int titleBottom = 0;
+        if (!TouchUi)
+        {
+            var title = Text.Render(top, fs, 0xFFFFFFFF);
+            FillRect(_clientW / 2 - title.W / 2 - 12, 8, title.W + 24, title.H + 8, 0xA0000000);
+            DrawText(title, _clientW / 2 - title.W / 2, 12);
+            titleBottom = 12 + title.H;
+        }
+        // 폰은 승패 조건 · 보물상자 · 칸 정보 · 사람 정보를 기본으로 숨기고 「메뉴」 단추의 모바일 메뉴에서 켠다
+        if (TouchUi ? _settings.TouchGoals : _settings.ShowGoals) DrawGoals(fs, titleBottom + 12);
 
         // 왼쪽 아래 — 마우스 밑 사람(없으면 고른 사람)
         DrawHudToggles(fs);
+        _miniBottom = 0;
+        if (TouchUi) DrawTouchMinimap();   // 폰은 왼쪽 위 반투명 미니맵, 보물 목록은 그 밑
         if (!TouchUi || _settings.TouchChests) DrawChestList(fs);
-        DrawMinimap();
+        if (!TouchUi) DrawMinimap();
         int tileH = !TouchUi || _settings.TouchTileInfo ? DrawTileInfo(fs) : 0;
         var hover = HoverUnit() ?? _actor;
         if (hover is { MaxHp: > 0 } && (!TouchUi || _settings.TouchUnitInfo)) DrawInfo(hover, fs, tileH);
@@ -1609,7 +1617,7 @@ internal sealed partial class GameWindow
         int btn = title.H;
         bool open = _settings.ShowChests;   // 접으면 제목 줄 + [+] 만
         int w = Math.Max(title.W + btn + 16, open ? rows.Max(r => r.W) : 0) + 20, h = open ? title.H + rows.Sum(r => r.H + 2) + 14 : title.H + 12;
-        int bx = 12, by = Math.Max(12, VersionLabelBottom + 4);
+        int bx = 12, by = Math.Max(Math.Max(12, VersionLabelBottom + 4), _miniBottom + 8);
         FillRect(bx, by, w, h, 0xC0101020);
         DrawText(title, bx + 10, by + 6);
         _chestFold = FoldButton(bx + w - btn - 6, by + 6, btn, open);
@@ -1681,6 +1689,65 @@ internal sealed partial class GameWindow
 
     private Scene? _miniFor;
     private uint[]? _mini;
+
+    /// <summary>폰 미니맵의 자리(누르면 그곳으로 지도를 옮긴다)와 칸 크기 · 아래 끝.</summary>
+    private (int X, int Y, int W, int H) _touchMini;
+    private int _touchMiniCell, _miniBottom;
+
+    /// <summary>칸마다 타일 평균 색 — 미니맵 바탕(장면이 바뀌면 다시).</summary>
+    private void BuildMini()
+    {
+        if (_miniFor == _scene) return;
+        _miniFor = _scene;
+        _mini = new uint[_scene.Width * _scene.Height];
+        for (int y = 0; y < _scene.Height; y++)
+            for (int x = 0; x < _scene.Width; x++)
+            {
+                long r = 0, gg = 0, b = 0;
+                int n = 0;
+                foreach (uint c in _scene.TileAt(x, y)) { if (c == 0) continue; r += c >> 16 & 255; gg += c >> 8 & 255; b += c & 255; n++; }
+                _mini[y * _scene.Width + x] = n == 0 ? 0xFF000000 : 0xFF000000 | (uint)(r / n) << 16 | (uint)(gg / n) << 8 | (uint)(b / n);
+            }
+    }
+
+    /// <summary>
+    /// 폰 — 왼쪽 위 반투명 미니맵(화면 높이의 약 1/3). 우리 편 초록 · 컴퓨터 아군 노랑 · 적 빨강, 보이는 곳은 흰 테두리. 누르면 그곳으로 지도가 간다.
+    /// 모바일 메뉴 「미니맵」으로 켜고 끈다.
+    /// </summary>
+    private void DrawTouchMinimap()
+    {
+        _touchMini = default;
+        if (!_settings.TouchMinimap || _bs is BattleState.CutIn or BattleState.Talk) return;
+        BuildMini();
+        int m = Math.Max(2, Math.Min(_clientH / 3 / _scene.Height, _clientW / 4 / _scene.Width));
+        int mw = _scene.Width * m, mh = _scene.Height * m, mx = 12, my = Math.Max(12, VersionLabelBottom + 4);
+        FillRect(mx - 3, my - 3, mw + 6, mh + 6, 0x80101020);
+        for (int y = 0; y < _scene.Height; y++)
+            for (int x = 0; x < _scene.Width; x++) FillRect(mx + x * m, my + y * m, m, m, 0xB0000000 | _mini![y * _scene.Width + x] & 0xFFFFFF);
+        foreach (var u in _scene.Units.Where(u => u.Alive && u.Hp > 0))
+        {
+            uint c = u.Ai ? 0xFFF0D040 : u.Side == Side.Player ? 0xFF40F070 : 0xFFFF4040;
+            FillRect(mx + u.X * m, my + u.Y * m, m, m, 0xFF000000);
+            FillRect(mx + u.X * m + 1, my + u.Y * m + 1, m - 2, m - 2, c);
+        }
+        int vx = mx + _camX * m / T, vy = my + _camY * m / T;
+        int vw = Math.Min(mw, _boardW * m / T), vh = Math.Min(mh, _boardH * m / T);
+        FillRect(vx, vy, vw, 2, 0xFFFFFFFF); FillRect(vx, vy + vh - 2, vw, 2, 0xFFFFFFFF);
+        FillRect(vx, vy, 2, vh, 0xFFFFFFFF); FillRect(vx + vw - 2, vy, 2, vh, 0xFFFFFFFF);
+        (_touchMini, _touchMiniCell, _miniBottom) = ((mx, my, mw, mh), m, my + mh + 3);
+    }
+
+    /// <summary>폰 미니맵을 눌렀으면 그 칸이 가운데 오게 지도를 옮기고 true.</summary>
+    private bool TouchMinimapClick(int x, int y)
+    {
+        var r = _touchMini;
+        if (r.W <= 0 || x < r.X || y < r.Y || x >= r.X + r.W || y >= r.Y + r.H) return false;
+        int tx = (x - r.X) / _touchMiniCell, ty = (y - r.Y) / _touchMiniCell;
+        int mw = _scene.Width * T, mh = _scene.Height * T;
+        if (mw > _boardW) _camX = Math.Clamp(tx * T + T / 2 - _boardW / 2, 0, mw - _boardW);
+        if (mh > _boardH) _camY = Math.Clamp(ty * T + T / 2 - _boardH / 2, 0, mh - _boardH);
+        return true;
+    }
 
     /// <summary>
     /// 왼쪽 아래 칸 정보 창(원작) — 커서 칸 그림(사람이 있으면 그 사람, 아래에 HP 세 자리)과 그 칸 지형의 공격 · 방어 보정(A ±% · D ±%).
