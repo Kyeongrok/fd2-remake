@@ -91,9 +91,9 @@ internal sealed partial class GameWindow
     /// <summary>모바일 메뉴 — 칸 정보 · 상대 정보 · 보물상자 · 미니맵 · 승패 조건 · 조작법 켜고 끄기, 파티 정보 · 소리 크기, 시스템 메뉴(턴 끝 · 기록 · 타이틀).</summary>
     private void OpenTouchMenu(int index = 0)
     {
-        if (!CanOpenTouchMenu && _bs != BattleState.Menu) return;
+        if (!CanOpenTouchMenu && !(_bs == BattleState.Menu && _stage == MenuStage.Mobile)) return;
         if (_bs != BattleState.Menu) PlaySfx(Sound.UiBank, Sound.Menu);   // 처음 뜰 때만(켜고 끄며 다시 그릴 때는 말고)
-        _stage = MenuStage.System;
+        _stage = MenuStage.Mobile;
         _menu.Clear();
         void Toggle(string label, bool on, Action flip) =>
             _menu.Add(($"{label}  [{(on ? "보임" : "숨김")}]", () => { flip(); _settings.Save(); OpenTouchMenu(_menuIndex); }, default));

@@ -34,21 +34,9 @@ internal sealed partial class GameWindow
     {
         IntPtr bar = Win32.CreatePopupMenu();
 
-        IntPtr game = Win32.CreatePopupMenu();
-        Win32.AppendMenuW(game, Win32.MF_STRING, MenuScenePrev, "이전 장면(&P)\tPgUp");
-        Win32.AppendMenuW(game, Win32.MF_STRING, MenuSceneNext, "다음 장면(&N)\tPgDn");
-        IntPtr pick = Win32.CreatePopupMenu();
-        for (int i = 0; i < _sceneCount; i++)
-            Win32.AppendMenuW(pick, Win32.MF_STRING, (nuint)(MenuSceneBase + i), $"장면 {i + 1}");
-        Win32.AppendMenuW(game, Win32.MF_POPUP, (nuint)pick, "장면 고르기(&S)");
-        Win32.AppendMenuW(game, Win32.MF_SEPARATOR, 0, null);
-        Win32.AppendMenuW(game, Win32.MF_STRING, MenuBattle, "1장 전투 시작(&B)");
-        Win32.AppendMenuW(game, Win32.MF_STRING, MenuBattleStop, "전투 그만두기(&Q)");
-        Win32.AppendMenuW(game, Win32.MF_SEPARATOR, 0, null);
-        Win32.AppendMenuW(game, Win32.MF_STRING, MenuVersions, "버전 고르기(&V)...");
-        Win32.AppendMenuW(game, Win32.MF_SEPARATOR, 0, null);
-        Win32.AppendMenuW(game, Win32.MF_STRING, MenuExit, "끝내기(&X)\tEsc");
-        Win32.AppendMenuW(bar, Win32.MF_POPUP, (nuint)game, "게임(&G)");
+        // 맨 위는 버전 고르기, 맨 아래는 끝내기 — 장면 넘기기 · 1장 전투 시작 · 전투 그만두기는 뺐다(사용자 요청)
+        Win32.AppendMenuW(bar, Win32.MF_STRING, MenuVersions, "버전 고르기(&V)...");
+        Win32.AppendMenuW(bar, Win32.MF_SEPARATOR, 0, null);
 
         IntPtr settings = Win32.CreatePopupMenu();
         IntPtr res = Win32.CreatePopupMenu();
@@ -82,6 +70,8 @@ internal sealed partial class GameWindow
         IntPtr tools = Win32.CreatePopupMenu();
         Win32.AppendMenuW(tools, Win32.MF_STRING, MenuEditor, "편집기 열기(&E)...");
         Win32.AppendMenuW(bar, Win32.MF_POPUP, (nuint)tools, "도구(&T)");
+        Win32.AppendMenuW(bar, Win32.MF_SEPARATOR, 0, null);
+        Win32.AppendMenuW(bar, Win32.MF_STRING, MenuExit, "끝내기(&X)");
         return bar;
     }
 
@@ -106,7 +96,7 @@ internal sealed partial class GameWindow
             case MenuMobileView:
                 _settings.MobileView = !_settings.MobileView;
                 _settings.Save();
-                if (_bs == BattleState.Menu && _stage == MenuStage.System) { _menu.Clear(); _bs = BattleState.Select; }   // 열린 모바일 메뉴는 닫는다
+                if (_bs == BattleState.Menu && _stage == MenuStage.Mobile) { _menu.Clear(); _bs = BattleState.Select; }   // 열린 모바일 메뉴는 닫는다
                 Layout();
                 break;
             case MenuControlAllies:

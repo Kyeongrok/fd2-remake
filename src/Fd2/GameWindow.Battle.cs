@@ -91,7 +91,7 @@ internal sealed partial class GameWindow
     private readonly Dictionary<int, Motion?> _motions = new(), _stands = new();
 
     /// <summary>지금 메뉴가 어느 단계인가 — 취소할 때 어디로 돌아갈지.</summary>
-    private enum MenuStage { System, AfterMove, Spell, Over, Ask, Deploy, Town, Item }
+    private enum MenuStage { System, Mobile, AfterMove, Spell, Over, Ask, Deploy, Town, Item }
     private MenuStage _stage;
 
     /// <summary>이동할 칸을 고르는 중인가(메뉴에서 「이동」을 고른 뒤).</summary>
@@ -418,6 +418,7 @@ internal sealed partial class GameWindow
                         item.Do();
                         return;
                     }
+                if (_stage == MenuStage.System) BattleCancel();   // 십자 시스템 메뉴 밖을 누르면 닫는다
                 return;
             case BattleState.Target:
             {
@@ -647,7 +648,7 @@ internal sealed partial class GameWindow
             case BattleState.Menu when _stage == MenuStage.Town:   // 마을 — 한 단계 앞 메뉴로
                 _townBack?.Invoke();
                 break;
-            case BattleState.Menu when _actor == null || _stage == MenuStage.System:
+            case BattleState.Menu when _actor == null || _stage is MenuStage.System or MenuStage.Mobile:
                 _menu.Clear();
                 _bs = BattleState.Select;
                 break;
@@ -853,10 +854,11 @@ internal sealed partial class GameWindow
         PlaySfx(Sound.UiBank, Sound.Menu);   // 메뉴가 뜰 때 원작처럼 소리
         _stage = MenuStage.System;
         _menu.Clear();
+        // 원작(sub_16F55)처럼 커서 칸 둘레 네 단추 — 아래 END 턴 끝 · 위 기록 · 오른쪽 설정 · 왼쪽(원작은 위임) 타이틀로. 물리기는 Esc · 오른쪽 단추 · 빈 곳 누르기
         _menu.Add(("턴 끝", EndPlayerTurn, default));
         if (!_enemyPhase) _menu.Add(("전황 기록", SaveBattleRecord, default));
+        _menu.Add(("설정", () => { _menu.Clear(); _bs = BattleState.Select; OpenVolume(); }, default));
         _menu.Add(("타이틀로", ToTitle, default));
-        _menu.Add(("취소", () => { _menu.Clear(); _bs = BattleState.Select; }, default));
         _menuIndex = 0;
         _bs = BattleState.Menu;
     }
@@ -1526,16 +1528,20 @@ internal sealed partial class GameWindow
         return h + 8;
     }
 
-    /// <summary>원작처럼 사람 둘레 네모 단추로 보이는 메뉴인가 — 고른 뒤 · 걸은 뒤의 행동 메뉴.</summary>
-    private bool CrossMenu => _stage == MenuStage.AfterMove;
+    /// <summary>원작처럼 네모 단추 넷으로 보이는 메뉴인가 — 고른 뒤 · 걸은 뒤의 행동 메뉴(사람 둘레), 시스템 메뉴(커서 칸 둘레).</summary>
+    private bool CrossMenu => _stage is MenuStage.AfterMove or MenuStage.System;
 
     /// <summary>
-    /// 십자 메뉴의 자리 — 원작(sub_18D8C · sub_179D5): 위 공격, 왼쪽 마법, 오른쪽 물건, 아래 쉬기.
+    /// 십자 메뉴의 자리 — 원작 행동(sub_18D8C · sub_179D5): 위 공격, 왼쪽 마법, 오른쪽 물건, 아래 쉬기.
+    /// 시스템(sub_16F55, 단추 7 · 5 · 6 · 4): 위 기록, 왼쪽 위임(여기는 타이틀로), 오른쪽 설정, 아래 END 턴 끝.
     /// </summary>
     private static Dir SlotOf(string label) => label switch
     {
-        "공격" => Dir.Up, "마법" => Dir.Left, "물건" => Dir.Right, _ => Dir.Down,
+        "공격" or "전황 기록" => Dir.Up, "마법" or "타이틀로" => Dir.Left, "물건" or "설정" => Dir.Right, _ => Dir.Down,
     };
+
+    /// <summary>시스템 메뉴 단추 그림(FDOTHER 2) — 위 7(기록), 왼쪽 15(도스 — 나가기), 오른쪽 6(설정), 아래 4(END).</summary>
+    private const int SysRecordButton = 7, SysExitButton = 15, SysSetupButton = 6, SysEndButton = 4;
 
     private Buttons? _buttons;
     private bool _buttonsTried;
@@ -1546,18 +1552,21 @@ internal sealed partial class GameWindow
     /// </summary>
     private void DrawCrossMenu(int fs)
     {
-        if (_actor is not { } u) return;
+        bool sys = _stage == MenuStage.System;
+        if (!sys && _actor == null) return;
         if (!_buttonsTried)
         {
             _buttonsTried = true;
             try { _buttons = new Buttons(_dir, _pal); }
             catch (Exception e) when (e is IOException or IndexOutOfRangeException or ArgumentOutOfRangeException) { _buttons = null; }
         }
-        var (sx, sy) = TileScreen(u.X, u.Y);
-        if (_buttons is not { Count: > 3 * Buttons.Rest + 2 } bank) { DrawTextCross(sx, sy); return; }
+        var (sx, sy) = sys ? TileScreen(_cursor.X, _cursor.Y) : TileScreen(_actor!.X, _actor.Y);
+        if (_buttons is not { Count: > 3 * SysExitButton + 2 } bank) { DrawTextCross(sx, sy); return; }
 
         int s = _zoom, blink = (int)(_time * 18.2 / 4) & 1;
-        var slots = new[] { (Dir.Up, Buttons.Attack, 0, -20), (Dir.Left, Buttons.Magic, -24, 2), (Dir.Right, Buttons.Item, 24, 2), (Dir.Down, Buttons.Rest, 0, 24) };
+        var slots = sys
+            ? new[] { (Dir.Up, SysRecordButton, 0, -20), (Dir.Left, SysExitButton, -24, 2), (Dir.Right, SysSetupButton, 24, 2), (Dir.Down, SysEndButton, 0, 24) }
+            : new[] { (Dir.Up, Buttons.Attack, 0, -20), (Dir.Left, Buttons.Magic, -24, 2), (Dir.Right, Buttons.Item, 24, 2), (Dir.Down, Buttons.Rest, 0, 24) };
         foreach (var (dir, button, ox, oy) in slots)
         {
             int i = _menu.FindIndex(m => SlotOf(m.Label) == dir);
