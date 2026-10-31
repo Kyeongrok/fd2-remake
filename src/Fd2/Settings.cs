@@ -55,6 +55,9 @@ internal sealed class Settings
     /// <summary>폰에서 보일 것 — 기본은 모두 숨김, 화면의 메뉴 단추 → 모바일 메뉴에서 켠다(사용자 요청). 윈도우판은 늘 보인다.</summary>
     public bool TouchTileInfo { get; set; }
     public bool TouchUnitInfo { get; set; }
+
+    /// <summary>PC 전투 왼쪽 아래 사람 정보 창(이름 · 레벨 · HP · 능력치) — 모드에서 켜고 끈다, 기본 끔(사용자 요청).</summary>
+    public bool ShowUnitInfo { get; set; }
     public bool TouchChests { get; set; }
     public bool TouchGoals { get; set; }
     public bool TouchHelp { get; set; }

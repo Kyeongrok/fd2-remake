@@ -118,6 +118,7 @@ internal sealed partial class GameWindow
         {
             f.Controls.Add(Toggle("고해상도(4배, 이 PC 에서 차례로 만듦)", _settings.HiRes, MenuHiRes));
             f.Controls.Add(Toggle("이동 · 공격 범위 보기", _settings.ShowRange, MenuShowRange));
+            f.Controls.Add(Toggle("사람 정보 창(전투 왼쪽 아래 — 이름 · HP · 능력치)", _settings.ShowUnitInfo, MenuShowUnitInfo));
             f.Controls.Add(Heading("소리"));
             f.Controls.Add(Toggle("배경음악", _settings.Music, MenuMusic));
             f.Controls.Add(Toggle("효과음", _settings.Sound, MenuSound));

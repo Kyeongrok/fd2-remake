@@ -1597,7 +1597,7 @@ internal sealed partial class GameWindow
         if (!TouchUi) DrawMinimap();
         int tileH = !TouchUi || _settings.TouchTileInfo ? DrawTileInfo(fs) : 0;
         var hover = HoverUnit() ?? _actor;
-        if (hover is { MaxHp: > 0 } && (!TouchUi || _settings.TouchUnitInfo)) DrawInfo(hover, fs, tileH);
+        if (hover is { MaxHp: > 0 } && (TouchUi ? _settings.TouchUnitInfo : _settings.ShowUnitInfo)) DrawInfo(hover, fs, tileH);   // PC 는 모드 「사람 정보 창」(기본 끔)
 
         if (_bs is BattleState.Select or BattleState.Target or BattleState.Moving && !_mouseMoved) DrawCursor();   // 마우스를 쓰는 동안에는 커서를 숨긴다
         if (_bs == BattleState.Menu) DrawMenu(fs);
