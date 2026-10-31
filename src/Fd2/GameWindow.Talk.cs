@@ -35,6 +35,9 @@ internal sealed partial class GameWindow
         ResolveSpeakers();
         _talkPage = 0;
         _talkShown = 0;
+        _talkSkip = 0;
+        _talkMore = false;
+        _talkWindowEnd = int.MaxValue;
         _afterTalk = after;
         if (!Talking) EndTalk();
         else FocusSpeaker();
@@ -106,18 +109,27 @@ internal sealed partial class GameWindow
         return _wrapped[(text, size, width)] = lines;
     }
 
+    /// <summary>창에 다 안 들어가는 대사 — 앞에서 넘긴 줄 수, 지금 창 끝까지의 글자 수, 뒤에 줄이 더 있나, 창에 들어가는 줄 수(DrawTalk 이 정한다).</summary>
+    private int _talkSkip, _talkWindowEnd = int.MaxValue, _talkFit = 3;
+    private bool _talkMore;
+
     private void TalkTick(double dt)
     {
-        if (Talking) _talkShown += dt * TalkCharsPerSecond;
+        if (!Talking) return;
+        _talkShown += dt * TalkCharsPerSecond;
+        if (_talkMore && _talkShown > _talkWindowEnd) _talkShown = _talkWindowEnd;   // 창 끝에서 ▼ 를 띄우고 기다린다
     }
 
     /// <summary>다음 — 글이 아직 나오는 중이면 다 보이고, 다 보였으면 다음 쪽.</summary>
     private void TalkNext()
     {
         if (!Talking) return;
-        if (_talkShown < PageChars(_talk[_talkPage])) { _talkShown = 9999; return; }
+        if (_talkShown < Math.Min(_talkWindowEnd, PageChars(_talk[_talkPage]))) { _talkShown = _talkMore ? _talkWindowEnd : 9999; return; }
+        if (_talkMore) { _talkSkip += _talkFit; _talkShown = _talkWindowEnd; _talkMore = false; _talkWindowEnd = int.MaxValue; return; }   // 같은 쪽의 다음 줄들
         if (++_talkPage >= _talk.Count) { EndTalk(); return; }
         _talkShown = 0;
+        _talkSkip = 0;
+        _talkWindowEnd = int.MaxValue;
         if (_screen == Screen.Prologue) ProloguePage();
         FocusSpeaker();
     }
@@ -164,13 +176,6 @@ internal sealed partial class GameWindow
                 textLines = Wrap(page.Text, textSize, boxW - faceW - 24 * 3);
                 boxH = Math.Max(boxH, textLines.Count * textLineH + textSize * 2 + 50);
             }
-            else
-            {
-                // 원작 글꼴 대사 — 다시 나눈 줄 수만큼 창을 키운다
-                int nameH = name.Length > 0 ? Text.Render(name, Math.Max(14, glyph * 3 / 4), 0xFFFFE070).H + 8 : 0;
-                int textW = faceW == 0 ? boxW - 48 : boxW - faceW - (page.Right ? 72 : 68);   // 아래 그리기의 글 자리와 같게
-                boxH = Math.Max(boxH, 16 + nameH + Reflow(page, Math.Max(8, textW / glyph)).Count * lineH + 20);
-            }
             if (boxH <= _clientH - 32) break;
         }
         g = Math.Max(1, g);
@@ -197,7 +202,9 @@ internal sealed partial class GameWindow
         int ty = by + 16;
         if (name.Length > 0)
         {
-            var n = Text.Render(name, Math.Max(14, glyph * 3 / 4), 0xFFFFE070);
+            // 몬스터 · 장면 사람은 「몬스터 29」 대신 원작 이름 표(FDTXT 0 의 번호+1 줄)의 이름을 원본 글꼴로
+            var n = page.Name == null && page.Speaker >= CharacterNames.Heroes && NameImage(page.Speaker + 1, Math.Max(1, (g * 3 + 2) / 4), 0xFFFFE070) is { W: > 1 } original
+                ? original : Text.Render(name, Math.Max(14, glyph * 3 / 4), 0xFFFFE070);
             DrawText(n, textX, ty);
             ty += n.H + 8;
         }
@@ -212,7 +219,16 @@ internal sealed partial class GameWindow
             ty += textLineH;
         }
         if (textLines != null) left = 0;
-        foreach (var line in Reflow(page, Math.Max(8, (bx + boxW - 24 - textX - (page.Right ? faceW + 24 : 0)) / glyph)))
+        // 원작 글꼴 대사 — 창에 들어가는 줄만큼씩(원작처럼). 더 남았으면 ▼ 를 띄우고 누르면 이어지는 줄(_talkSkip)
+        var lines = Reflow(page, Math.Max(8, (bx + boxW - 24 - textX - (page.Right ? faceW + 24 : 0)) / glyph));
+        int fit = Math.Max(1, (by + boxH - 12 - ty) / lineH);
+        _talkSkip = Math.Clamp(_talkSkip, 0, Math.Max(0, lines.Count - 1));
+        int skipped = lines.Take(_talkSkip).Sum(l => l.Count);
+        _talkWindowEnd = textLines != null ? PageChars(page) : skipped + lines.Skip(_talkSkip).Take(fit).Sum(l => l.Count);
+        _talkMore = textLines == null && _talkSkip + fit < lines.Count;
+        _talkFit = fit;
+        if (textLines == null) left -= skipped;
+        foreach (var line in lines.Skip(_talkSkip).Take(fit))
         {
             int x = textX;
             foreach (int c in line)
@@ -224,7 +240,7 @@ internal sealed partial class GameWindow
             ty += lineH;
         }
 
-        if (_talkShown >= PageChars(page) && (int)(_time * 2) % 2 == 0)
+        if (_talkShown >= _talkWindowEnd && (int)(_time * 2) % 2 == 0)
         {
             var more = Text.Render("▼", Math.Max(12, glyph / 2), 0xFFFFFFFF);
             DrawText(more, bx + boxW - more.W - 16, by + boxH - more.H - 10);

@@ -16,7 +16,7 @@ internal sealed partial class GameWindow
 
     private const int MenuScenePrev = 1001, MenuSceneNext = 1002, MenuSceneBase = 1100;
     private const int MenuResBase = 1300, MenuZoomBase = 1400, MenuFullscreen = 1500, MenuResetView = 1501, MenuKeys = 1502;
-    private const int MenuEditor = 1600, MenuExit = 1601, MenuHiRes = 1700, MenuShowRange = 1701, MenuMusic = 1702, MenuSound = 1703;
+    private const int MenuEditor = 1600, MenuExit = 1601, MenuHiRes = 1700, MenuShowRange = 1701, MenuMusic = 1702, MenuSound = 1703, MenuShowHelp = 1704, MenuShowGoals = 1705;
     private const int MenuBattle = 1003, MenuBattleStop = 1004, MenuVersions = 1005;
 
     private static readonly (int W, int H)[] ResChoices =
@@ -61,6 +61,9 @@ internal sealed partial class GameWindow
         Win32.AppendMenuW(settings, Win32.MF_POPUP, (nuint)zoom, "배율(&Z)");
         Win32.AppendMenuW(settings, Win32.MF_STRING, MenuFullscreen, "전체화면(&F)\tF11");
         Win32.AppendMenuW(settings, Win32.MF_SEPARATOR, 0, null);
+        Win32.AppendMenuW(settings, Win32.MF_STRING, MenuShowHelp, "조작법 보기(전투 위 줄)(&H)");
+        Win32.AppendMenuW(settings, Win32.MF_STRING, MenuShowGoals, "승패 조건 보기(&G)");
+        Win32.AppendMenuW(settings, Win32.MF_SEPARATOR, 0, null);
         Win32.AppendMenuW(settings, Win32.MF_STRING, MenuResetView, "화면 처음 값으로(&D)");
         Win32.AppendMenuW(settings, Win32.MF_SEPARATOR, 0, null);
         Win32.AppendMenuW(settings, Win32.MF_STRING, MenuKeys, "단축키 · 패드 설정(&K)...");
@@ -87,6 +90,14 @@ internal sealed partial class GameWindow
             case MenuBattleStop: if (InBattle) StopBattle(); break;
             case MenuShowRange:
                 _settings.ShowRange = !_settings.ShowRange;
+                _settings.Save();
+                break;
+            case MenuShowHelp:
+                _settings.ShowHelp = !_settings.ShowHelp;
+                _settings.Save();
+                break;
+            case MenuShowGoals:
+                _settings.ShowGoals = !_settings.ShowGoals;
                 _settings.Save();
                 break;
             case MenuMusic:
@@ -158,6 +169,8 @@ internal sealed partial class GameWindow
         check(MenuFullscreen, _settings.Fullscreen);
         check(MenuHiRes, _settings.HiRes);
         check(MenuShowRange, _settings.ShowRange);
+        check(MenuShowHelp, _settings.ShowHelp);
+        check(MenuShowGoals, _settings.ShowGoals);
         check(MenuMusic, _settings.Music);
         check(MenuSound, _settings.Sound);
         if (_scene != null)

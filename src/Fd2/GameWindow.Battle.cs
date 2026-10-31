@@ -785,6 +785,7 @@ internal sealed partial class GameWindow
     /// <summary>빈 칸에서 고르면 — 턴 끝 · 취소.</summary>
     private void OpenSystemMenu()
     {
+        PlaySfx(Sound.UiBank, Sound.Menu);   // 메뉴가 뜰 때 원작처럼 소리
         _stage = MenuStage.System;
         _menu.Clear();
         _menu.Add(("턴 끝", EndPlayerTurn, default));
@@ -1225,6 +1226,7 @@ internal sealed partial class GameWindow
             _ when _enemyPhase && _bs != BattleState.Over => $"{ChapterName(_scene.Index)} 전투 · {Turn}턴 · {(_alliesPhase ? "컴퓨터 아군" : "적군")} 차례",
             BattleState.Over => $"{ChapterName(_scene.Index)} 전투 · {Turn}턴",
             _ when TouchUi => $"{ChapterName(_scene.Index)} 전투 · {Turn}턴 · 아군 차례 · 돈 {_battle.Gold}" + (_settings.TouchHelp ? "   (누르기 고르기 · 길게 누르기/뒤로 물리기 · 빈 칸 누르면 턴 끝)" : ""),
+            _ when !_settings.ShowHelp => $"{ChapterName(_scene.Index)} 전투 · {Turn}턴 · 아군 차례 · 돈 {_battle.Gold}",
             _ => $"{ChapterName(_scene.Index)} 전투 · {Turn}턴 · 아군 차례 · 돈 {_battle.Gold}   (방향키 커서 · Enter 결정 · Esc 물리기 · {KeyBindings.KeyName(_keyMap[KeyAction.Attack])} 공격 · " +
                  $"{KeyBindings.KeyName(_keyMap[KeyAction.Wait])} 대기 · {KeyBindings.KeyName(_keyMap[KeyAction.System])} 턴 끝 · {KeyBindings.KeyName(_keyMap[KeyAction.KeyHelp])} 단축키)",
         };
@@ -1232,7 +1234,7 @@ internal sealed partial class GameWindow
         FillRect(_clientW / 2 - title.W / 2 - 12, 8, title.W + 24, title.H + 8, 0xA0000000);
         DrawText(title, _clientW / 2 - title.W / 2, 12);
         // 폰은 승패 조건 · 보물상자 · 칸 정보 · 사람 정보를 기본으로 숨기고 ESC 단추의 모바일 메뉴에서 켠다
-        if (!TouchUi || _settings.TouchGoals) DrawGoals(fs, 12 + title.H + 12);
+        if (TouchUi ? _settings.TouchGoals : _settings.ShowGoals) DrawGoals(fs, 12 + title.H + 12);
 
         // 왼쪽 아래 — 마우스 밑 사람(없으면 고른 사람)
         DrawHudToggles(fs);

@@ -1,3 +1,5 @@
+using Fd2.Data;
+
 namespace Fd2;
 
 /// <summary>
@@ -93,6 +95,7 @@ internal sealed partial class GameWindow
     private void OpenTouchMenu(int index = 0)
     {
         if (!CanOpenTouchMenu && _bs != BattleState.Menu) return;
+        if (_bs != BattleState.Menu) PlaySfx(Sound.UiBank, Sound.Menu);   // 처음 뜰 때만(켜고 끄며 다시 그릴 때는 말고)
         _stage = MenuStage.System;
         _menu.Clear();
         void Toggle(string label, bool on, Action flip) =>

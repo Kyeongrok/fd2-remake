@@ -29,6 +29,10 @@ internal sealed class Settings
     /// <summary>모드 > 이동 · 공격 범위 보기 — 전투 밖에서도 고른 사람의 이동(파랑) · 공격(빨강) 범위를 보인다.</summary>
     public bool ShowRange { get; set; } = true;
 
+    /// <summary>전투 위 줄의 조작법 · 그 밑 승패 조건 — 설정에서 켜고 끈다(윈도우판, 기본 보임).</summary>
+    public bool ShowHelp { get; set; } = true;
+    public bool ShowGoals { get; set; } = true;
+
     /// <summary>폰 지도 배율(1~4, 두 손가락으로 바꾼다) — 기본 2.</summary>
     public int TouchZoom { get; set; } = 2;
 
