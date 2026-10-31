@@ -16,7 +16,7 @@ namespace Fd2;
 /// </remarks>
 internal sealed partial class GameWindow
 {
-    private enum BattleState { None, Select, Moving, Menu, Target, CutIn, Enemy, Banner, Over, Talk, Script, Fx, March }
+    private enum BattleState { None, Select, Moving, Menu, Target, CutIn, Enemy, Banner, Over, Talk, Script, Fx, March, Phase }
 
     private const uint ReachLight = 0x58FFFFFF, ReachColor = 0x5A3C78FF, AttackColor = 0x5AFF4646, TargetColor = 0x80FF3030;
     private const double FigTick = 0.055;
@@ -196,7 +196,7 @@ internal sealed partial class GameWindow
         ClearSelection();
         if (Controlled.OrderBy(u => u.Slot).FirstOrDefault() is { } lead) { _cursor = (lead.X, lead.Y); _centerCursor = true; }
         var notes = Tick(2);
-        void Banner() => ShowBanner($"{turn}턴 — 아군 차례", () =>
+        void Banner() => PhaseFx(PhasePlayer, () =>   // 원작처럼 「PLAYER PHASE」 모자이크
         {
             _bs = BattleState.Select;
             if (!Controlled.Any(u => !u.Paralyzed)) EndPlayerTurn();   // 움직일 우리 편이 모두 마비면 저절로 끝(sub_13565)
@@ -251,7 +251,7 @@ internal sealed partial class GameWindow
         PlayDeathFx(_tickDied, () => ShowNotices(notes, () =>
         {
             if (CheckOver()) return;
-            ShowBanner($"{Turn}턴 — 적군 차례", () => StartAi(allies: false));
+            PhaseFx(PhaseEnemy, () => StartAi(allies: false));   // 원작처럼 「ENEMY PHASE」 모자이크(sub_1F1CC · sub_1F30A)
         }));
     }
 
@@ -359,6 +359,9 @@ internal sealed partial class GameWindow
                 break;
             case BattleState.March:
                 MarchTick();
+                break;
+            case BattleState.Phase:
+                if ((_phaseT += dt) >= PhaseLen) { _bs = BattleState.None; var a = _phaseAfter; _phaseAfter = null; a?.Invoke(); }
                 break;
         }
     }
@@ -857,6 +860,71 @@ internal sealed partial class GameWindow
     }
 
     // ── 시스템 메뉴 — 원작(sub_16F55 · sub_19DF7)처럼 커서 칸 둘레 네 단추, 고르면 원작 글(FDTXT)로 묻고 알린다 ─────
+
+    // ── 차례 넘김 효과(sub_1F1CC · sub_1F30A · sub_1F42D) — FDOTHER 5 의 글 그림(80 PLAYER · 82 ENEMY · 81 PHASE)이 양옆에서 밀려 들어와
+    //    가운데 서면, 지도가 모자이크(칸 1 → 16, sub_4EB59)로 굵어지며 어두워지고(sub_11D40), 다시 17 → 1 로 풀린 뒤 글이 양옆으로 빠진다.
+
+    private const int PhasePlayer = 80, PhaseEnemy = 82, PhaseWord = 81;
+    private const double PhaseSlide = 0.06, PhaseStep = 0.045;
+    private static double PhaseLen => 5 * PhaseSlide + 16 * PhaseStep + 0.25 + 17 * PhaseStep + 5 * PhaseSlide;
+
+    private double _phaseT;
+    private int _phaseWho;
+    private Action? _phaseAfter;
+    private EffectFrames? _phaseArt;
+    private bool _phaseArtTried;
+
+    /// <summary>모자이크를 하려면 지도도 CPU 로 찍는다(윈도우는 평소 GPU 지도).</summary>
+    private bool PhaseFxOn => _bs == BattleState.Phase;
+
+    private void PhaseFx(int who, Action after)
+    {
+        if (!_phaseArtTried)
+        {
+            _phaseArtTried = true;
+            try { _phaseArt = new EffectFrames(_dir, 5, _pal); if (_phaseArt.Count <= PhaseEnemy) _phaseArt = null; }
+            catch (Exception e) when (e is IOException or IndexOutOfRangeException or ArgumentOutOfRangeException) { _phaseArt = null; }
+        }
+        if (_phaseArt == null) { ShowBanner(who == PhaseEnemy ? $"{Turn}턴 — 적군 차례" : $"{Turn}턴 — 아군 차례", after); return; }
+        (_phaseWho, _phaseT, _phaseAfter) = (who, 0, after);
+        _bs = BattleState.Phase;
+    }
+
+    private void DrawPhaseFx()
+    {
+        if (_phaseArt == null) return;
+        double t = _phaseT;
+        int slideIn = 5, block = 1, dark = 0, slideOut = 0;
+        if ((t -= 5 * PhaseSlide) < 0) slideIn = (int)((t + 5 * PhaseSlide) / PhaseSlide);   // 0..4 — 밀려 들어오는 중
+        else if ((t -= 16 * PhaseStep) < 0) { int n = (int)((t + 16 * PhaseStep) / PhaseStep); block = n + 1; dark = n; }
+        else if ((t -= 0.25) < 0) { block = 16; dark = 15; }
+        else if ((t -= 17 * PhaseStep) < 0) { int n = 16 - (int)((t + 17 * PhaseStep) / PhaseStep); block = Math.Max(1, n + 1); dark = Math.Max(0, n - 1); }
+        else slideOut = Math.Min(5, 1 + (int)(t / PhaseSlide));   // 남은 시간 — 글이 양옆으로 빠진다
+
+        int s = Math.Max(1, _zoom), cx = _clientW / 2, cy = _clientH / 2;
+        if (block > 1 || dark > 0) Mosaic(block * s, dark);
+        int off = slideIn < 5 ? (4 - slideIn) * 25 : slideOut * 25;   // 원작 sub_1F42D 의 25 점씩
+        var (wp, ww, wh) = _phaseArt[_phaseWho];
+        var (pp, pw, ph) = _phaseArt[PhaseWord];
+        int y = cy + (86 - 100) * s;
+        BlitScaled(wp, ww, wh, cx + (89 - 160 - off) * s, y, s, 0, 0, _fbW, _fbH);
+        BlitScaled(pp, pw, ph, cx + (169 - 160 + off) * s, y, s, 0, 0, _fbW, _fbH);
+    }
+
+    /// <summary>판 전체를 size 점 네모로 뭉개고(네모의 왼쪽 위 점 색), dark/16 만큼 어둡게 — 원작 sub_4EB59 · sub_11D40.</summary>
+    private void Mosaic(int size, int dark)
+    {
+        int keep = 16 - dark * 3 / 4;   // 끝까지 가도 1/4 은 남게(원작 사진처럼 어둑하게)
+        for (int by = 0; by < _fbH; by += size)
+            for (int bx = 0; bx < _fbW; bx += size)
+            {
+                uint c = _fb[by * _fbW + bx];
+                uint r = (c >> 16 & 255) * (uint)keep / 16, g = (c >> 8 & 255) * (uint)keep / 16, b = (c & 255) * (uint)keep / 16;
+                uint d = 0xFF000000 | r << 16 | g << 8 | b;
+                for (int y = by; y < Math.Min(_fbH, by + size); y++)
+                    Array.Fill(_fb, d, y * _fbW + bx, Math.Min(size, _fbW - bx));
+            }
+    }
 
     /// <summary>원작 글 줄(sub_15F84 의 FDTXT 번호 = NameTable 줄) — 묻기 · 알림.</summary>
     private const int TxtAskSave = 410, TxtSaved = 411, TxtNever = 412, TxtAskLoad = 413, TxtWait = 414, TxtAskQuit = 415, TxtRest = 416,
@@ -1486,6 +1554,7 @@ internal sealed partial class GameWindow
                      u.Ai ? 0xFFE0C040 : u.Side == Side.Player ? 0xFF40D060 : 0xFFE04040);
         }
 
+        if (_bs == BattleState.Phase) { DrawPhaseFx(); return; }   // 차례 넘김 효과 동안은 다른 창을 그리지 않는다
         int fs = Math.Max(14, 7 * HudZoom);
         // 위 가운데 — 몇 턴 · 누구 차례
         string top = _bs switch

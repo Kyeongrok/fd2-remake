@@ -537,7 +537,7 @@ internal sealed partial class GameWindow
             DrawKeysWindow();
             return;
         }
-        if (_cpuMap) DrawMapCpu();
+        if (_cpuMap || PhaseFxOn) DrawMapCpu();   // 차례 넘김 모자이크는 지도까지 CPU 로
         DrawPatches();
         DrawRanges();
         DrawUnits(outline: true);

@@ -395,7 +395,7 @@ internal sealed unsafe partial class GameWindow : IDisposable
         var v = (float*)cb.DataPointer;
         v[0] = _zoom; v[1] = _offX; v[2] = _offY; v[3] = _mapScale;
         v[4] = _boardW; v[5] = _boardH; v[6] = _camX; v[7] = _camY;
-        v[8] = _scene.Width * T * _mapScale; v[9] = _scene.Height * T * _mapScale; v[10] = _mapScale > 1 ? 1 : 0; v[11] = MapShown && !_cpuMap ? 0 : 1;
+        v[8] = _scene.Width * T * _mapScale; v[9] = _scene.Height * T * _mapScale; v[10] = _mapScale > 1 ? 1 : 0; v[11] = MapShown && !_cpuMap && !PhaseFxOn ? 0 : 1;
         v[12] = _barH; v[13] = v[14] = v[15] = 0;
         _ctx.Unmap(_viewCb, 0);
         UploadBar();
