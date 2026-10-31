@@ -9,6 +9,7 @@ namespace Fd2.Data;
 /// 모션\고르기.json   { "5": "용의기사2 모션패치5" }   (캐릭터마다 다른 버전의 모션을 쓸 때 — 없으면 지금 버전)
 /// </code>
 /// 지금 버전의 폴더가 없으면 처음 쓸 때 FIGANI.DAT 에서 뽑는다. 파일이 없거나 못 쓰는 곳이면 FIGANI.DAT 를 바로 읽는다.
+/// 전투 화면 마법 효과 같은 FDOTHER 의 FIGANI 꼴 항목은 고르기에 그 항목(키 10000 + 번호)이 있을 때만 그 버전의 기타\NNNN.obs 를 쓴다(편집기 「불러오기」).
 /// </summary>
 public static class MotionFiles
 {
@@ -104,5 +105,21 @@ public static class MotionFiles
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
     }
 
-    private static string Safe(string name) => new(name.Where(ch => !Path.GetInvalidFileNameChars().Contains(ch)).ToArray());
+    /// <summary>FDOTHER 항목의 고르기 키(캐릭터 번호와 겹치지 않게).</summary>
+    public static int OtherKey(int entry) => 10000 + entry;
+
+    public const string OtherFolder = "기타";
+
+    public static string OtherFileName(int entry) => $"{entry:D4}{Ext}";
+
+    /// <summary>FDOTHER 항목 entry 의 바이트 — 고르기에 그 항목이 있으면 그 버전의 기타\NNNN.obs, 아니면 null(그때는 FDOTHER.DAT).</summary>
+    public static byte[]? ReadOther(string gameDir, int entry)
+    {
+        if (!Picks().TryGetValue(OtherKey(entry), out var version)) return null;
+        string path = Path.Combine(VersionFolder(version), OtherFolder, OtherFileName(entry));
+        try { return File.Exists(path) ? File.ReadAllBytes(path) : null; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
+    }
+
+    internal static string Safe(string name) => new(name.Where(ch => !Path.GetInvalidFileNameChars().Contains(ch)).ToArray());
 }

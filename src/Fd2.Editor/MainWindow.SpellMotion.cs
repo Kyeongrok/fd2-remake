@@ -124,6 +124,52 @@ public partial class MainWindow
         [30] = [18, 67],   // 암속인 — 미티 · 미아스튜터(닌자)
     };
 
+    /// <summary>마법 spell 의 전투 화면 효과 항목(FDOTHER)과 기술이면 쓰는 사람들 — 내보내기 · 불러오기에 담는 것.</summary>
+    private static (int[] Entries, int[] Casters) SpellParts(int spell) =>
+        spell < BattleFx.Length ? ([BattleFx[spell].Ours, BattleFx[spell].Theirs], [])
+        : spell == 9 ? ([44], [])
+        : spell is >= 32 and <= 35 ? ([spell + 33], [])
+        : SkillCasters.TryGetValue(spell, out var c) ? ([], c) : ([], []);
+
+    private void OnExportSpellMotion(object sender, RoutedEventArgs e)
+    {
+        int spell = SpellMotionList.SelectedIndex;
+        if (_dir == "" || spell < 0) return;
+        var (entries, casters) = SpellParts(spell);
+        if (entries.Length + casters.Length == 0) { Status.Text = $"{SpellNames.Of(spell)} 은(는) 전투 화면 효과가 없습니다(지도 위 그림은 여러 마법이 한 묶음을 나눠 써서 따로 내보내지 않습니다)."; return; }
+        var save = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "마법 모션 내보내기", Filter = "모션 묶음 (*.zip)|*.zip", FileName = $"마법{spell:D2}_{SpellNames.Of(spell)}_모션.zip",
+        };
+        if (save.ShowDialog(this) != true) return;
+        try
+        {
+            int n = MotionPack.ExportSpell(_dir, spell, entries, casters, save.FileName);
+            Status.Text = $"{SpellNames.Of(spell)} 마법 모션 {n}개를 내보냈습니다 — {save.FileName}";
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException) { Status.Text = $"내보내지 못했습니다: {ex.Message}"; }
+    }
+
+    private void OnImportSpellMotion(object sender, RoutedEventArgs e)
+    {
+        if (_dir == "") return;
+        var open = new Microsoft.Win32.OpenFileDialog { Title = "마법 모션 불러오기", Filter = "모션 묶음 (*.zip)|*.zip" };
+        if (open.ShowDialog(this) != true) return;
+        try
+        {
+            var info = MotionPack.Read(open.FileName);
+            if (info is not { Type: "spell" }) { Status.Text = "마법 모션 묶음이 아닙니다(전투 모션은 「전투 모션」 탭에서 불러오세요)."; return; }
+            var (version, what) = MotionPack.Import(open.FileName, _dir);
+            if (info.Spell >= 0 && info.Spell < SpellMotionList.Items.Count) SpellMotionList.SelectedIndex = info.Spell;
+            LoadSpellMotion();
+            Status.Text = $"불러왔습니다 — {what}. 모션 버전 「{version}」 으로 돕니다(게임은 다시 켜면).";
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException or System.IO.InvalidDataException)
+        {
+            Status.Text = $"불러오지 못했습니다: {ex.Message}";
+        }
+    }
+
     private Motion? SafeMotion(int character, int kind)
     {
         try { return Motion.Load(_dir, character, kind, _pal); }

@@ -39,7 +39,7 @@ public sealed class Motion
     /// <summary>FDOTHER 의 FIGANI 꼴 항목(전투 화면 마법 효과 18~44 — sub_2FF01) — 비었거나 꼴이 아니면 null.</summary>
     public static Motion? LoadOther(string dir, int entry, uint[] pal)
     {
-        try { return Parse(Dat.Load(Path.Combine(dir, "FDOTHER.DAT"), entry), pal); }
+        try { return Parse(MotionFiles.ReadOther(dir, entry) ?? Dat.Load(Path.Combine(dir, "FDOTHER.DAT"), entry), pal); }
         catch (Exception e) when (e is IndexOutOfRangeException or ArgumentOutOfRangeException) { return null; }
     }
 

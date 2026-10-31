@@ -132,6 +132,8 @@
                         <ComboBox x:Name="MotionVersion" Width="300" SelectionChanged="OnMotionVersionChanged" />
                         <Button Content="모든 버전 모션 .obs 다시 뽑기" Click="OnExportMotions" Margin="12,0,0,0" Padding="10,2" />
                         <Button Content="모션 폴더 열기" Click="OnOpenMotionFolder" Margin="6,0,0,0" Padding="10,2" />
+                        <Button Content="이 캐릭터 모션 내보내기..." Click="OnExportCharMotion" Margin="18,0,0,0" Padding="10,2" />
+                        <Button Content="모션 불러오기..." Click="OnImportCharMotion" Margin="6,0,0,0" Padding="10,2" />
                     </StackPanel>
                     <Slider x:Name="FrameSlider" DockPanel.Dock="Top" Margin="12,0" Minimum="0" IsSnapToTickEnabled="True"
                             TickFrequency="1" TickPlacement="BottomRight" ValueChanged="OnFrameSlider" />
@@ -171,6 +173,8 @@
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="12,8">
                         <RadioButton x:Name="SpellOurs" Content="우리 편이 쓸 때" GroupName="spellside" IsChecked="True" Checked="OnSpellSideChanged" VerticalAlignment="Center" />
                         <RadioButton x:Name="SpellEnemy" Content="적이 쓸 때" GroupName="spellside" Checked="OnSpellSideChanged" Margin="12,0,0,0" VerticalAlignment="Center" />
+                        <Button Content="이 마법 모션 내보내기..." Click="OnExportSpellMotion" Margin="24,0,0,0" Padding="10,2" />
+                        <Button Content="마법 모션 불러오기..." Click="OnImportSpellMotion" Margin="6,0,0,0" Padding="10,2" />
                     </StackPanel>
                     <TextBlock x:Name="SpellInfo" DockPanel.Dock="Top" Margin="12,0,12,8" FontSize="13" TextWrapping="Wrap" />
                     <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">

@@ -422,6 +422,47 @@ public partial class MainWindow : Window
         Status.Text = $"버전 {versions}개에서 모션 .obs {files}개를 뽑았습니다 — {MotionFiles.Root}";
     }
 
+    // ── 모션 내보내기 · 불러오기(MotionPack) — .zip 한 파일. 불러오면 모션\가져옴-파일이름 버전으로 풀고 그 캐릭터가 그 버전을 쓰게 ──
+
+    private void OnExportCharMotion(object sender, RoutedEventArgs e)
+    {
+        if (_dir == "" || MotionList.SelectedItem is not CharItem item) { Status.Text = "내보낼 캐릭터를 먼저 고르세요."; return; }
+        var save = new SaveFileDialog
+        {
+            Title = "전투 모션 내보내기", Filter = "모션 묶음 (*.zip)|*.zip", FileName = $"{MotionFiles.CharacterFolder(item.Index)}_모션.zip",
+        };
+        if (save.ShowDialog(this) != true) return;
+        try
+        {
+            int n = MotionPack.ExportCharacter(_dir, item.Index, save.FileName);
+            Status.Text = $"{CharacterNames.Of(item.Index)} 전투 모션 {n}개(서기 · 공격 · 마법)를 내보냈습니다 — {save.FileName}";
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException) { Status.Text = $"내보내지 못했습니다: {ex.Message}"; }
+    }
+
+    private void OnImportCharMotion(object sender, RoutedEventArgs e)
+    {
+        if (_dir == "" || MotionList.SelectedItem is not CharItem item) { Status.Text = "모션을 넣을 캐릭터를 먼저 고르세요."; return; }
+        var open = new OpenFileDialog { Title = "전투 모션 불러오기", Filter = "모션 묶음 (*.zip)|*.zip" };
+        if (open.ShowDialog(this) != true) return;
+        try
+        {
+            var info = MotionPack.Read(open.FileName);
+            if (info is not { Type: "battle" }) { Status.Text = "전투 모션 묶음이 아닙니다(마법 모션은 「마법 모션」 탭에서 불러오세요)."; return; }
+            if (info.Character != item.Index && MessageBox.Show(this,
+                    $"이 묶음은 {CharacterNames.Of(info.Character)} 의 모션입니다. 고른 {CharacterNames.Of(item.Index)} 에 넣을까요?", "모션 불러오기",
+                    MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
+            var (version, what) = MotionPack.Import(open.FileName, _dir, item.Index);
+            FillMotionVersions();
+            LoadMotion();
+            Status.Text = $"불러왔습니다 — {what}. 모션 버전 「{version}」 으로 돕니다(게임은 다음 장부터).";
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException or System.IO.InvalidDataException)
+        {
+            Status.Text = $"불러오지 못했습니다: {ex.Message}";
+        }
+    }
+
     private void OnOpenMotionFolder(object sender, RoutedEventArgs e)
     {
         System.IO.Directory.CreateDirectory(MotionFiles.Root);
