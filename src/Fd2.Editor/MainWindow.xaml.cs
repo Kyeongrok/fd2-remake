@@ -65,6 +65,9 @@ public partial class MainWindow : Window
         FillMotionVersions();
         FillMusic();
         LoadStats();
+        int scenes = Dat.Count(System.IO.Path.Combine(dir, "FDFIELD.DAT")) / 3;
+        EventScenes.ItemsSource = Enumerable.Range(0, scenes).Select(i => $"{i + 1}장").ToList();
+        EventScenes.SelectedIndex = 0;
         Status.Text = $"캐릭터 그림 {_icons.Characters}명 · 전투 모션 {motions}명  ·  ←/→ 한 컷씩, 스페이스 재생/정지";
     }
 
@@ -184,6 +187,27 @@ public partial class MainWindow : Window
     {
         ShowMotionPick();
         LoadMotion();
+    }
+
+    // ── 이벤트 — 장마다 사건을 글로(EventText) ───────────────────────────────────
+
+    private SceneEvents? _events;
+    private bool _eventsTried;
+
+    private void OnEventSceneSelected(object sender, SelectionChangedEventArgs e)
+    {
+        if (_dir == "" || _icons == null || EventScenes.SelectedIndex < 0) return;
+        if (!_eventsTried) { _eventsTried = true; _events = SceneEvents.Load(); }
+        try
+        {
+            var scene = new Scene(_dir, EventScenes.SelectedIndex, _pal, _icons);
+            EventText.Text = string.Join(Environment.NewLine, Fd2.Data.EventText.Describe(_events, scene));
+            EventText.ScrollToHome();
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or IndexOutOfRangeException or ArgumentOutOfRangeException)
+        {
+            EventText.Text = $"이 장을 읽지 못했습니다: {ex.Message}";
+        }
     }
 
     // ── 능력치 — FD2.EXE 의 아군(동료 꼴 · 성장) · 적(몬스터) 표 ────────────────────────────

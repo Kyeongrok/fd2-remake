@@ -170,6 +170,14 @@
                               HeadersVisibility="Column" FrozenColumnCount="1" CellEditEnding="OnStatCellEdit" AutoGeneratingColumn="OnStatColumn" />
                 </DockPanel>
             </TabItem>
+            <!-- 이벤트: 장마다 시작 연출 · 사건 줄 · 땅 칸 사건 · 사건 상자 · 승리 뒤 연출(SceneEvents.json 대본 + 장면 정보) -->
+            <TabItem Header="이벤트">
+                <DockPanel Margin="8">
+                    <ListBox x:Name="EventScenes" DockPanel.Dock="Left" Width="120" SelectionChanged="OnEventSceneSelected" />
+                    <TextBox x:Name="EventText" Margin="8,0,0,0" IsReadOnly="True" FontFamily="Consolas, 맑은 고딕" FontSize="13" TextWrapping="NoWrap"
+                             VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" />
+                </DockPanel>
+            </TabItem>
             <TabItem Header="배경음악">
                 <DockPanel Margin="8">
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
