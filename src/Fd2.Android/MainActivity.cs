@@ -4,10 +4,14 @@ using Android.Provider;
 using Android.Views;
 using Fd2.Data;
 
+// 원본 자료(fd2-assets 릴리즈)와 새 판 APK 를 받는다
+[assembly: UsesPermission(Android.Manifest.Permission.Internet)]
+
 namespace Fd2;
 
 /// <summary>
-/// 안드로이드 시작 화면 — 게임 파일이 앱 안에 없으면 폴더를 고르게 해(문서 트리) .DAT · .B24 를 앱 안으로 베끼고, 있으면 바로 게임.
+/// 안드로이드 시작 화면 — 게임 파일이 앱 안에 없으면 원본 자료를 받아 풀고(<see cref="DownloadOriginal"/>), 있으면 바로 게임.
+/// 다른 버전(모션패치 …)은 폴더를 골라(문서 트리) .DAT · .B24 를 앱 안으로 베낀다. 켤 때마다 새 판이 나왔는지 본다(<see cref="AppUpdate"/>).
 /// </summary>
 /// <remarks>
 /// 판(원본 · 모션패치 …)은 가져온 폴더마다 files/versions/폴더이름 에 따로 둔다. 게임의 타이틀 「판:」 줄에서 고르거나 더 가져온다.
@@ -48,7 +52,66 @@ public class MainActivity : Activity
         var versions = Versions();
         if (chosen.Length > 0 && GameFolder.Missing(chosen) == null) StartGame(chosen);
         else if (versions.Count > 0) StartGame(versions[0].Dir);
-        else ShowPicker("용의기사2 게임 폴더(FDFIELD.DAT · FIGANI.DAT 가 있는 곳)를 골라 주세요.\n고른 폴더의 .DAT · .B24 파일을 앱 안으로 복사합니다.");
+        else DownloadOriginal();
+        AppUpdate.Check(this);
+    }
+
+    /// <summary>원본 자료 묶음 — 리메이크가 읽는 .DAT · .B24 · FD2.EXE 와 수치 표 tables/*.json(GitHub 릴리즈 fd2-assets).</summary>
+    private const string OriginalUrl = "https://github.com/Kyeongrok/fd2-remake/releases/download/fd2-assets/fd2-original.zip";
+
+    /// <summary>
+    /// 가져온 버전이 하나도 없으면 원본 자료를 받아 versions/용의기사2_original 에 풀고 바로 시작한다(대항해시대3 리메이크가 음악 · 동영상을 받듯).
+    /// 못 받으면 예전처럼 폰의 게임 폴더를 고르게 한다.
+    /// </summary>
+    private void DownloadOriginal()
+    {
+        ShowPicker("용의기사2 원본 자료를 받는 중… (약 8MB)");
+        Task.Run(async () =>
+        {
+            string target = System.IO.Path.Combine(VersionsDir, "용의기사2_original"), part = target + ".part";
+            string zip = System.IO.Path.Combine(CacheDir!.AbsolutePath, "fd2-original.zip");
+            try
+            {
+                using (var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) })
+                using (var res = await http.GetAsync(OriginalUrl, HttpCompletionOption.ResponseHeadersRead))
+                {
+                    res.EnsureSuccessStatusCode();
+                    long total = res.Content.Headers.ContentLength ?? 0, got = 0;
+                    await using var input = await res.Content.ReadAsStreamAsync();
+                    await using var output = File.Create(zip);
+                    var buf = new byte[81920];
+                    int n, shown = -1;
+                    while ((n = await input.ReadAsync(buf)) > 0)
+                    {
+                        await output.WriteAsync(buf.AsMemory(0, n));
+                        got += n;
+                        int pct = total > 0 ? (int)(got * 100 / total) : -1;
+                        if (pct == shown) continue;
+                        shown = pct;
+                        string text = $"용의기사2 원본 자료를 받는 중… {(pct >= 0 ? $"{pct}%" : $"{got / 1024}KB")}";
+                        RunOnUiThread(() => _message!.Text = text);
+                    }
+                }
+                RunOnUiThread(() => _message!.Text = "푸는 중…");
+                if (Directory.Exists(part)) Directory.Delete(part, recursive: true);
+                System.IO.Compression.ZipFile.ExtractToDirectory(zip, part);
+                if (GameFolder.Missing(part) is { } missing) throw new IOException($"{missing} 이(가) 묶음에 없습니다");
+                if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
+                Directory.Move(part, target);
+                File.Delete(zip);
+                RunOnUiThread(() =>
+                {
+                    var s = Settings.Load();
+                    s.GameDir = target;
+                    s.Save();
+                    StartGame(target);
+                });
+            }
+            catch (Exception e) when (e is HttpRequestException or IOException or TaskCanceledException or InvalidDataException or UnauthorizedAccessException)
+            {
+                RunOnUiThread(() => _message!.Text = $"원본 자료를 받지 못했습니다({e.Message}).\n인터넷을 확인하고 앱을 다시 켜거나, 폰에 넣어 둔 용의기사2 게임 폴더(FDFIELD.DAT · FIGANI.DAT 가 있는 곳)를 골라 주세요.");
+            }
+        });
     }
 
     /// <summary>쓸 수 있는 판들 — 가져온 판들, 옛 game 폴더, USB 로 넣은 폴더.</summary>
