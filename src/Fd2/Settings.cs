@@ -53,8 +53,6 @@ internal sealed class Settings
     public bool TouchGoals { get; set; }
     public bool TouchHelp { get; set; }
 
-    /// <summary>폰 왼쪽 위 반투명 미니맵 — 기본 보임(사용자 요청).</summary>
-    public bool TouchMinimap { get; set; } = true;
 
     /// <summary>전투 미니맵(오른쪽 위, M 키 · 아이콘) — 기본은 접음(사용자 요청).</summary>
     public bool ShowMinimap { get; set; }

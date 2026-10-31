@@ -504,8 +504,8 @@ internal sealed partial class GameWindow
                 if (_choosingMove) return;   // 범위 밖 — 무시(취소는 Esc · 오른쪽 단추)
                 if (who == null)
                 {
-                    // 빈 칸 — 키(Enter)면 시스템 메뉴, 마우스 · 손가락은 고른 것만 푼다(시스템 메뉴는 X 키 · 폰은 「메뉴」 단추, 사용자 요청)
-                    if (_actor == null && _reach == null) { if (mx < 0) OpenSystemMenu(); }
+                    // 빈 칸 — 키(Enter)와 터치면 원작처럼 시스템 십자 메뉴(커서 칸 둘레), PC 마우스 클릭은 고른 것만 푼다(시스템 메뉴는 X 키)
+                    if (_actor == null && _reach == null) { if (mx < 0 || TouchUi) OpenSystemMenu(); }
                     else ClearSelection();
                     return;
                 }
@@ -1776,6 +1776,9 @@ internal sealed partial class GameWindow
 
     /// <summary>폰 미니맵의 자리(누르면 그곳으로 지도를 옮긴다)와 칸 크기 · 아래 끝.</summary>
     private (int X, int Y, int W, int H) _touchMini;
+
+    /// <summary>폰 미니맵이 떠 있나 — 「지도」 단추로 열고 미니맵 오른쪽 위 ✕ 로 닫는다(저장하지 않음).</summary>
+    private bool _touchMiniOpen;
     private int _touchMiniCell, _miniBottom;
 
     /// <summary>칸마다 타일 평균 색 — 미니맵 바탕(장면이 바뀌면 다시).</summary>
@@ -1801,9 +1804,9 @@ internal sealed partial class GameWindow
     private void DrawTouchMinimap()
     {
         _touchMini = default;
-        if (!_settings.TouchMinimap || _bs is BattleState.CutIn or BattleState.Talk) return;
+        if (!_touchMiniOpen || _bs is BattleState.CutIn or BattleState.Talk or BattleState.Phase) return;
         BuildMini();
-        int m = Math.Max(2, Math.Min(_clientH / 3 / _scene.Height, _clientW / 4 / _scene.Width));
+        int m = Math.Max(2, Math.Min(_clientH / 2 / _scene.Height, _clientW / 3 / _scene.Width));
         int mw = _scene.Width * m, mh = _scene.Height * m, mx = 12, my = Math.Max(12, VersionLabelBottom + 4);
         FillRect(mx - 3, my - 3, mw + 6, mh + 6, 0x80101020);
         for (int y = 0; y < _scene.Height; y++)
@@ -1819,6 +1822,18 @@ internal sealed partial class GameWindow
         FillRect(vx, vy, vw, 2, 0xFFFFFFFF); FillRect(vx, vy + vh - 2, vw, 2, 0xFFFFFFFF);
         FillRect(vx, vy, 2, vh, 0xFFFFFFFF); FillRect(vx + vw - 2, vy, 2, vh, 0xFFFFFFFF);
         (_touchMini, _touchMiniCell, _miniBottom) = ((mx, my, mw, mh), m, my + mh + 3);
+        // 오른쪽 위 닫기 ✕ — 미니맵 밖 오른쪽에 붙여 손가락으로 누르기 쉽게
+        int cs = Math.Max(24, 7 * HudZoom * 4 / 3), cx = mx + mw + 6, cy = my - 3;
+        FillRect(cx, cy, cs, cs, 0xD0602020);
+        FillRect(cx, cy, cs, 2, 0xFFFFFFFF); FillRect(cx, cy + cs - 2, cs, 2, 0xFFFFFFFF);
+        FillRect(cx, cy, 2, cs, 0xFFFFFFFF); FillRect(cx + cs - 2, cy, 2, cs, 0xFFFFFFFF);
+        int t = Math.Max(2, cs / 10);
+        for (int i = cs / 4; i < cs * 3 / 4; i++)
+        {
+            FillRect(cx + i - t / 2, cy + i - t / 2, t, t, 0xFFFFFFFF);
+            FillRect(cx + cs - 1 - i - t / 2, cy + i - t / 2, t, t, 0xFFFFFFFF);
+        }
+        _miniClose = (cx, cy, cs, cs);
     }
 
     /// <summary>폰 미니맵을 눌렀으면 그 칸이 가운데 오게 지도를 옮기고 true.</summary>
