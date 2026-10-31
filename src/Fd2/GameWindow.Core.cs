@@ -157,6 +157,7 @@ internal sealed partial class GameWindow
         _mouseMoved = true;
         if (_keysOpen || _helpOpen) { KeysWindowKey(Win32.VK_ESCAPE); return; }
         if (VersionsClick(x, y)) return;
+        if (TalkMenuClick(x, y)) return;   // 폰 — 대화 · 프롤로그 위 「메뉴」 단추와 그 메뉴
         if (_screen == Screen.Prologue) { PrologueNext(); return; }
         if (_screen == Screen.Ending) { EndingNext(); return; }
         if (_screen != Screen.Game) { TitleClick(_mouseX, _mouseY); return; }
@@ -512,6 +513,7 @@ internal sealed partial class GameWindow
         ComposeScreen();
         DrawParty();
         DrawVolume();
+        DrawTalkMenu();
         DrawVersionLabel();
     }
 

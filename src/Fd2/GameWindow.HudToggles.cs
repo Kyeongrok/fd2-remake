@@ -134,4 +134,65 @@ internal sealed partial class GameWindow
         _menuIndex = Math.Clamp(index, 0, _menu.Count - 1);
         _bs = BattleState.Menu;
     }
+
+    // ── 폰: 대화 · 프롤로그 중에도 오른쪽 위 「메뉴」 단추 — 대사 건너뛰기 · 타이틀로 · 게임 끝내기(사용자 요청) ─────────────
+
+    private bool _talkMenuOpen;
+    private (int X, int Y, int W, int H) _talkMenuIcon;
+    private readonly List<(int X, int Y, int W, int H)> _talkMenuRows = new();
+
+    /// <summary>대화 메뉴 단추를 보이는 때 — 폰에서 대사(전투 · 마을)나 프롤로그가 나오는 중.</summary>
+    private bool TalkMenuShown => TouchUi && (_screen == Screen.Prologue || _screen == Screen.Game && Talking) && !_partyOpen && !_volumeOpen && !_keysOpen;
+
+    private (string Label, Action Do)[] TalkMenuItems =>
+    [
+        ("대사 건너뛰기", () => { if (_screen == Screen.Prologue) SkipPrologue(); else EndTalk(); }),
+        ("타이틀로", ToTitle),
+        ("게임 끝내기", () => _running = false),
+        ("닫기", () => { }),
+    ];
+
+    private void DrawTalkMenu()
+    {
+        _talkMenuIcon = default;
+        _talkMenuRows.Clear();
+        if (!TalkMenuShown) { _talkMenuOpen = false; return; }
+        int fs = Math.Max(14, 7 * HudZoom);
+        _talkMenuIcon = DrawHudButton("메뉴", fs, _clientW - 14, 10);
+        if (!_talkMenuOpen) return;
+        var items = TalkMenuItems;
+        int big = fs * 4 / 3;
+        var imgs = items.Select(i => Text.Render(i.Label, big, 0xFFFFFFFF)).ToList();
+        int rowH = imgs.Max(i => i.H) + big / 2, w = imgs.Max(i => i.W) + big * 2, h = rowH * items.Length + 16;
+        int x = (_clientW - w) / 2, y = (_clientH - h) / 2;
+        FillRect(0, 0, _clientW, _clientH, 0x80000000);
+        FillRect(x, y, w, h, 0xF0182040);
+        FillRect(x, y, w, 2, 0xFF8090C0); FillRect(x, y + h - 2, w, 2, 0xFF8090C0);
+        FillRect(x, y, 2, h, 0xFF8090C0); FillRect(x + w - 2, y, 2, h, 0xFF8090C0);
+        for (int i = 0; i < items.Length; i++)
+        {
+            var r = (X: x + 8, Y: y + 8 + i * rowH, W: w - 16, H: rowH - 4);
+            FillRect(r.X, r.Y, r.W, r.H, 0xC0304070);
+            DrawText(imgs[i], x + (w - imgs[i].W) / 2, r.Y + (r.H - imgs[i].H) / 2);
+            _talkMenuRows.Add(r);
+        }
+    }
+
+    /// <summary>대화 메뉴 단추 · 줄을 눌렀으면 처리하고 true. 메뉴가 떠 있을 때 밖을 누르면 닫는다(대사는 넘기지 않는다).</summary>
+    private bool TalkMenuClick(int mx, int my)
+    {
+        if (!TalkMenuShown) return false;
+        static bool In((int X, int Y, int W, int H) r, int x, int y) => r.W > 0 && x >= r.X - 4 && y >= r.Y - 4 && x < r.X + r.W + 4 && y < r.Y + r.H + 4;
+        if (!_talkMenuOpen)
+        {
+            if (!In(_talkMenuIcon, mx, my)) return false;
+            _talkMenuOpen = true;
+            PlaySfx(Sound.UiBank, Sound.Menu);
+            return true;
+        }
+        _talkMenuOpen = false;
+        for (int i = 0; i < _talkMenuRows.Count; i++)
+            if (In(_talkMenuRows[i], mx, my)) { TalkMenuItems[i].Do(); break; }
+        return true;
+    }
 }
