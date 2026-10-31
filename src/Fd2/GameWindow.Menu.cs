@@ -16,7 +16,7 @@ internal sealed partial class GameWindow
 
     private const int MenuScenePrev = 1001, MenuSceneNext = 1002, MenuSceneBase = 1100;
     private const int MenuResBase = 1300, MenuZoomBase = 1400, MenuFullscreen = 1500, MenuResetView = 1501, MenuKeys = 1502, MenuVolume = 1503;
-    private const int MenuEditor = 1600, MenuExit = 1601, MenuHiRes = 1700, MenuShowRange = 1701, MenuMusic = 1702, MenuSound = 1703, MenuShowHelp = 1704, MenuShowGoals = 1705, MenuControlAllies = 1706, MenuMobileView = 1707, MenuBugReport = 1708;
+    private const int MenuEditor = 1600, MenuExit = 1601, MenuHiRes = 1700, MenuShowRange = 1701, MenuMusic = 1702, MenuSound = 1703, MenuShowHelp = 1704, MenuShowGoals = 1705, MenuControlAllies = 1706, MenuMobileView = 1707, MenuBugReport = 1708, MenuSettingsDialog = 1709, MenuModeDialog = 1710;
     private const int MenuBattle = 1003, MenuBattleStop = 1004, MenuVersions = 1005;
 
     private static readonly (int W, int H)[] ResChoices =
@@ -38,34 +38,9 @@ internal sealed partial class GameWindow
         Win32.AppendMenuW(bar, Win32.MF_STRING, MenuVersions, "버전 고르기(&V)...");
         Win32.AppendMenuW(bar, Win32.MF_SEPARATOR, 0, null);
 
-        IntPtr settings = Win32.CreatePopupMenu();
-        IntPtr res = Win32.CreatePopupMenu();
-        for (int i = 0; i < ResChoices.Length; i++)
-            Win32.AppendMenuW(res, Win32.MF_STRING, (nuint)(MenuResBase + i), $"{ResChoices[i].W} × {ResChoices[i].H}");
-        Win32.AppendMenuW(settings, Win32.MF_POPUP, (nuint)res, "해상도(창 크기)(&R)");
-        IntPtr zoom = Win32.CreatePopupMenu();
-        foreach (int z in ZoomChoices)
-            Win32.AppendMenuW(zoom, Win32.MF_STRING, (nuint)(MenuZoomBase + z), z == 0 ? "자동(창을 채움)" : $"{z * 100}%");
-        Win32.AppendMenuW(settings, Win32.MF_POPUP, (nuint)zoom, "배율(&Z)");
-        Win32.AppendMenuW(settings, Win32.MF_STRING, MenuFullscreen, "전체화면(&F)\tF11");
-        Win32.AppendMenuW(settings, Win32.MF_STRING, MenuMobileView, "모바일 화면으로 보기(&M)");
-        Win32.AppendMenuW(settings, Win32.MF_SEPARATOR, 0, null);
-        Win32.AppendMenuW(settings, Win32.MF_STRING, MenuShowHelp, "조작법 보기(전투 위 줄)(&H)");
-        Win32.AppendMenuW(settings, Win32.MF_STRING, MenuShowGoals, "승패 조건 보기(&G)");
-        Win32.AppendMenuW(settings, Win32.MF_STRING, MenuControlAllies, "NPC 아군도 내가 움직이기(AI 끔)(&N)");
-        Win32.AppendMenuW(settings, Win32.MF_SEPARATOR, 0, null);
-        Win32.AppendMenuW(settings, Win32.MF_STRING, MenuResetView, "화면 처음 값으로(&D)");
-        Win32.AppendMenuW(settings, Win32.MF_SEPARATOR, 0, null);
-        Win32.AppendMenuW(settings, Win32.MF_STRING, MenuKeys, "단축키 · 패드 설정(&K)...");
-        Win32.AppendMenuW(settings, Win32.MF_STRING, MenuVolume, "소리 크기(&V)...");
-        Win32.AppendMenuW(bar, Win32.MF_POPUP, (nuint)settings, "설정(&S)");
-
-        IntPtr mode = Win32.CreatePopupMenu();
-        Win32.AppendMenuW(mode, Win32.MF_STRING, MenuHiRes, "고해상도(4배, 이 PC 에서 차례로 만듦)(&H)");
-        Win32.AppendMenuW(mode, Win32.MF_STRING, MenuShowRange, "이동 · 공격 범위 보기(&R)");
-        Win32.AppendMenuW(mode, Win32.MF_STRING, MenuMusic, "배경음악(&U)");
-        Win32.AppendMenuW(mode, Win32.MF_STRING, MenuSound, "효과음(&E)");
-        Win32.AppendMenuW(bar, Win32.MF_POPUP, (nuint)mode, "모드(&M)");
+        // 설정 · 모드는 창 하나로(사용자 요청 — 창세기전3 · 대항해시대3 처럼). GameWindow.SettingsDialog.cs
+        Win32.AppendMenuW(bar, Win32.MF_STRING, MenuSettingsDialog, "설정(&S)...");
+        Win32.AppendMenuW(bar, Win32.MF_STRING, MenuModeDialog, "모드(&M)...");
 
         IntPtr tools = Win32.CreatePopupMenu();
         Win32.AppendMenuW(tools, Win32.MF_STRING, MenuEditor, "편집기 열기(&E)...");
@@ -157,6 +132,8 @@ internal sealed partial class GameWindow
                 break;
             case MenuVolume: OpenVolume(); break;
             case MenuBugReport: OpenBugReport(); break;
+            case MenuSettingsDialog: OpenSettingsDialog(); break;
+            case MenuModeDialog: OpenModeDialog(); break;
             case MenuVersions: PickVersion(); break;
             case MenuEditor: OpenEditor(); break;
             case MenuExit: _running = false; break;
