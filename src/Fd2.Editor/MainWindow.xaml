@@ -204,6 +204,7 @@
                 </DockPanel>
             </TabItem>
             <!-- 표 편집: FD2.EXE(능력치 · 아이템 · 마법 · 상점) · FDFIELD.DAT(장마다 적 배치) — 칸을 고쳐 저장(처음엔 -backup 을 남김) -->
+            <TabItem Header="초상화"><ContentControl x:Name="PortraitHost" /></TabItem>
             <TabItem Header="능력치"><ContentControl x:Name="StatsHost" /></TabItem>
             <TabItem Header="적 배치"><ContentControl x:Name="UnitsHost" /></TabItem>
             <TabItem Header="아이템"><ContentControl x:Name="ItemsHost" /></TabItem>

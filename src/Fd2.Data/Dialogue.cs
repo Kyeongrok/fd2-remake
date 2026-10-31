@@ -106,8 +106,13 @@ public static class Portrait
     {
         var frames = new List<(uint[], int, int)>();
         string path = Path.Combine(dir, "DATO.DAT");
-        if (icon < 0 || icon >= Dat.Count(path)) return frames;
-        var e = Dat.Load(path, icon);
+        // 편집기에서 바꾼 초상화(초상화\NNNN.dat)가 있으면 그것을
+        var e = icon >= 0 ? PortraitFiles.Read(icon) : null;
+        if (e == null)
+        {
+            if (icon < 0 || icon >= Dat.Count(path)) return frames;
+            e = Dat.Load(path, icon);
+        }
         if (e.Length < 8) return frames;
         int n = Dat.U32(e, 0) / 4;
         for (int i = 0; i < n; i++)

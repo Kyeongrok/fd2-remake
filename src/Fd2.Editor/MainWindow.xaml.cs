@@ -66,6 +66,7 @@ public partial class MainWindow : Window
         FillMusic();
         LoadStats();
         FillSpellMotions();
+        FillPortraits();
         int scenes = Dat.Count(System.IO.Path.Combine(dir, "FDFIELD.DAT")) / 3;
         EventScenes.ItemsSource = Enumerable.Range(0, scenes).Select(i => $"{i + 1}장").ToList();
         EventScenes.SelectedIndex = 0;
