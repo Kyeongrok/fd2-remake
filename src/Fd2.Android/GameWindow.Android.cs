@@ -11,6 +11,9 @@ internal sealed partial class GameWindow
     /// <summary>안내 글을 터치 기준으로.</summary>
     private static readonly bool TouchUi = true;
 
+    /// <summary>폰은 제목 줄이 없어 버전 이름을 화면 왼쪽 위에 그린다.</summary>
+    private static readonly bool VersionOnScreen = true;
+
     /// <summary>가져온 판들(이름, 폴더) — MainActivity 가 채운다.</summary>
     internal static Func<List<(string Name, string Dir)>>? VersionsProvider;
 

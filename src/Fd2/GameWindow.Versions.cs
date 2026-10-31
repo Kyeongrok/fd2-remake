@@ -136,8 +136,11 @@ internal sealed partial class GameWindow
     /// <summary>왼쪽 위 구석의 지금 버전 이름 — 어느 화면에서나 작게(Text.Render 가 그림을 기억한다).</summary>
     private Text.Image VersionLabel => Text.Render(VersionName, Math.Max(11, 5 * _zoom), 0xA0C8D0E0, bold: false);
 
-    private void DrawVersionLabel() => DrawText(VersionLabel, 4, 2);
+    private void DrawVersionLabel()
+    {
+        if (VersionOnScreen) DrawText(VersionLabel, 4, 2);
+    }
 
-    /// <summary>버전 이름 줄 밑 — 왼쪽 위에 놓는 창은 여기부터.</summary>
-    private int VersionLabelBottom => 2 + VersionLabel.H;
+    /// <summary>버전 이름 줄 밑 — 왼쪽 위에 놓는 창은 여기부터(이름을 화면에 안 그리면 0).</summary>
+    private int VersionLabelBottom => VersionOnScreen ? 2 + VersionLabel.H : 0;
 }

@@ -231,14 +231,18 @@ internal sealed partial class GameWindow
 
     private string _titleStatus = "";
 
-    /// <summary>고해상도를 만드는 동안 제목 끝에 지금 상태를 붙인다(바뀔 때만 고친다).</summary>
+    /// <summary>제목 줄 — 「용의기사2 — 지금 버전 이름」, 고해상도를 만드는 동안은 끝에 지금 상태를 붙인다(바뀔 때만 고친다).</summary>
     private void UpdateTitleStatus()
     {
         string st = _hires.Enabled ? _hires.Status : "";
-        if (st == _titleStatus) return;
-        _titleStatus = st;
-        SetCaption(st.Length > 0 ? $"용의기사2  · {st}" : "용의기사2");
+        string text = $"용의기사2 — {VersionName}" + (st.Length > 0 ? $"  · {st}" : "");
+        if (text == _titleStatus) return;
+        _titleStatus = text;
+        SetCaption(text);
     }
+
+    /// <summary>버전 이름을 화면 왼쪽 위에도 그리나 — 윈도우는 제목 줄에 있으니, 제목 줄이 없는 전체화면일 때만.</summary>
+    private bool VersionOnScreen => _barH <= 0;
 
     /// <summary>
     /// 게임 > 판 고르기 — 이 PC 의 용의기사2 판들(바탕화면 · 다운로드 · 문서)을 찾아 띄우고, 고르면 그 판으로 다시 켠다.
