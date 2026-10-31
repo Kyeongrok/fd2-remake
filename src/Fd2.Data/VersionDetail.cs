@@ -102,7 +102,7 @@ public static class VersionDetail
         Table(lines, "동료", ta.Heroes, tb.Heroes, i => CharacterNames.Of(i));
         Table(lines, "레벨업 성장", ta.Growths, tb.Growths, i => CharacterNames.Of(i));
         Table(lines, "몬스터", ta.Monsters, tb.Monsters, i => $"몬스터 꼴 {i}");
-        Table(lines, "물건", ta.Items, tb.Items, i => $"물건 {i}");
+        Table(lines, "아이템", ta.Items, tb.Items, i => $"아이템 {i}");
         Table(lines, "마법", ta.Spells, tb.Spells, i => SpellNames.Of(i));
         Table(lines, "직업", ta.Classes, tb.Classes, i => $"직업 {i}");
         Table(lines, "상점", ta.Shops, tb.Shops, i => $"상점 {i}");
@@ -198,7 +198,7 @@ public static class VersionDetail
         }
         return lines.Count > 0 ? lines : Generic(a, b);
 
-        static string Chest(byte[] d, int e) => d[83 + 3 * e] switch { 0 => $"물건 {Dat.U16(d, 84 + 3 * e)}", 1 => $"돈 {Dat.U16(d, 84 + 3 * e)}", var s => $"사건 {s}" };
+        static string Chest(byte[] d, int e) => d[83 + 3 * e] switch { 0 => $"아이템 {Dat.U16(d, 84 + 3 * e)}", 1 => $"돈 {Dat.U16(d, 84 + 3 * e)}", var s => $"사건 {s}" };
     }
 
     // ── FDTXT: 0 이름 표(줄마다 원본 글꼴 번호), 그 밖은 장면 대사 묶음 ────────────
@@ -221,7 +221,7 @@ public static class VersionDetail
             >= 1 and < 140 => $"캐릭터 {i - 1} 이름({CharacterNames.Of(i - 1)})",
             >= 140 and < 150 => $"종족 {i - 140}",
             >= 150 and < 181 => $"직업 {i - 150}",
-            >= 181 and < 441 => $"물건 {i - 181} 이름",
+            >= 181 and < 441 => $"아이템 {i - 181} 이름",
             >= 441 and < 597 => $"마법 {i - 441}",
             >= 597 and < 657 => $"{(i - 597) / 2 + 1}장 {((i - 597) % 2 == 0 ? "승리" : "패배")} 조건",
             _ => "그 밖의 글",

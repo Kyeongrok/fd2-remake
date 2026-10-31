@@ -99,6 +99,35 @@ public partial class MainWindow : Window
         if (VersionMenu.Items.Count == 0) VersionMenu.Items.Add(new MenuItem { Header = "(찾은 버전이 없습니다)", IsEnabled = false });
     }
 
+    // ── 메뉴에서 여는 창 — 버전 > 버전 비교 · 합치기, 에셋 > 배경음악(숨긴 탭의 내용을 따로 창으로 옮겨 띄운다) ──────
+
+    private Window? _compareWindow, _musicWindow;
+    private bool _quitting;
+
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        _quitting = true;   // 편집기를 닫으면 숨겨 둔 창들도 함께 닫힌다
+        base.OnClosing(e);
+    }
+
+    private void OnOpenCompare(object sender, RoutedEventArgs e) => ShowPanel(CompareTab, "버전 비교 · 합치기", ref _compareWindow);
+
+    private void OnOpenMusic(object sender, RoutedEventArgs e) => ShowPanel(MusicTab, "배경음악", ref _musicWindow);
+
+    private void ShowPanel(TabItem tab, string title, ref Window? window)
+    {
+        if (window == null)
+        {
+            var content = (UIElement)tab.Content;
+            tab.Content = null;
+            var w = new Window { Title = $"{title} — 용의기사2 편집기", Content = content, Owner = this, Width = 1200, Height = 760, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+            w.Closing += (_, ce) => { if (_quitting) return; ce.Cancel = true; w.Hide(); };   // 닫으면 숨겨 두고 다음에 그대로 다시 연다
+            window = w;
+        }
+        window.Show();
+        window.Activate();
+    }
+
     private void FillVersionBoxes()
     {
         var list = FindVersions();
@@ -210,101 +239,81 @@ public partial class MainWindow : Window
         }
     }
 
-    // ── 능력치 — FD2.EXE 의 아군(동료 꼴 · 성장) · 적(몬스터) 표 ────────────────────────────
+    // ── 표 편집 — 능력치(아군 · 적) · 적 배치(장마다) · 아이템 · 마법 · 상점 ─────────────────────────
+    // FD2.EXE · FDFIELD.DAT 를 통째로 읽어 두고(_exe · _field), 탭마다 TableEditor 가 칸을 바로 고친다.
 
-    private byte[]? _exe;
-    private StatTables.Table? _statTable;
+    private byte[]? _exe, _field;
+    private readonly List<TableEditor> _tableEditors = new();
+    private readonly Dictionary<int, ImageSource?> _faces = new();
 
     private void LoadStats()
     {
-        string path = System.IO.Path.Combine(_dir, "FD2.EXE");
-        _exe = System.IO.File.Exists(path) && new System.IO.FileInfo(path).Length == GameTables.ExeSize ? System.IO.File.ReadAllBytes(path) : null;
-        FillStats();
+        string exe = System.IO.Path.Combine(_dir, "FD2.EXE"), field = System.IO.Path.Combine(_dir, "FDFIELD.DAT");
+        _exe = System.IO.File.Exists(exe) && new System.IO.FileInfo(exe).Length == GameTables.ExeSize ? System.IO.File.ReadAllBytes(exe) : null;
+        _field = System.IO.File.Exists(field) ? System.IO.File.ReadAllBytes(field) : null;
+        _faces.Clear();
+        if (_tableEditors.Count == 0) BuildTableEditors();
+        foreach (var t in _tableEditors) t.Refresh();
     }
 
-    private void FillStats()
+    private static TextBlock Label(string text) => new() { Text = text, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) };
+
+    private void BuildTableEditors()
     {
-        if (_exe == null) { StatGrid.ItemsSource = null; return; }
-        _statTable = StatKind.SelectedIndex switch
-        {
-            1 => StatTables.Enemies(),
-            2 => StatTables.Items(),
-            3 => StatTables.Spells(),
-            4 => StatTables.Shops(),
-            _ => StatTables.Allies(),
-        };
-        var t = new System.Data.DataTable();
-        t.Columns.Add("이름", typeof(string)).ReadOnly = true;
-        foreach (var f in _statTable.Rows[0].Fields) t.Columns.Add(f.Name, typeof(int));
-        foreach (var (name, fields) in _statTable.Rows)
-            t.Rows.Add([name, .. fields.Select(f => (object)StatTables.Get(_exe, f))]);
-        StatGrid.ItemsSource = t.DefaultView;
+        var side = new ComboBox { Width = 260, ItemsSource = new[] { "아군 (동료 꼴 · 레벨업 성장)", "적군 (몬스터 — 능력은 레벨당 값)" }, SelectedIndex = 0 };
+        var stats = new TableEditor(this, () => side.SelectedIndex == 1 ? StatTables.Enemies() : StatTables.Allies(), () => _exe, "FD2.EXE 에 저장", SaveExe, LoadStats,
+            r => Face(side.SelectedIndex == 1 ? GameTables.MonsterBase + r : r), Label("표"), side);
+        side.SelectionChanged += (_, _) => stats.Refresh();
+        StatsHost.Content = stats;
+
+        int scenes = _field == null ? 0 : ((Dat.U32(_field, 6) - 6) / 4 - 1) / 3;   // 장면 n = FDFIELD 3n · 3n+1 · 3n+2
+        var scene = new ComboBox { Width = 120, ItemsSource = Enumerable.Range(0, scenes).Select(i => $"{i + 1}장").ToList(), SelectedIndex = 0 };
+        StatTables.Table? Units() => _field == null || scene.SelectedIndex < 0 ? null : StatTables.StageUnits(_field, scene.SelectedIndex);
+        var units = new TableEditor(this, Units, () => _field, "FDFIELD.DAT 에 저장", SaveField, LoadStats,
+            r => Units() is { } t && r < t.Rows.Count && _field != null ? Face(StatTables.Get(_field, t.Rows[r].Fields[1])) : null,
+            Label("장"), scene, Label("   편 · 그림 · 레벨 · 자리 · 등장 차례 · 장비 · 아이템(255 = 없음) · AI · 떨굼"));
+        scene.SelectionChanged += (_, _) => units.Refresh();
+        UnitsHost.Content = units;
+
+        ItemsHost.Content = new TableEditor(this, StatTables.Items, () => _exe, "FD2.EXE 에 저장", SaveExe, LoadStats);
+        SpellsHost.Content = new TableEditor(this, StatTables.Spells, () => _exe, "FD2.EXE 에 저장", SaveExe, LoadStats);
+        ShopsHost.Content = new TableEditor(this, StatTables.Shops, () => _exe, "FD2.EXE 에 저장", SaveExe, LoadStats,
+            null, Label("마을마다 무기 12 · 도구 8 · 비밀 8칸에 아이템 번호(255 = 빈 칸) — 빈 칸에 넣으면 추가, 255 로 바꾸면 삭제"));
+        _tableEditors.AddRange([stats, units, (TableEditor)ItemsHost.Content, (TableEditor)SpellsHost.Content, (TableEditor)ShopsHost.Content]);
     }
 
-    private void OnStatColumn(object? sender, DataGridAutoGeneratingColumnEventArgs e)
+    /// <summary>초상화 — DATO 얼굴 첫 장, 없으면 지도 그림.</summary>
+    private ImageSource? Face(int icon)
     {
-        // 칸 이름에 「/」 · 빈칸이 있으면 기본 묶음 길이 깨진다 — [이름] 으로 다시 묶는다
-        e.Column.Header = e.PropertyName;
-        if (e.Column is DataGridTextColumn c)
-        {
-            c.Binding = new System.Windows.Data.Binding($"[{e.PropertyName}]");
-            if (e.PropertyName != "이름") c.Width = new DataGridLength(1, DataGridLengthUnitType.Auto);
-        }
-    }
-
-    private void OnStatTableChanged(object sender, RoutedEventArgs e)
-    {
-        if (IsLoaded) FillStats();
-    }
-
-    private void OnStatCellEdit(object? sender, DataGridCellEditEndingEventArgs e)
-    {
-        if (_exe == null || _statTable == null || e.EditAction != DataGridEditAction.Commit || e.EditingElement is not TextBox box) return;
-        int row = e.Row.GetIndex(), col = e.Column.DisplayIndex - 1;
-        if (row < 0 || row >= _statTable.Rows.Count || col < 0 || col >= _statTable.Rows[row].Fields.Count) return;
-        var f = _statTable.Rows[row].Fields[col];
-        var (min, max) = StatTables.Range(f);
-        if (!int.TryParse(box.Text.Trim(), out int v) || v < min || v > max)
-        {
-            e.Cancel = true;
-            Status.Text = $"{f.Name} 은(는) {min} ~ {max} 사이 숫자여야 합니다.";
-            return;
-        }
-        StatTables.Set(_exe, f, v);
-        Status.Text = $"{_statTable.Rows[row].Name} {f.Name} = {v} — 「FD2.EXE 에 저장」을 눌러야 파일에 들어갑니다.";
-    }
-
-    private void OnStatClearRow(object sender, RoutedEventArgs e)
-    {
-        if (_exe == null || _statTable == null || StatGrid.SelectedIndex < 0 || StatGrid.SelectedIndex >= _statTable.Rows.Count) { Status.Text = "비울 줄을 먼저 고르세요."; return; }
-        var (name, fields) = _statTable.Rows[StatGrid.SelectedIndex];
-        if (MessageBox.Show(this, $"{name} 줄을 비웁니다(수치 0, 상점 칸은 빈 칸). 저장 전에는 「되돌리기」로 살릴 수 있습니다.", "줄 비우기",
-                MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
-        int row = StatGrid.SelectedIndex;
-        StatTables.Clear(_exe, fields);
-        FillStats();
-        StatGrid.SelectedIndex = row;
-        Status.Text = $"{name} 줄을 비웠습니다 — 「FD2.EXE 에 저장」을 눌러야 파일에 들어갑니다.";
-    }
-
-    private void OnStatSave(object sender, RoutedEventArgs e)
-    {
-        if (_exe == null) { Status.Text = "이 폴더의 FD2.EXE 를 읽지 못했습니다(크기가 원본과 다름)."; return; }
-        StatGrid.CommitEdit(DataGridEditingUnit.Row, true);
-        if (MessageBox.Show(this, $"{System.IO.Path.Combine(_dir, "FD2.EXE")} 에 씁니다.\n처음 한 번은 옆에 FD2-backup.EXE 로 원래 것을 남깁니다.", "능력치 저장",
-                MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
+        if (_faces.TryGetValue(icon, out var img)) return img;
         try
         {
-            StatTables.Save(_dir, _exe);
-            Status.Text = "저장했습니다 — 게임은 다시 켜면(또는 버전을 다시 고르면) 새 능력치로 돕니다.";
+            var f = Portrait.Load(_dir, icon, _pal);
+            img = f.Count > 0 && f[0].W > 0 ? ToBitmap(f[0].Px, f[0].W, f[0].H)
+                : _icons != null && icon < _icons.Characters ? ToBitmap(_icons.Frame(icon, 0), Rle.Tile, Rle.Tile) : null;
         }
+        catch (Exception e) when (e is System.IO.IOException or IndexOutOfRangeException or ArgumentOutOfRangeException) { img = null; }
+        return _faces[icon] = img;
+    }
+
+    private bool Confirm(string file) =>
+        MessageBox.Show(this, $"{System.IO.Path.Combine(_dir, file)} 에 씁니다.\n처음 한 번은 옆에 백업({System.IO.Path.GetFileNameWithoutExtension(file)}-backup{System.IO.Path.GetExtension(file)})을 남깁니다.",
+            "저장", MessageBoxButton.OKCancel, MessageBoxImage.Question) == MessageBoxResult.OK;
+
+    private void SaveExe()
+    {
+        if (_exe == null) { Status.Text = "이 폴더의 FD2.EXE 를 읽지 못했습니다(크기가 원본과 다름)."; return; }
+        if (!Confirm("FD2.EXE")) return;
+        try { StatTables.Save(_dir, _exe); Status.Text = "저장했습니다 — 게임은 다시 켜면 새 값으로 돕니다."; }
         catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException) { Status.Text = $"저장하지 못했습니다: {ex.Message}"; }
     }
 
-    private void OnStatReload(object sender, RoutedEventArgs e)
+    private void SaveField()
     {
-        LoadStats();
-        Status.Text = "FD2.EXE 에서 다시 읽었습니다(저장 안 한 고침은 버렸습니다).";
+        if (_field == null) return;
+        if (!Confirm("FDFIELD.DAT")) return;
+        try { StatTables.SaveField(_dir, _field); Status.Text = "저장했습니다 — 게임은 그 장을 새로 시작하면 바뀐 배치로 돕니다."; }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException) { Status.Text = $"저장하지 못했습니다: {ex.Message}"; }
     }
 
     // ── 모션 .obs — 버전마다 뽑아 두고, 캐릭터마다 어느 버전 것으로 돌지(MotionFiles) ──────────

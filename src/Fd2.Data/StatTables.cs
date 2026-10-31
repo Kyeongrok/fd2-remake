@@ -9,7 +9,7 @@ namespace Fd2.Data;
 public static class StatTables
 {
     /// <summary>한 칸 — 이름, 표 시작에서 떨어진 곳, 바이트 수(1 · 2), 부호.</summary>
-    public sealed record Field(string Name, int Va, int Size, bool Signed = false, int Empty = 0);
+    public sealed record Field(string Name, int Va, int Size, bool Signed = false, int Empty = 0, bool Absolute = false);
 
     /// <summary>표 하나 — 줄 이름과 줄마다의 칸들(Va 는 그 줄의 절대 주소).</summary>
     public sealed record Table(string Title, List<(string Name, List<Field> Fields)> Rows);
@@ -68,7 +68,7 @@ public static class StatTables
 
     /// <summary>물건 표(0x602AD, 23바이트) 215줄 — 0~127 무기 쪽, 128~ 옷 · 도구 쪽.</summary>
     public static Table Items() =>
-        new("물건", Enumerable.Range(0, GameTables.ItemCount).Select(i => ($"물건 {i}", Item(i))).ToList());
+        new("아이템", Enumerable.Range(0, GameTables.ItemCount).Select(i => ($"아이템 {i}", Item(i))).ToList());
 
     /// <summary>마법 표(0x619FD, 7바이트) 36줄.</summary>
     public static Table Spells() =>
@@ -92,9 +92,11 @@ public static class StatTables
 
     private static int FileOffset(int va) => va >= 0x60000 ? va + 0x19014 : va + 0x25014;
 
+    private static int At(Field f) => f.Absolute ? f.Va : FileOffset(f.Va);
+
     public static int Get(byte[] exe, Field f)
     {
-        var s = exe.AsSpan(FileOffset(f.Va));
+        var s = exe.AsSpan(At(f));
         return f.Size == 1 ? s[0] : f.Signed ? BinaryPrimitives.ReadInt16LittleEndian(s) : BinaryPrimitives.ReadUInt16LittleEndian(s);
     }
 
@@ -105,7 +107,7 @@ public static class StatTables
     {
         var (min, max) = Range(f);
         value = Math.Clamp(value, min, max);
-        var s = exe.AsSpan(FileOffset(f.Va));
+        var s = exe.AsSpan(At(f));
         if (f.Size == 1) s[0] = (byte)value;
         else if (f.Signed) BinaryPrimitives.WriteInt16LittleEndian(s, (short)value);
         else BinaryPrimitives.WriteUInt16LittleEndian(s, (ushort)value);
@@ -124,6 +126,43 @@ public static class StatTables
                 var keep = exe.AsSpan(at, count).ToArray().Where(b => b != 255).ToArray();
                 for (int i = 0; i < count; i++) exe[at + i] = i < keep.Length ? keep[i] : (byte)255;
             }
+    }
+
+    /// <summary>
+    /// 장 n 의 유닛 표(FDFIELD 3n+1 의 131 부터 26바이트씩)와 좌표(3n+2 의 2 부터 6바이트씩) — 적 · 합류하는 사람 · 컴퓨터 아군.
+    /// fdfield 는 FDFIELD.DAT 통째(칸 주소는 파일 안 절대 위치), 우리 편 자리는 빼고 그 밖의 유닛만.
+    /// </summary>
+    public static Table StageUnits(byte[] fdfield, int scene)
+    {
+        int info = Dat.U32(fdfield, 6 + 4 * (3 * scene + 1)), pos = Dat.U32(fdfield, 6 + 4 * (3 * scene + 2));
+        int infoEnd = Dat.U32(fdfield, 6 + 4 * (3 * scene + 2)), posEnd = Dat.U32(fdfield, 6 + 4 * (3 * scene + 3));
+        int others = fdfield[info + 2];
+        var rows = new List<(string, List<Field>)>();
+        for (int i = 0; i < others; i++)
+        {
+            int u = info + 131 + 26 * i, p = pos + 2 + 6 * i;
+            if (u + 26 > infoEnd || p + 4 > posEnd) break;
+            var f = new List<Field>
+            {
+                new("편", u, 1, Absolute: true), new("그림", u + 1, 1, Absolute: true), new("레벨", u + 4, 1, Absolute: true),
+                new("x", p, 2, Absolute: true), new("y", p + 2, 2, Absolute: true), new("등장 차례", u + 21, 1, Absolute: true),
+                new("무기", u + 5, 1, Absolute: true, Empty: 255), new("옷", u + 6, 1, Absolute: true, Empty: 255),
+            };
+            for (int k = 0; k < 6; k++) f.Add(new($"아이템 {k + 1}", u + 7 + k, 1, Absolute: true, Empty: 255));
+            f.AddRange([new("AI", u + 17, 1, Absolute: true), new("AI x", u + 18, 1, Absolute: true), new("AI y", u + 19, 1, Absolute: true),
+                        new("떨굼 종류", u + 22, 1, Absolute: true), new("떨굼 값", u + 23, 2, Absolute: true)]);
+            rows.Add(($"{i} {CharacterNames.Of(fdfield[u + 1])}", f));
+        }
+        return new("장 유닛", rows);
+    }
+
+    /// <summary>고친 FDFIELD.DAT 를 쓴다 — 처음 한 번은 FDFIELD-backup.DAT 를 남긴다. 크기가 바뀌지 않는 칸만 고치므로 통째로 쓴다.</summary>
+    public static void SaveField(string gameDir, byte[] fdfield)
+    {
+        string path = Path.Combine(gameDir, "FDFIELD.DAT"), backup = Path.Combine(gameDir, "FDFIELD-backup.DAT");
+        if (new FileInfo(path).Length != fdfield.Length) throw new IOException("FDFIELD.DAT 크기가 읽을 때와 달라 쓰지 않습니다.");
+        if (!File.Exists(backup)) File.Copy(path, backup);
+        File.WriteAllBytes(path, fdfield);
     }
 
     public static void Save(string gameDir, byte[] exe)

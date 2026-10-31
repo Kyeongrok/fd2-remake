@@ -23,11 +23,18 @@
         <Menu DockPanel.Dock="Top">
             <MenuItem Header="파일(_F)">
                 <MenuItem Header="게임 폴더 열기(_O)..." Click="OnOpenFolder" />
-                <MenuItem x:Name="VersionMenu" Header="버전 고르기(_V)" SubmenuOpened="OnVersionMenuOpened">
+                <Separator />
+                <MenuItem Header="끝내기(_X)" Click="OnExit" />
+            </MenuItem>
+            <MenuItem Header="버전(_V)">
+                <MenuItem x:Name="VersionMenu" Header="버전 고르기(_S)" SubmenuOpened="OnVersionMenuOpened">
                     <MenuItem Header="(찾는 중…)" IsEnabled="False" />
                 </MenuItem>
                 <Separator />
-                <MenuItem Header="끝내기(_X)" Click="OnExit" />
+                <MenuItem Header="버전 비교 · 합치기(_C)..." Click="OnOpenCompare" />
+            </MenuItem>
+            <MenuItem Header="에셋(_A)">
+                <MenuItem Header="배경음악(_M)..." Click="OnOpenMusic" />
             </MenuItem>
         </Menu>
         <StatusBar DockPanel.Dock="Bottom">
@@ -157,26 +164,12 @@
                 </DockPanel>
             </TabItem>
             <!-- 배경음악: FDMUS.DAT 의 곡들을 MIDI 로 바꿔 듣기 · 저장 -->
-            <!-- 능력치: FD2.EXE 의 동료 꼴 · 성장표(아군), 몬스터 표(적) — 칸을 고쳐 저장(처음엔 FD2-backup.EXE 를 남김) -->
-            <TabItem Header="능력치 · 물건 · 마법 · 상점">
-                <DockPanel Margin="8">
-                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
-                        <TextBlock Text="표" VerticalAlignment="Center" Margin="0,0,6,0" />
-                        <ComboBox x:Name="StatKind" Width="300" SelectionChanged="OnStatTableChanged" SelectedIndex="0">
-                            <ComboBoxItem Content="아군 (동료 꼴 · 레벨업 성장)" />
-                            <ComboBoxItem Content="적 (몬스터 — 능력은 레벨당 값)" />
-                            <ComboBoxItem Content="물건 (215개)" />
-                            <ComboBoxItem Content="마법 (36개)" />
-                            <ComboBoxItem Content="상점 (장마다 무기 · 도구 · 비밀, 255 = 빈 칸)" />
-                        </ComboBox>
-                        <Button Content="고른 줄 비우기(삭제)" Click="OnStatClearRow" Margin="12,0,0,0" Padding="10,2" />
-                        <Button Content="FD2.EXE 에 저장" Click="OnStatSave" Margin="24,0,0,0" Padding="14,2" />
-                        <Button Content="되돌리기 (파일에서 다시 읽기)" Click="OnStatReload" Margin="8,0,0,0" Padding="10,2" />
-                    </StackPanel>
-                    <DataGrid x:Name="StatGrid" AutoGenerateColumns="True" CanUserAddRows="False" CanUserDeleteRows="False" CanUserSortColumns="False"
-                              HeadersVisibility="Column" FrozenColumnCount="1" CellEditEnding="OnStatCellEdit" AutoGeneratingColumn="OnStatColumn" />
-                </DockPanel>
-            </TabItem>
+            <!-- 표 편집: FD2.EXE(능력치 · 아이템 · 마법 · 상점) · FDFIELD.DAT(장마다 적 배치) — 칸을 고쳐 저장(처음엔 -backup 을 남김) -->
+            <TabItem Header="능력치"><ContentControl x:Name="StatsHost" /></TabItem>
+            <TabItem Header="적 배치"><ContentControl x:Name="UnitsHost" /></TabItem>
+            <TabItem Header="아이템"><ContentControl x:Name="ItemsHost" /></TabItem>
+            <TabItem Header="마법"><ContentControl x:Name="SpellsHost" /></TabItem>
+            <TabItem Header="상점"><ContentControl x:Name="ShopsHost" /></TabItem>
             <!-- 이벤트: 장마다 시작 연출 · 사건 줄 · 땅 칸 사건 · 사건 상자 · 승리 뒤 연출(SceneEvents.json 대본 + 장면 정보) -->
             <TabItem Header="이벤트">
                 <DockPanel Margin="8">
@@ -185,7 +178,7 @@
                              VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" />
                 </DockPanel>
             </TabItem>
-            <TabItem Header="배경음악">
+            <TabItem x:Name="MusicTab" Header="배경음악" Visibility="Collapsed">
                 <DockPanel Margin="8">
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
                         <Button Content="▶ 듣기" Click="OnMusicPlay" Padding="14,2" />
@@ -208,7 +201,7 @@
                 </DockPanel>
             </TabItem>
             <!-- 여러 판: 기준 판과 비교 판의 다른 파일 · DAT 안 바뀐 항목, 고른 파일만 비교 판 것으로 바꿔 새 폴더로 합치기 -->
-            <TabItem Header="버전 비교 · 합치기">
+            <TabItem x:Name="CompareTab" Header="버전 비교 · 합치기" Visibility="Collapsed">
                 <DockPanel Margin="8">
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
                         <TextBlock Text="기준 버전" VerticalAlignment="Center" Margin="0,0,6,0" />

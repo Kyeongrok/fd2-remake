@@ -118,7 +118,7 @@ public static class EventText
                     "setunit" => $"{Unit(A(1))} 칸 +{A(2)} = {A(3)}",
                     "arm" => $"사건 줄 {A(1)} 을 {(op.GetArrayLength() > 2 ? A(2) : 1)}차례 뒤로 켬",
                     "flag" => $"깃발 {A(1)} 켬",
-                    "reward" => $"보상 {A(1)}: {(A(1) == 0 ? $"물건 {A(2)}" : $"{A(2)}")}",
+                    "reward" => $"보상 {A(1)}: {(A(1) == 0 ? $"아이템 {A(2)}" : $"{A(2)}")}",
                     "win" => "승리",
                     "lose" => "패배",
                     "stack" => "(원작 스택 정리)",
@@ -140,8 +140,8 @@ public static class EventText
             m => m.Value switch
             {
                 "dead" => "쓰러짐", "alive" => "살아 있음", "anyalive" => "하나라도 살아 있음", "anydead" => "하나라도 쓰러짐",
-                "inparty" => "동료에", "inroster" => "싸움터에", "hasitem" => "물건 가짐", "flag" => "깃발", "turn" => "차례",
-                "nitems" => "물건 수", "deadcount" => "쓰러진 수", _ => m.Value,
+                "inparty" => "동료에", "inroster" => "싸움터에", "hasitem" => "아이템 가짐", "flag" => "깃발", "turn" => "차례",
+                "nitems" => "아이템 수", "deadcount" => "쓰러진 수", _ => m.Value,
             }).Replace("arg0", "밟은/연 사람").Replace("&&", " 그리고 ").Replace("||", " 또는 ");
     }
 }
