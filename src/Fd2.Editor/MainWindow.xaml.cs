@@ -161,12 +161,35 @@ public partial class MainWindow : Window
         Status.Text = $"다른 파일 {rows.Count}개 — 「비교 버전 것」을 체크하고 합치면, 기준 버전에 그 파일만 바꿔 넣은 새 폴더를 만듭니다.";
     }
 
-    /// <summary>고른 파일의 상세 — 모션은 컷마다, FD2.EXE 는 수치 표 칸마다(<see cref="VersionDetail"/>).</summary>
+    /// <summary>
+    /// 고른 파일의 상세 — 갈래(지도 · 사건 줄 · 상자 · 유닛 …)마다 탭 하나, 줄마다 어디 · 무엇과 기준 값(왼쪽) · 비교 값(오른쪽)(<see cref="VersionDetail"/>).
+    /// </summary>
     private void OnDiffSelected(object sender, SelectionChangedEventArgs e)
     {
         if (DiffGrid.SelectedItem is not DiffRow row || BaseVersion.SelectedItem is not VersionItem a || OtherVersion.SelectedItem is not VersionItem b) return;
-        DiffDetail.Text = $"{row.File} — {a.Label} → {b.Label}\n\n" + string.Join("\n", VersionDetail.Describe(a.Dir, b.Dir, row.File));
-        DiffDetail.ScrollToHome();
+        var changes = VersionDetail.Describe(a.Dir, b.Dir, row.File);
+        DiffHeader.Text = $"{row.File} — 바뀐 곳 {changes.Count}개 · 왼쪽 기준 {a.Label} · 오른쪽 비교 {b.Label}";
+        DiffTabs.Items.Clear();
+        var otherCell = new Style(typeof(DataGridCell));
+        otherCell.Setters.Add(new Setter(DataGridCell.BackgroundProperty, new SolidColorBrush(Color.FromRgb(0xFF, 0xF4, 0xD6))));
+        foreach (var g in changes.GroupBy(c => c.Tab))
+        {
+            var grid = new DataGrid
+            {
+                AutoGenerateColumns = false, IsReadOnly = true, CanUserAddRows = false, HeadersVisibility = DataGridHeadersVisibility.Column,
+                ItemsSource = g.ToList(), FontSize = 13,
+            };
+            DataGridTextColumn Column(string header, string path, double star) =>
+                new() { Header = header, Binding = new System.Windows.Data.Binding(path), Width = new DataGridLength(star, DataGridLengthUnitType.Star) };
+            grid.Columns.Add(Column("어디", nameof(VersionDetail.Change.Where), 2));
+            grid.Columns.Add(Column("무엇", nameof(VersionDetail.Change.What), 1.2));
+            grid.Columns.Add(Column($"기준 — {a.Label}", nameof(VersionDetail.Change.Base), 2));
+            var other = Column($"비교 — {b.Label}", nameof(VersionDetail.Change.Other), 2);
+            other.CellStyle = otherCell;
+            grid.Columns.Add(other);
+            DiffTabs.Items.Add(new TabItem { Header = $"{g.Key} ({g.Count()})", Content = grid });
+        }
+        if (DiffTabs.Items.Count > 0) DiffTabs.SelectedIndex = 0;
     }
 
     private void OnMerge(object sender, RoutedEventArgs e)

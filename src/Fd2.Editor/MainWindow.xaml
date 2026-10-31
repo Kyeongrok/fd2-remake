@@ -266,8 +266,11 @@
                         </DataGrid.Columns>
                     </DataGrid>
                     <GridSplitter Grid.Row="1" HorizontalAlignment="Stretch" Background="#DDD" />
-                    <TextBox x:Name="DiffDetail" Grid.Row="2" IsReadOnly="True" FontFamily="Consolas, 맑은 고딕" FontSize="13" TextWrapping="NoWrap"
-                             VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Text="위에서 파일을 고르면 무엇이 다른지 자세히 보입니다(모션은 컷마다, FD2.EXE 는 수치 표 칸마다)." />
+                    <DockPanel Grid.Row="2">
+                        <TextBlock x:Name="DiffHeader" DockPanel.Dock="Top" Margin="2,6,2,6" FontSize="13" TextTrimming="CharacterEllipsis"
+                                   Text="위에서 파일을 고르면 무엇이 다른지 항목별 탭으로 보입니다 — 왼쪽은 기준 버전, 오른쪽은 비교 버전." />
+                        <TabControl x:Name="DiffTabs" />
+                    </DockPanel>
                     </Grid>
                 </DockPanel>
             </TabItem>
