@@ -44,12 +44,14 @@ internal sealed partial class GameWindow
     private (string Label, Action Do)[] TitleItems => _continueOpen
         ? [.. _continueList.Select(s => (s.Label, (Action)(() => ContinueFrom(s.Campaign)))), ("돌아가기", () => { _continueOpen = false; _titleIndex = 0; })]
         : [
-        ("Start — 게임 시작", StartGame),
-        .. ((_hasSaves ??= ContinueSlots().Count > 0) ? new (string, Action)[] { ("이어하기", () => { OpenContinue(); _titleIndex = 0; }) } : []),
-        ($"버전: {VersionName}", OpenVersions),
-        .. (TouchUi ? new (string, Action)[] { ("단축키 · 패드 설정", () => { _keysOpen = true; _keysRow = 0; _keysCapture = -1; }), ("소리 크기", OpenVolume) } : []),   // PC 는 창 메뉴 「설정」에
-        ("끝내기", () => _running = false),
+        ("Start", StartGame),
+        ("Load", () => { OpenContinue(); _titleIndex = 0; }),
+        ("Exit", () => _running = false),
+        ($"버전: {VersionName}  ▼", OpenVersions),   // 맨 끝 줄이지만 화면 맨 위(제목 그림의 파란 띠)에 그린다 — Start 에서 ↑ 하면 여기로
     ];
+
+    /// <summary>타이틀의 버전 줄 번호 — 메뉴 셋 뒤(이어하기 목록에는 없다).</summary>
+    private int TitleVersionRow => _continueOpen ? -1 : 3;
 
     private void StartOpening()
     {
@@ -302,6 +304,20 @@ internal sealed partial class GameWindow
         }
     }
 
+    /// <summary>그림을 (dx, dy) 에서 dw x dh 로 늘려 찍는다(가까운 점 — 정수 배가 아니어도).</summary>
+    private void BlitFit(uint[] px, int w, int h, int dx, int dy, int dw, int dh)
+    {
+        for (int y = Math.Max(0, dy); y < Math.Min(_fbH, dy + dh); y++)
+        {
+            int sy = (y - dy) * h / dh, row = y * _fbW;
+            for (int x = Math.Max(0, dx); x < Math.Min(_fbW, dx + dw); x++)
+            {
+                uint c = px[sy * w + (x - dx) * w / dw];
+                if (c >> 24 != 0) _fb[row + x] = c;
+            }
+        }
+    }
+
     /// <summary>320x200 그림을 창에 들어가는 가장 큰 정수 배로 가운데에.</summary>
     private (int X, int Y, int S) DrawScreen320(uint[] px)
     {
@@ -330,40 +346,45 @@ internal sealed partial class GameWindow
             return;
         }
 
-        // 제목 그림은 위쪽 3/4 안에(「LEGEND OF GOLDEN CASTLE」 띠가 160줄까지), 메뉴는 그 밑 — 원작 메뉴 글씨(164 ~ 190줄) 자리
-        int ls = Math.Max(1, Math.Min(_clientW / AfmPlayer.Width, _clientH * 3 / 4 / AfmPlayer.Height));
-        int lx = (_clientW - AfmPlayer.Width * ls) / 2, ly = Math.Max(0, _clientH / 60);
-        if (_titleBack != null) BlitScaled(_titleBack, AfmPlayer.Width, AfmPlayer.Height, lx, ly, ls, 0, 0, _clientW, _clientH);
+        // 제목 그림은 화면에 꽉 차게(비율은 그대로, 정수 배가 아니어도) — 메뉴는 그림 아래쪽 불길(원작 메뉴 글씨 164 ~ 190줄) 위에, 버전은 맨 위 파란 띠에
+        double ls = Math.Min(_clientW / (double)AfmPlayer.Width, _clientH / (double)AfmPlayer.Height);
+        int lw = (int)(AfmPlayer.Width * ls), lh = (int)(AfmPlayer.Height * ls);
+        int lx = (_clientW - lw) / 2, ly = (_clientH - lh) / 2;
+        if (_titleBack != null) BlitFit(_titleBack, AfmPlayer.Width, AfmPlayer.Height, lx, ly, lw, lh);
 
         var items = TitleItems;
-        var imgs = items.Select((it, i) => Text.Render(it.Label, fs * 5 / 4, i == _titleIndex ? 0xFFFFE070 : 0xFFFFFFFF)).ToList();
-        int rowH = imgs.Max(i => i.H) + 12, w = imgs.Max(i => i.W) + 80;
-        int x = (_clientW - w) / 2, y = Math.Min(ly + 160 * ls, _clientH - rowH * items.Length - 80);
-        if (ly + 160 * ls + rowH * items.Length + 40 > _clientH && _titleBack != null)
-        {
-            // 낮은 화면(폰) — 로고는 왼쪽 절반, 메뉴는 오른쪽 절반 가운데
-            FillRect(0, 0, _clientW, _clientH, 0xFF000000);
-            int sideLx = Math.Max(0, (_clientW / 2 - AfmPlayer.Width * ls) / 2);
-            BlitScaled(_titleBack, AfmPlayer.Width, AfmPlayer.Height, sideLx, (_clientH - AfmPlayer.Height * ls) / 2, ls, 0, 0, _clientW / 2 + AfmPlayer.Width * ls / 2, _clientH);
-            x = Math.Max(_clientW / 2, _clientW * 3 / 4 - w / 2);
-            y = Math.Max(8, (_clientH - rowH * items.Length) / 2 - 16);
-        }
-        FillRect(x, y - 10, w, rowH * items.Length + 20, 0xB0101020);
+        int vrow = TitleVersionRow;
+        var imgs = items.Select((it, i) => Text.Render(it.Label, i == vrow ? fs : fs * 3 / 2, i == _titleIndex ? 0xFFFFE070 : 0xFFFFFFFF)).ToList();
+        var menuRows = Enumerable.Range(0, items.Length).Where(i => i != vrow).ToList();
+        int rowH = menuRows.Max(i => imgs[i].H) + 14, w = menuRows.Max(i => imgs[i].W) + 120;
+        var notice = Text.Render(FanMadeNotice, Math.Max(12, fs * 3 / 4), 0xE0FFFFFF, bold: false);
+        int bottom = _clientH - notice.H - 24;
+        int x = (_clientW - w) / 2, y = Math.Max(8, Math.Min(ly + (int)(162 * ls), bottom - rowH * menuRows.Count - 10));
         _titleRects.Clear();
-        for (int i = 0; i < items.Length; i++)
+        for (int i = 0; i < items.Length; i++) _titleRects.Add(default);
+        FillRect(x, y - 10, w, rowH * menuRows.Count + 20, 0xA0101020);
+        for (int k = 0; k < menuRows.Count; k++)
         {
-            int ry = y + i * rowH;
-            _titleRects.Add((x, ry, w, rowH));
+            int i = menuRows[k], ry = y + k * rowH;
+            _titleRects[i] = (x, ry, w, rowH);
             if (i == _titleIndex)
             {
                 FillRect(x + 6, ry, w - 12, rowH - 4, 0xC0405090);
-                DrawText(Text.Render("▶", fs * 5 / 4, 0xFFFFE070), x + 16, ry + 5);
+                DrawText(Text.Render("▶", fs * 3 / 2, 0xFFFFE070), x + 20, ry + 5);
             }
             DrawText(imgs[i], x + (w - imgs[i].W) / 2, ry + 5);
         }
+        if (vrow >= 0)
+        {
+            // 버전 고르기 — 맨 위 가운데 작은 단추
+            var v = imgs[vrow];
+            int vw = v.W + 40, vh = v.H + 12, vx = (_clientW - vw) / 2, vy = Math.Max(4, ly + (int)(2 * ls));
+            _titleRects[vrow] = (vx, vy, vw, vh);
+            FillRect(vx, vy, vw, vh, vrow == _titleIndex ? 0xD0405090 : 0xA0101020);
+            DrawText(v, vx + 20, vy + 6);
+        }
 
         // 맨 아래 — 팬메이드 알림
-        var notice = Text.Render(FanMadeNotice, Math.Max(12, fs * 3 / 4), 0xE0FFFFFF, bold: false);
         FillRect(0, _clientH - notice.H - 20, _clientW, notice.H + 20, 0xA0000000);
         DrawText(notice, (_clientW - notice.W) / 2, _clientH - notice.H - 10);
     }

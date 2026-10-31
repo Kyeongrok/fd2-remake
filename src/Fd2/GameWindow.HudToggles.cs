@@ -105,6 +105,7 @@ internal sealed partial class GameWindow
         Toggle("조작법", _settings.TouchHelp, () => _settings.TouchHelp = !_settings.TouchHelp);
         _menu.Add(("파티 정보", () => { _menu.Clear(); _bs = BattleState.Select; OpenParty(); }, default));
         _menu.Add(("소리 크기", () => { _menu.Clear(); _bs = BattleState.Select; OpenVolume(); }, default));
+        _menu.Add(("단축키 · 패드 설정", () => { _menu.Clear(); _bs = BattleState.Select; _keysOpen = true; _keysRow = 0; _keysCapture = -1; }, default));   // 타이틀에서 옮김
         _menu.Add(("시스템 메뉴 (턴 끝 · 기록 · 타이틀)", OpenSystemMenu, default));
         _menu.Add(("닫기", () => { _menu.Clear(); _bs = BattleState.Select; }, default));
         _menuIndex = Math.Clamp(index, 0, _menu.Count - 1);
