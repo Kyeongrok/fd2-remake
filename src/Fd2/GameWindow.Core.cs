@@ -225,7 +225,7 @@ internal sealed partial class GameWindow
     }
 
     /// <summary>글 · 창(HUD) 크기를 정하는 배율 — 지도 배율과 따로. 폰은 두 손가락으로 지도만 키우고 글은 그대로 둔다.</summary>
-    private int HudZoom => TouchUi ? 2 : _zoom;
+    private int HudZoom => TouchUi ? 3 : _zoom;   // 폰은 메뉴 · 글을 크게(손가락으로 누르기 쉽게, 사용자 요청)
 
     private const int MinTouchZoom = 1, MaxTouchZoom = 4;
 

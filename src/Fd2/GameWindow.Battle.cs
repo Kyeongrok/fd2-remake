@@ -1562,8 +1562,15 @@ internal sealed partial class GameWindow
         var (sx, sy) = _actor is { } u ? TileScreen(u.X, u.Y) : TileScreen(_cursor.X, _cursor.Y);
         int cell = T * _zoom;
         var imgs = _menu.Select((m, i) => WithGlyphs(Text.Render(m.Label, fs, 0xFFFFFFFF), i, fs)).ToList();
+        // 줄이 많아 화면 높이를 넘으면 글을 줄인다(폰은 글이 커서 마법 · 메뉴가 길면 넘친다)
+        while (fs > 12 && (imgs.Max(i => i.H) + 12) * imgs.Count > _clientH - 8)
+        {
+            fs -= 2;
+            int f = fs;
+            imgs = _menu.Select((m, i) => WithGlyphs(Text.Render(m.Label, f, 0xFFFFFFFF), i, f)).ToList();
+        }
         int w = imgs.Max(i => i.W) + 32, rowH = imgs.Max(i => i.H) + 12;
-        int x = Math.Min(sx + cell + 6, _clientW - w - 4), y = Math.Clamp(sy, 4, _clientH - rowH * imgs.Count - 4);
+        int x = Math.Min(sx + cell + 6, _clientW - w - 4), y = Math.Max(4, Math.Min(sy, _clientH - rowH * imgs.Count - 4));
         for (int i = 0; i < _menu.Count; i++)
         {
             var rect = (x, y + i * rowH, w, rowH);
