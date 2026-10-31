@@ -119,6 +119,13 @@
                         <CheckBox x:Name="Onion" Content="앞 컷 겹쳐 보기" Margin="16,0,0,0" VerticalAlignment="Center" Checked="OnOnionChanged" Unchecked="OnOnionChanged" />
                         <CheckBox x:Name="ShowBox" Content="그림 테두리" Margin="12,0,0,0" VerticalAlignment="Center" Checked="OnOnionChanged" Unchecked="OnOnionChanged" />
                     </StackPanel>
+                    <!-- 버전마다 뽑아 둔 .obs(모션\버전\캐릭터) — 이 캐릭터는 어느 버전 모션으로 돌지 -->
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="12,0,12,8">
+                        <TextBlock Text="이 캐릭터 모션 버전" VerticalAlignment="Center" Margin="0,0,6,0" />
+                        <ComboBox x:Name="MotionVersion" Width="300" SelectionChanged="OnMotionVersionChanged" />
+                        <Button Content="모든 버전 모션 .obs 다시 뽑기" Click="OnExportMotions" Margin="12,0,0,0" Padding="10,2" />
+                        <Button Content="모션 폴더 열기" Click="OnOpenMotionFolder" Margin="6,0,0,0" Padding="10,2" />
+                    </StackPanel>
                     <Slider x:Name="FrameSlider" DockPanel.Dock="Top" Margin="12,0" Minimum="0" IsSnapToTickEnabled="True"
                             TickFrequency="1" TickPlacement="BottomRight" ValueChanged="OnFrameSlider" />
                     <TextBlock x:Name="FrameInfo" DockPanel.Dock="Top" Margin="12,6" FontFamily="Consolas" FontSize="14" />

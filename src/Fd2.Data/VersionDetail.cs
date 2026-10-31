@@ -73,7 +73,7 @@ public static class VersionDetail
     private static Motion? Parse(string path, int entry, uint[] pal)
     {
         string dir = Path.GetDirectoryName(path)!;
-        try { return entry < Dat.Count(path) ? Motion.Load(dir, entry / 3, entry % 3, pal) : null; }
+        try { return entry < Dat.Count(path) ? Motion.LoadFigani(dir, entry / 3, entry % 3, pal) : null; }
         catch (Exception e) when (e is IndexOutOfRangeException or ArgumentOutOfRangeException) { return null; }
     }
 

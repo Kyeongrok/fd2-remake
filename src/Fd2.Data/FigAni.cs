@@ -25,11 +25,16 @@ public sealed class Motion
 
     public static int Characters(string dir) => Dat.Count(Path.Combine(dir, "FIGANI.DAT")) / 3;
 
-    /// <summary>캐릭터 c 의 모션 kind(0 서기, 1 공격, 2 마법 · 특수 공격 — 17 캐릭터만 있다). 비어 있으면 null.</summary>
-    public static Motion? Load(string dir, int character, int kind, uint[] pal)
-    {
-        return Parse(Dat.Load(Path.Combine(dir, "FIGANI.DAT"), 3 * character + kind), pal);
-    }
+    /// <summary>
+    /// 캐릭터 c 의 모션 kind(0 서기, 1 공격, 2 마법 · 특수 공격 — 17 캐릭터만 있다). 비어 있으면 null.
+    /// 버전마다 뽑아 둔 .obs(<see cref="MotionFiles"/>, 캐릭터마다 고른 버전)가 있으면 그것을, 없으면 FIGANI.DAT 를.
+    /// </summary>
+    public static Motion? Load(string dir, int character, int kind, uint[] pal) =>
+        MotionFiles.Read(dir, character, kind) is { } obs ? Parse(obs, pal) : LoadFigani(dir, character, kind, pal);
+
+    /// <summary>그 폴더 FIGANI.DAT 의 모션 그대로(버전 비교처럼 .obs 고르기를 거치지 않을 때).</summary>
+    public static Motion? LoadFigani(string dir, int character, int kind, uint[] pal) =>
+        Parse(Dat.Load(Path.Combine(dir, "FIGANI.DAT"), 3 * character + kind), pal);
 
     /// <summary>FDOTHER 의 FIGANI 꼴 항목(전투 화면 마법 효과 18~44 — sub_2FF01) — 비었거나 꼴이 아니면 null.</summary>
     public static Motion? LoadOther(string dir, int entry, uint[] pal)

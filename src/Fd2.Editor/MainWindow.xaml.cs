@@ -61,6 +61,8 @@ public partial class MainWindow : Window
         _walkTimer.Start();
         Title = $"용의기사2 편집기 — {dir}";
         FillVersionBoxes();
+        foreach (var v in FindVersions()) MotionFiles.Ensure(v.Dir);   // 버전마다 .obs 가 없으면 뽑아 둔다
+        FillMotionVersions();
         FillMusic();
         Status.Text = $"캐릭터 그림 {_icons.Characters}명 · 전투 모션 {motions}명  ·  ←/→ 한 컷씩, 스페이스 재생/정지";
     }
@@ -177,7 +179,67 @@ public partial class MainWindow : Window
 
     private int MotionKind => KindStand.IsChecked == true ? 0 : 1;
 
-    private void OnMotionCharSelected(object sender, SelectionChangedEventArgs e) => LoadMotion();
+    private void OnMotionCharSelected(object sender, SelectionChangedEventArgs e)
+    {
+        ShowMotionPick();
+        LoadMotion();
+    }
+
+    // ── 모션 .obs — 버전마다 뽑아 두고, 캐릭터마다 어느 버전 것으로 돌지(MotionFiles) ──────────
+
+    private bool _pickSync;
+
+    private void FillMotionVersions()
+    {
+        _pickSync = true;
+        MotionVersion.ItemsSource = new[] { $"(지금 버전 — {MotionFiles.VersionOf(_dir)})" }.Concat(MotionFiles.Versions()).ToList();
+        _pickSync = false;
+        ShowMotionPick();
+    }
+
+    private void ShowMotionPick()
+    {
+        if (_dir == "" || MotionList.SelectedItem is not CharItem item || MotionVersion.ItemsSource is not List<string> names) return;
+        MotionFiles.Reload();
+        string pick = MotionFiles.PickFor(_dir, item.Index);
+        _pickSync = true;
+        MotionVersion.SelectedIndex = pick == MotionFiles.VersionOf(_dir) ? 0 : Math.Max(0, names.IndexOf(pick));
+        _pickSync = false;
+    }
+
+    private void OnMotionVersionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_pickSync || _dir == "" || MotionList.SelectedItem is not CharItem item || MotionVersion.SelectedItem is not string name) return;
+        try
+        {
+            MotionFiles.SetPick(item.Index, MotionVersion.SelectedIndex == 0 ? null : name);
+            Status.Text = $"{CharacterNames.Of(item.Index)} 모션 — {(MotionVersion.SelectedIndex == 0 ? "지금 버전" : name)} 것으로 돕니다(게임은 다음 장부터).";
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException) { Status.Text = $"고르기를 저장하지 못했습니다: {ex.Message}"; }
+        LoadMotion();
+    }
+
+    private void OnExportMotions(object sender, RoutedEventArgs e)
+    {
+        int files = 0, versions = 0;
+        foreach (var v in FindVersions())
+        {
+            try { files += MotionFiles.Export(v.Dir); versions++; }
+            catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException or IndexOutOfRangeException or ArgumentOutOfRangeException)
+            {
+                Status.Text = $"{v.Label} 을(를) 뽑지 못했습니다: {ex.Message}";
+            }
+        }
+        FillMotionVersions();
+        LoadMotion();
+        Status.Text = $"버전 {versions}개에서 모션 .obs {files}개를 뽑았습니다 — {MotionFiles.Root}";
+    }
+
+    private void OnOpenMotionFolder(object sender, RoutedEventArgs e)
+    {
+        System.IO.Directory.CreateDirectory(MotionFiles.Root);
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", MotionFiles.Root) { UseShellExecute = true });
+    }
 
     private void OnKindChanged(object sender, RoutedEventArgs e)
     {

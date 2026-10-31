@@ -273,6 +273,9 @@ internal sealed partial class GameWindow
     {
         _bs = BattleState.None;
         ClearSelection();
+        MotionFiles.Reload();   // 편집기에서 캐릭터 모션 버전을 바꿨으면 장마다 새로
+        _motions.Clear();
+        _stands.Clear();
         _scene = new Scene(_dir, index, _pal, _icons, party);
         _backdrop = Backdrop.For(_dir, index, _pal);
         _battle = new Battle(_scene, _tables);
