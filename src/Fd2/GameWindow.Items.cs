@@ -90,15 +90,15 @@ internal sealed partial class GameWindow
         return mode switch
         {
             ItemMode.Use => UsableItem(it) && ItemCenters(u, it).Count > 0,
-            ItemMode.Equip => it.Kind < 32 && !equipped && CanEquip(u, it),
-            _ => !equipped,
+            ItemMode.Equip => it.Kind < 32 && (!equipped && CanEquip(u, it) || equipped && _settings.SharedBag),   // 공통 가방이면 입은 것을 벗는다
+            _ => !equipped || _settings.SharedBag,   // 공통 가방이면 입은 것도 건네고 버린다(벗기고)
         };
     }
 
     /// <summary>
-    /// 공통 가방(모드) — 싸움터의 다른 우리 편(살아 있는) 가방에 든 소모품(장비 안 한 것). 「사용」 목록의 제 가방 아래에 붙는다.
+    /// 공통 가방(모드) — 싸움터의 다른 우리 편(살아 있는) 가방에 든 것 중 장비 안 한 것. 「사용」 목록엔 소모품, 「장비」 목록엔 이 사람이 입을 수 있는 무기 · 옷(벗어 둔 것)이 제 가방 아래에 붙는다.
     /// </summary>
-    private List<(Unit Owner, int Slot)> SharedItems(Unit u)
+    private List<(Unit Owner, int Slot)> SharedItems(Unit u, ItemMode mode = ItemMode.Use)
     {
         var list = new List<(Unit, int)>();
         if (!_settings.SharedBag || _tables == null || !InBattle) return list;
@@ -107,7 +107,8 @@ internal sealed partial class GameWindow
             {
                 var (id, equipped) = o.Bag[k];
                 var it = _tables.Items[id];
-                if (!equipped && it.Kind >= 32 && UsableItem(it) && ConsumedItem(it.Use)) list.Add((o, k));
+                if (equipped) continue;
+                if (mode == ItemMode.Use ? it.Kind >= 32 && UsableItem(it) && ConsumedItem(it.Use) : it.Kind < 32 && CanEquip(u, it)) list.Add((o, k));
             }
         return list;
     }
@@ -117,11 +118,12 @@ internal sealed partial class GameWindow
 
     /// <summary>공통 가방 줄을 지금 쓸 수 있나 — 쓰는 사람 가방에 자리가 있고 범위 안에 대상이 있어야.</summary>
     private bool SharedRowEnabled(Unit u, (Unit Owner, int Slot) row) =>
-        _tables != null && u.Bag.Count < 8 && row.Slot < row.Owner.Bag.Count && ItemCenters(u, _tables.Items[row.Owner.Bag[row.Slot].Item]).Count > 0;
+        _tables != null && u.Bag.Count < 8 && row.Slot < row.Owner.Bag.Count
+        && (_itemMode == ItemMode.Equip || ItemCenters(u, _tables.Items[row.Owner.Bag[row.Slot].Item]).Count > 0);
 
     private void OpenItemPick(Unit u, ItemMode mode)
     {
-        _sharedRows = mode == ItemMode.Use ? SharedItems(u) : new();
+        _sharedRows = mode is ItemMode.Use or ItemMode.Equip ? SharedItems(u, mode) : new();
         if (u.Bag.Count == 0 && _sharedRows.Count == 0) { OpenItemCross(u); return; }
         PlaySfx(Sound.UiBank, Sound.Menu);
         _itemMode = mode;
@@ -137,6 +139,12 @@ internal sealed partial class GameWindow
                 switch (mode)
                 {
                     case ItemMode.Use: BeginItemTarget(u, slot, _itemFrom); break;
+                    case ItemMode.Equip when u.Bag[slot].Equipped:
+                        // 벗기 — 제 가방에 남아 공통 가방(누구나 「장비」 · 건네주기)에 든다
+                        u.Bag[slot] = (u.Bag[slot].Item, false);
+                        _battle.Recompute(u);
+                        OpenItemPick(u, mode);
+                        break;
                     case ItemMode.Equip: Equip(u, slot); OpenItemPick(u, mode); break;
                     case ItemMode.Drop:
                         AskBox(-1, u.Icon, () => { u.Bag.RemoveAt(slot); _battle.Recompute(u); OpenItemPick(u, mode); }, () => OpenItemPick(u, mode));
@@ -153,7 +161,7 @@ internal sealed partial class GameWindow
                 }
             }, default));
         }
-        // 공통 가방 — 고르면 그 물건을 쓰는 사람 가방으로 옮겨 와 쓴다(쓰면 없어지는 소모품만)
+        // 공통 가방 — 고르면 그 물건을 이 사람 가방으로 옮겨 와 쓴다(소모품) · 입는다(무기 · 옷)
         foreach (var row in _sharedRows)
         {
             var r = row;
@@ -165,7 +173,8 @@ internal sealed partial class GameWindow
                 u.Bag.Add((item, false));
                 _battle.Recompute(r.Owner);
                 _battle.Recompute(u);
-                BeginItemTarget(u, u.Bag.Count - 1, _itemFrom);
+                if (mode == ItemMode.Equip) { Equip(u, u.Bag.Count - 1); OpenItemPick(u, mode); }
+                else BeginItemTarget(u, u.Bag.Count - 1, _itemFrom);
             }, default));
         }
         int first = Enumerable.Range(0, u.Bag.Count).Where(i => ItemRowEnabled(u, i, mode)).DefaultIfEmpty(-1).First();
@@ -179,7 +188,7 @@ internal sealed partial class GameWindow
     {
         _pendingGive = -1;
         _attackTiles.Clear();
-        if (_scene.UnitAt(at.X, at.Y) is { Team: 2 } to && to != u && to.Bag.Count < 8 && slot < u.Bag.Count && !u.Bag[slot].Equipped)
+        if (_scene.UnitAt(at.X, at.Y) is { Team: 2 } to && to != u && to.Bag.Count < 8 && slot < u.Bag.Count && (!u.Bag[slot].Equipped || _settings.SharedBag))
         {
             to.Bag.Add((u.Bag[slot].Item, false));
             u.Bag.RemoveAt(slot);
@@ -206,7 +215,7 @@ internal sealed partial class GameWindow
             faceW = Math.Max(16, _clientW / 4 - 8);
             faceH = faces[0].H * faceW / Math.Max(1, faces[0].W);
         }
-        int rows = u.Bag.Count + (_itemMode == ItemMode.Use ? _sharedRows.Count : 0);
+        int rows = u.Bag.Count + (_itemMode is ItemMode.Use or ItemMode.Equip ? _sharedRows.Count : 0);
         int topH = Math.Max(faceH + 16, lineH * 5 + 16), listH = lineH * Math.Max(4, rows) + 24 + (rows >= 4 ? lineH * 2 / 3 : 0);   // 줄이 차면 아래 「사용」 글 자리를 더
         if (topH + listH + 16 > _clientH) listH = Math.Max(lineH * 4 + 24, _clientH - topH - 16);   // 공통 가방 줄이 많으면 넘치는 줄은 잘린다
         int y0 = Math.Max(8, (_clientH - topH - listH - 8) / 2);
@@ -291,7 +300,7 @@ internal sealed partial class GameWindow
             _menu[i] = (_menu[i].Label, _menu[i].Do, rect);
         }
         // 공통 가방 줄 — 「공통」 표시와 가진 사람 이름
-        for (int j = 0; _itemMode == ItemMode.Use && j < _sharedRows.Count && u.Bag.Count + j < _menu.Count; j++)
+        for (int j = 0; _itemMode is ItemMode.Use or ItemMode.Equip && j < _sharedRows.Count && u.Bag.Count + j < _menu.Count; j++)
         {
             int i = u.Bag.Count + j;
             var (owner, slot) = _sharedRows[j];
@@ -309,7 +318,8 @@ internal sealed partial class GameWindow
             int ix = x0 + 16 + tag.W + 12;
             var nm = NameImage(181 + id, g, on ? 0xFFB8C8FF : 0xFF6878A0) ?? T(GameNames.Item(id), on ? 0xFFB8C8FF : 0xFF6878A0);
             DrawText(nm, ix, ry + (lineH - 4 - nm.H) / 2);
-            string eff = it.Use is 5 or 13 ? $"+HP {it.UseValue:000}" : it.Use == 11 ? $"+MP {it.UseValue:000}" : "";
+            string eff = id < 128 && it.Kind < 32 && it.Atk > 0 ? $"+AP {it.Atk:000}" : id >= 128 && it.Kind < 32 && it.Def > 0 ? $"+DP {it.Def:000}"
+                       : it.Use is 5 or 13 ? $"+HP {it.UseValue:000}" : it.Use == 11 ? $"+MP {it.UseValue:000}" : "";
             if (eff.Length > 0) { var e = T(eff, on ? 0xFFC8F0B0 : 0xFF607060); DrawText(e, Math.Max(x0 + W * 2 / 5, ix + nm.W + 8), ry + (lineH - 4 - e.H) / 2); }   // 이름이 길면(세로 화면) 그 뒤에
             var who = NameImage(Battle.NameLine(owner), Math.Max(1, g * 3 / 4), 0xFF9098B8) ?? T(CharacterNames.Of(owner.Icon).Split('-')[0], 0xFF9098B8);
             DrawText(who, x0 + W - who.W - 24, ry + (lineH - 4 - who.H) / 2);

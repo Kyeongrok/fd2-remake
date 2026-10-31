@@ -1309,9 +1309,9 @@ internal sealed partial class GameWindow
         _strikeTail = 0;
         _strikeDamage = -1;
         _strikeMiss = _strikeCrit = false;
-        if (_strikeOnMap)
+        if (_strikeOnMap || _settings.SkipEnemyFights && _enemyPhase)
         {
-            // 지도 위 마법 — 원작처럼 전투 화면 없이 그 자리에서 셈하고 알림만
+            // 지도 위 마법 · 적 공격 장면 건너뛰기(모드) — 원작처럼 전투 화면 없이 그 자리에서 셈하고 알림만
             ResolveStrike();
             var d = _strike.D;
             if (_strikeMiss) _strikeNotes.Add(new Notice(" 빗나감", Battle.NameLine(d)));
@@ -1935,14 +1935,30 @@ internal sealed partial class GameWindow
         var (sx, sy) = _stage == MenuStage.System ? TileScreen(_sysAt.X, _sysAt.Y) : TileScreen(_actor!.X, _actor.Y);
         if (_buttons is not { Count: > 3 * 15 + 2 } bank) { DrawTextCross(sx, sy); return; }
 
-        int s = _zoom, blink = (int)(_time * 18.2 / 4) & 1;
+        int z = _zoom, blink = (int)(_time * 18.2 / 4) & 1;
+        // 폰은 단추를 크게(사용자 요청) — 칸 가운데를 두고 벌려 놓고, 화면 밖으로 나가면 안으로 민다
+        int s = TouchUi ? Math.Max(z * 3 / 2, Math.Min(_clientW, _clientH) / 150) : z;
+        int cx = sx + 12 * z, cy = sy + 12 * z;
         var slots = sys
             ? new[] { (Dir.Up, _sysButtons[0], 0, -20), (Dir.Left, _sysButtons[1], -24, 2), (Dir.Right, _sysButtons[2], 24, 2), (Dir.Down, _sysButtons[3], 0, 24) }
             : new[] { (Dir.Up, Buttons.Attack, 0, -20), (Dir.Left, Buttons.Magic, -24, 2), (Dir.Right, Buttons.Item, 24, 2), (Dir.Down, Buttons.Rest, 0, 24) };
+        int shiftX = 0, shiftY = 0;
+        if (s != z)
+        {
+            int x0 = int.MaxValue, y0 = int.MaxValue, x1 = int.MinValue, y1 = int.MinValue;
+            foreach (var (_, button, ox, oy) in slots)
+            {
+                var (_, bw, bh) = bank.Frame(button, red: false);
+                int bx = cx + (ox - 12) * s, by = cy + (oy - 12) * s;
+                (x0, y0, x1, y1) = (Math.Min(x0, bx), Math.Min(y0, by), Math.Max(x1, bx + bw * s), Math.Max(y1, by + bh * s));
+            }
+            shiftX = x0 < 4 ? 4 - x0 : x1 > _clientW - 4 ? _clientW - 4 - x1 : 0;
+            shiftY = y0 < 4 ? 4 - y0 : y1 > _clientH - 4 ? _clientH - 4 - y1 : 0;
+        }
         foreach (var (dir, button, ox, oy) in slots)
         {
             int i = _menu.FindIndex(m => SlotOf(m.Label) == dir);
-            int x = sx + ox * s, y = sy + oy * s;
+            int x = s == z ? sx + ox * s : cx + (ox - 12) * s + shiftX, y = s == z ? sy + oy * s : cy + (oy - 12) * s + shiftY;
             if (i < 0)
             {
                 var (rp, rw, rh) = bank.Frame(button, red: true);

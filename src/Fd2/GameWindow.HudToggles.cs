@@ -9,14 +9,16 @@ namespace Fd2;
 /// </summary>
 internal sealed partial class GameWindow
 {
-    private (int X, int Y, int W, int H) _miniFold, _chestFold, _escIcon, _menuIcon, _mapIcon, _partyIcon, _readyIcon;
+    private (int X, int Y, int W, int H) _miniFold, _chestFold, _escIcon, _menuIcon, _mapIcon, _partyIcon, _readyIcon, _escIcon2;
+
+    private static string EscSpotName(int spot) => spot switch { 0 => "오른쪽 위", 1 => "오른쪽 아래", 3 => "왼쪽 아래", _ => "위 · 오른쪽 아래" };
 
     /// <summary>오른쪽 위 줄의 아래 끝 — 미니맵 패널을 그 밑에 놓는다(폰은 ESC 단추 밑).</summary>
     private int _hudIconBottom = 12;
 
     private void DrawHudToggles(int fs)
     {
-        _miniFold = _chestFold = _escIcon = _menuIcon = _mapIcon = _partyIcon = _readyIcon = default;
+        _miniFold = _chestFold = _escIcon = _menuIcon = _mapIcon = _partyIcon = _readyIcon = _escIcon2 = default;
         _hudIconBottom = 12;
         if (_bs is BattleState.CutIn or BattleState.Talk) return;
         if (TouchUi) DrawTouchButtons(fs);
@@ -36,13 +38,13 @@ internal sealed partial class GameWindow
 
     /// <summary>그 자리가 접기 단추 · ESC 단추인가 — 단추 누르기는 지도 끌기로 받지 않는다.</summary>
     private bool HudHit(int mx, int my) =>
-        new[] { _miniFold, _chestFold, _escIcon, _menuIcon, _mapIcon, _partyIcon, _readyIcon, _touchMini }.Any(r => r.W > 0 && mx >= r.X - 4 && my >= r.Y - 4 && mx < r.X + r.W + 4 && my < r.Y + r.H + 4);
+        new[] { _miniFold, _chestFold, _escIcon, _escIcon2, _menuIcon, _mapIcon, _partyIcon, _readyIcon, _touchMini }.Any(r => r.W > 0 && mx >= r.X - 4 && my >= r.Y - 4 && mx < r.X + r.W + 4 && my < r.Y + r.H + 4);
 
     /// <summary>단추를 눌렀으면 그 패널을 접고 펴고(ESC 는 원작 Esc, 메뉴는 모바일 메뉴) true.</summary>
     private bool HudToggleClick(int mx, int my)
     {
         static bool In((int X, int Y, int W, int H) r, int x, int y) => r.W > 0 && x >= r.X - 4 && y >= r.Y - 4 && x < r.X + r.W + 4 && y < r.Y + r.H + 4;
-        if (In(_escIcon, mx, my)) { _mouseMoved = false; PlaySfx(Sound.UiBank, Sound.Cursor); BattleKey(Win32.VK_ESCAPE); return true; }
+        if (In(_escIcon, mx, my) || In(_escIcon2, mx, my)) { _mouseMoved = false; PlaySfx(Sound.UiBank, Sound.Cursor); BattleKey(Win32.VK_ESCAPE); return true; }
         if (In(_menuIcon, mx, my)) { OpenTouchMenu(); return true; }
         if (In(_readyIcon, mx, my)) { CursorToNextReady(); PlaySfx(Sound.UiBank, Sound.Cursor); return true; }
         if (In(_partyIcon, mx, my)) { PlaySfx(Sound.UiBank, Sound.Menu); OpenParty(); return true; }
@@ -66,11 +68,20 @@ internal sealed partial class GameWindow
     private void DrawTouchButtons(int fs)
     {
         int right = _clientW - 14, y = 10, bottom = 0;
-        if (CanTouchEsc)
+        int spot = _settings.EscSpot;
+        if (CanTouchEsc && spot is 0 or 2)
         {
             _escIcon = DrawHudButton("ESC", fs, right, y);
             right = _escIcon.X - 10;
             bottom = _escIcon.Y + _escIcon.H;
+        }
+        if (CanTouchEsc && spot is 1 or 2 or 3)
+        {
+            // 아래 ESC — 엄지가 닿는 자리에 크게(자주 쓰는 단추, 사용자 요청)
+            int big = fs * 3 / 2;
+            var label = Text.Render("ESC", big, 0xFFFFFFFF);
+            int w = label.W + big / 2 * 2, h = label.H + big / 2;
+            _escIcon2 = DrawHudButton("ESC", big, spot == 3 ? 14 + w : _clientW - 14, _clientH - h - 14);   // 3 은 왼쪽 아래
         }
         if (CanOpenTouchMenu)
         {
@@ -154,6 +165,18 @@ internal sealed partial class GameWindow
                 _menu.Add(($"공통 가방  [{(_settings.SharedBag ? "켬" : "끔")}]", () =>
                 {
                     _settings.SharedBag = !_settings.SharedBag;
+                    _settings.Save();
+                    OpenTouchMenu(_menuIndex, 2);
+                }, default));
+                _menu.Add(($"적 공격 장면  [{(_settings.SkipEnemyFights ? "건너뛰기" : "보기")}]", () =>
+                {
+                    _settings.SkipEnemyFights = !_settings.SkipEnemyFights;
+                    _settings.Save();
+                    OpenTouchMenu(_menuIndex, 2);
+                }, default));
+                _menu.Add(($"ESC 단추 자리  [{EscSpotName(_settings.EscSpot)}]", () =>
+                {
+                    _settings.EscSpot = (_settings.EscSpot + 1) % 4;   // 누를 때마다 다음 자리
                     _settings.Save();
                     OpenTouchMenu(_menuIndex, 2);
                 }, default));

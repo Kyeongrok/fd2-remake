@@ -147,6 +147,7 @@ internal sealed partial class GameWindow
             f.Controls.Add(Toggle("이동 · 공격 범위 보기", _settings.ShowRange, MenuShowRange));
             f.Controls.Add(Toggle("사람 정보 창(전투 왼쪽 아래 — 이름 · HP · 능력치)", _settings.ShowUnitInfo, MenuShowUnitInfo));
             f.Controls.Add(Toggle("공통 가방(우리 편 소모품을 누구나 사용)", _settings.SharedBag, MenuSharedBag));
+            f.Controls.Add(Toggle("적 공격은 전투 장면 건너뛰기(지도에서 결과만)", _settings.SkipEnemyFights, MenuSkipEnemyFights));
             f.Controls.Add(Choice("마법 속도", SpellSpeeds.Select(SpellSpeedName).ToArray(), Array.IndexOf(SpellSpeeds, _settings.SpellSpeed),
                 i => { _settings.SpellSpeed = SpellSpeeds[i]; _settings.Save(); }));
             f.Controls.Add(Heading("소리"));
