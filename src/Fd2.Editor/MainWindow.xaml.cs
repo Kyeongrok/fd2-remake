@@ -235,7 +235,7 @@ public partial class MainWindow : Window
 
     // ── 전투 모션 ───────────────────────────────────────────────────────────
 
-    private int MotionKind => KindStand.IsChecked == true ? 0 : 1;
+    private int MotionKind => KindStand.IsChecked == true ? 0 : KindMagic.IsChecked == true ? 2 : 1;
 
     private void OnMotionCharSelected(object sender, SelectionChangedEventArgs e)
     {
