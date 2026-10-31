@@ -139,23 +139,42 @@ internal sealed partial class GameWindow
     {
         if (!Talking) return;
         var page = _talk[_talkPage];
-        int g = Math.Max(2, _zoom);                     // 글자 한 점의 크기(화면 점)
-        int glyph = Font16.Size * g, lineH = glyph + g * 4;
-        int faceS = Math.Max(2, _zoom);
         var faces = page.Speaker >= 0 ? Face(page.Speaker) : null;
-        int faceW = faces is { Count: > 0 } ? faces[0].W * faceS : 0, faceH = faces is { Count: > 0 } ? faces[0].H * faceS : 0;
+        string name = page.Name ?? (page.Speaker >= 0 ? CharacterNames.Of(page.Speaker).Split('-')[0] : "");   // 「사울-검사」에서 직업을 떼고
 
-        int boxW = Math.Min(_clientW - 40, Math.Max(faceW + glyph * 16 + 80, _clientW * 2 / 3));
-        int boxH = Math.Max(faceH + 40, lineH * 3 + 70);
-
-        // 보통 글(프롤로그) — 얼굴 옆 남는 폭에 맞춰 줄을 나누고, 줄이 많으면 창을 키운다
-        int textSize = Math.Max(14, glyph * 5 / 8), textLineH = textSize * 3 / 2;
+        // 글자 · 얼굴 배율 — 큰 것부터 줄여 창이 화면 안에 들어가는 첫 배율(폰처럼 낮은 화면에서 글이 창 밖으로 넘치지 않게)
+        int g = 0, glyph = 0, lineH = 0, faceS = 0, faceW = 0, faceH = 0, boxW = 0, boxH = 0, textSize = 0, textLineH = 0;
         List<string>? textLines = null;
-        if (page.Text != null)
+        for (g = Math.Max(2, _zoom); g >= 1; g--)
         {
-            textLines = Wrap(page.Text, textSize, boxW - faceW - 24 * 3);
-            boxH = Math.Max(boxH, textLines.Count * textLineH + textSize * 2 + 50);
+            glyph = Font16.Size * g;
+            lineH = glyph + g * 4;
+            faceS = g;
+            faceW = faces is { Count: > 0 } ? faces[0].W * faceS : 0;
+            faceH = faces is { Count: > 0 } ? faces[0].H * faceS : 0;
+            boxW = Math.Min(_clientW - 40, Math.Max(faceW + glyph * 16 + 80, _clientW * 2 / 3));
+            boxH = Math.Max(faceH + 40, lineH * 3 + 70);
+
+            // 보통 글(프롤로그) — 얼굴 옆 남는 폭에 맞춰 줄을 나누고, 줄이 많으면 창을 키운다
+            textSize = Math.Max(14, glyph * 5 / 8);
+            textLineH = textSize * 3 / 2;
+            textLines = null;
+            if (page.Text != null)
+            {
+                textLines = Wrap(page.Text, textSize, boxW - faceW - 24 * 3);
+                boxH = Math.Max(boxH, textLines.Count * textLineH + textSize * 2 + 50);
+            }
+            else
+            {
+                // 원작 글꼴 대사 — 다시 나눈 줄 수만큼 창을 키운다
+                int nameH = name.Length > 0 ? Text.Render(name, Math.Max(14, glyph * 3 / 4), 0xFFFFE070).H + 8 : 0;
+                int textW = faceW == 0 ? boxW - 48 : boxW - faceW - (page.Right ? 72 : 68);   // 아래 그리기의 글 자리와 같게
+                boxH = Math.Max(boxH, 16 + nameH + Reflow(page, Math.Max(8, textW / glyph)).Count * lineH + 20);
+            }
+            if (boxH <= _clientH - 32) break;
         }
+        g = Math.Max(1, g);
+
         // 원작처럼 오른쪽에 얼굴이 나오는 사람(FFEF · FFED)은 창을 위에, 왼쪽(FFEE · FFEC)은 아래에
         int bx = (_clientW - boxW) / 2, by = page.Right ? 16 : _clientH - boxH - 16;
         // 바탕은 얼굴 그림(DATO)의 바탕색 #28458A 과 같게 — 얼굴이 창에 붙어 보이도록. 테두리는 네 변 모두
@@ -175,8 +194,6 @@ internal sealed partial class GameWindow
             BlitFrame(f.Px, f.W, f.H, faceX, by + (boxH - faceH) / 2, faceS, false, 0, 0, (0, 0, _clientW, _clientH));
         }
 
-        // 이름 — 「사울-검사」에서 직업을 떼고
-        string name = page.Name ?? (page.Speaker >= 0 ? CharacterNames.Of(page.Speaker).Split('-')[0] : "");
         int ty = by + 16;
         if (name.Length > 0)
         {

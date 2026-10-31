@@ -17,7 +17,7 @@ namespace Fd2;
 /// </remarks>
 public sealed class GameView : SurfaceView, ISurfaceHolderCallback
 {
-    private const int FrameW = 640;
+    private const int FrameW = 960;   // 지도는 2배로(Layout — 터치판) 그려 가로 20칸쯤 · 캐릭터 둘레가 크게 보인다
     private const double LongPress = 0.5;
 
     private readonly Activity _activity;
@@ -61,6 +61,9 @@ public sealed class GameView : SurfaceView, ISurfaceHolderCallback
         _alive = false;
         _thread?.Join(1000);
     }
+
+    /// <summary>앱이 뒤로 가거나 돌아올 때 — 배경음악을 멈추고 잇는다.</summary>
+    public void Background(bool away) => _game?.Background(away);
 
     /// <summary>게임 — 화면(Surface)이 다시 만들어져도(앱이 잠깐 뒤로 갔다 와도) 이어서 쓴다.</summary>
     private GameWindow? _game;

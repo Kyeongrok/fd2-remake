@@ -57,6 +57,17 @@ internal sealed partial class GameWindow
         catch (Exception) { StopMusic(); }   // 소리가 안 나도 게임은 계속
     }
 
+    /// <summary>앱이 뒤로 가면 배경음악을 멈추고, 돌아오면 이어서 — MainActivity.OnPause · OnResume.</summary>
+    internal void Background(bool away)
+    {
+        try
+        {
+            if (away) { if (_player?.IsPlaying == true) _player.Pause(); }
+            else if (_settings.Music) _player?.Start();
+        }
+        catch (Java.Lang.IllegalStateException) { }
+    }
+
     partial void StopMusic()
     {
         try { _player?.Stop(); } catch (Java.Lang.IllegalStateException) { }

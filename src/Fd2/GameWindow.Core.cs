@@ -223,6 +223,7 @@ internal sealed partial class GameWindow
     private void Layout()
     {
         int auto = Math.Max(1, Math.Min(_clientW / BaseW, _clientH / BaseH));
+        if (TouchUi) auto = Math.Max(auto, 2);   // 폰은 화면이 낮아 1배면 지도가 작다 — 2배로 키워 사람 둘레를 보이고 카메라가 따라간다
         _zoom = _settings.Zoom > 0 ? _settings.Zoom : auto;
         int bw = Math.Max(1, _clientW / _zoom), bh = Math.Max(1, _clientH / _zoom);
         _offX = (_clientW - bw * _zoom) / 2;

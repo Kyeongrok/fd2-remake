@@ -242,6 +242,18 @@ public partial class MainActivity : Activity
     public override bool OnKeyDown(Keycode keyCode, KeyEvent? e) => _view?.Key(keyCode, true) == true || base.OnKeyDown(keyCode, e);
     public override bool OnKeyUp(Keycode keyCode, KeyEvent? e) => _view?.Key(keyCode, false) == true || base.OnKeyUp(keyCode, e);
 
+    protected override void OnPause()
+    {
+        base.OnPause();
+        _view?.Background(true);
+    }
+
+    protected override void OnResume()
+    {
+        base.OnResume();
+        _view?.Background(false);
+    }
+
     public override void OnWindowFocusChanged(bool hasFocus)
     {
         base.OnWindowFocusChanged(hasFocus);

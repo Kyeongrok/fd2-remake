@@ -29,8 +29,8 @@ internal sealed class Settings
     /// <summary>모드 > 이동 · 공격 범위 보기 — 전투 밖에서도 고른 사람의 이동(파랑) · 공격(빨강) 범위를 보인다.</summary>
     public bool ShowRange { get; set; } = true;
 
-    /// <summary>전투 미니맵(오른쪽 위, M 키).</summary>
-    public bool ShowMinimap { get; set; } = true;
+    /// <summary>전투 미니맵(오른쪽 위, M 키 · 아이콘) — 기본은 접음(사용자 요청).</summary>
+    public bool ShowMinimap { get; set; }
 
     /// <summary>안 연 보물상자 목록(왼쪽 위, T 키) — 창세기전3 처럼 상자마다 든 것을 보인다.</summary>
     public bool ShowChests { get; set; } = true;
