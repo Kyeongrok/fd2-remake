@@ -91,7 +91,7 @@ internal sealed partial class GameWindow
     private readonly Dictionary<int, Motion?> _motions = new(), _stands = new();
 
     /// <summary>지금 메뉴가 어느 단계인가 — 취소할 때 어디로 돌아갈지.</summary>
-    private enum MenuStage { System, Mobile, AfterMove, Spell, Over, Ask, Deploy, Town, Item }
+    private enum MenuStage { System, Mobile, AfterMove, Spell, Over, Ask, Deploy, Town, Item, ItemCross, ItemPick }
     private MenuStage _stage;
 
     /// <summary>이동할 칸을 고르는 중인가(메뉴에서 「이동」을 고른 뒤).</summary>
@@ -436,6 +436,7 @@ internal sealed partial class GameWindow
                 _tapAim = null;
                 var a = _actor;
                 int spell = _pendingSpell;
+                if (_pendingGive >= 0) { GiveItem(a, _pendingGive, (tx, ty)); return; }
                 if (_pendingItem >= 0 && _tables != null && _pendingItem < a.Bag.Count && _tables.Items[a.Bag[_pendingItem].Item].Use == 23)
                 {
                     // 전송법장 — 고른 우리 편을 갈 칸으로(전송술과 같은 2단계, MP 없이)
@@ -645,7 +646,10 @@ internal sealed partial class GameWindow
                 break;
             case BattleState.Menu when _stage == MenuStage.Deploy: // 편성 — 물릴 곳이 없다
                 break;
-            case BattleState.Menu when _stage == MenuStage.Item:   // 가방 — 걸은 뒤 메뉴로
+            case BattleState.Menu when _stage == MenuStage.ItemPick && _actor is { } picker:   // 아이템 창 — 물건 십자 메뉴로
+                OpenItemCross(picker);
+                break;
+            case BattleState.Menu when _stage is MenuStage.Item or MenuStage.ItemCross:   // 가방 — 걸은 뒤 메뉴로
                 _menuGlyphs.Clear();
                 BackTo(_itemFrom);
                 break;
@@ -661,6 +665,11 @@ internal sealed partial class GameWindow
                 break;
             case BattleState.Menu:   // 걸은 뒤 메뉴 — 제자리로 돌아가 다시 갈 칸 고르기
                 ReturnToOrigin();
+                break;
+            case BattleState.Target when _pendingGive >= 0 && _actor is { } giver:   // 건네줄 사람 고르기 — 물건 십자 메뉴로
+                _pendingGive = -1;
+                _attackTiles.Clear();
+                OpenItemCross(giver);
                 break;
             case BattleState.Target:
                 _pendingSpell = -1;
@@ -716,7 +725,7 @@ internal sealed partial class GameWindow
         // 걸은 뒤에도 마법을 연다 — 원작 메뉴(sub_18D8C)가 움직인 뒤 마법을 막는지는 아직 안 봤다(짐작)
         if (!u.Sealed && CastableSpells(u).Count > 0)
             _menu.Add(("마법", () => OpenSpellMenu(u, stage), default));
-        if (u.Bag.Count > 0) _menu.Add(("물건", () => { _itemFrom = stage; OpenItemMenu(u, stage); }, default));
+        if (u.Bag.Count > 0) _menu.Add(("물건", () => { _itemFrom = stage; OpenItemCross(u); }, default));
         _menu.Add(("대기", () =>
         {
             if ((u.X, u.Y) == _origin) { _battle.Rest(u); u.Facing = Dir.Down; PlaySfx(Sound.UiBank, Sound.Rest); }   // 안 걸었으면 쉬어 회복 — 쉬는 사람은 앞을 본다
@@ -904,26 +913,31 @@ internal sealed partial class GameWindow
 
     private int _askLine = -1, _askFace = -1;
 
+    /// <summary>원작 글 줄이 없는 질문(버리기 같은)의 우리 글.</summary>
+    private string _askText = "";
+
     /// <summary>원작 글 line 으로 묻는다 — face 는 얼굴 그림(캐릭터 번호, 없으면 -1). 물리기(Esc · 오른쪽 단추)는 「NO」.</summary>
     private void AskBox(int line, int face, Action yes, Action no)
     {
         _stage = MenuStage.Ask;
         _menu.Clear();
         _menuGlyphs.Clear();
-        (_askLine, _askFace) = (line, face);
-        _menu.Add(("예", () => { _askLine = -1; _menu.Clear(); yes(); }, default));
-        _menu.Add(("아니오", () => { _askLine = -1; _menu.Clear(); no(); }, default));
+        (_askLine, _askFace, _askText) = (line, face, "");
+        _askOpen = true;
+        _menu.Add(("예", () => { _askOpen = false; _menu.Clear(); yes(); }, default));
+        _menu.Add(("아니오", () => { _askOpen = false; _menu.Clear(); no(); }, default));
         _menuIndex = 0;
         _bs = BattleState.Menu;
     }
 
-    private bool AskBoxOpen => _bs == BattleState.Menu && _stage == MenuStage.Ask && _askLine >= 0 && _menu.Count == 2;
+    private bool _askOpen;
+    private bool AskBoxOpen => _bs == BattleState.Menu && _stage == MenuStage.Ask && _askOpen && _menu.Count == 2;
 
     private void DrawAskBox()
     {
         var faces = _askFace >= 0 ? Face(_askFace) : null;
         _names ??= TryNames();
-        var codes = _names?.Line(_askLine) ?? [];
+        var codes = _askLine >= 0 ? _names?.Line(_askLine) ?? [] : [];
         int g = Math.Max(2, HudZoom), faceW = 0, faceH = 0, boxW = 0, boxH = 0;
         for (; g >= 1; g--)
         {
@@ -950,6 +964,7 @@ internal sealed partial class GameWindow
         _font ??= TryFont();
         int x = textX, glyph = Font16.Size * g;
         foreach (int c in codes) { DrawGlyph(c, x, by + 24, g); x += glyph; }
+        if (_askLine < 0 && _askText.Length > 0) DrawText(Text.Render(_askText, Math.Max(14, glyph * 3 / 4), 0xFFFFFFFF), textX, by + 24);
 
         // YES · NO — 고른 단추는 반짝임 장(원작 sub_17898 처럼 4틱마다)
         if (!_buttonsTried)
@@ -1782,7 +1797,7 @@ internal sealed partial class GameWindow
     }
 
     /// <summary>원작처럼 네모 단추 넷으로 보이는 메뉴인가 — 고른 뒤 · 걸은 뒤의 행동 메뉴(사람 둘레), 시스템 메뉴(커서 칸 둘레).</summary>
-    private bool CrossMenu => _stage is MenuStage.AfterMove or MenuStage.System;
+    private bool CrossMenu => _stage is MenuStage.AfterMove or MenuStage.System or MenuStage.ItemCross;
 
     /// <summary>
     /// 십자 메뉴의 자리 — 원작 행동(sub_18D8C · sub_179D5): 위 공격, 왼쪽 마법, 오른쪽 물건, 아래 쉬기.
@@ -1790,7 +1805,8 @@ internal sealed partial class GameWindow
     /// </summary>
     private static Dir SlotOf(string label) => label switch
     {
-        "공격" or "기록" or "지도 보기" => Dir.Up, "마법" or "행군" or "전황 기록" => Dir.Left, "물건" or "설정" or "전황 부르기" => Dir.Right, _ => Dir.Down,
+        "공격" or "기록" or "지도 보기" or "사용" => Dir.Up, "마법" or "행군" or "전황 기록" or "건네주기" => Dir.Left,
+        "물건" or "설정" or "전황 부르기" or "장비" => Dir.Right, _ => Dir.Down,
     };
 
 
@@ -1804,15 +1820,15 @@ internal sealed partial class GameWindow
     /// </summary>
     private void DrawCrossMenu(int fs)
     {
-        bool sys = _stage == MenuStage.System;
-        if (!sys && _actor == null) return;
+        bool sys = _stage is MenuStage.System or MenuStage.ItemCross;   // 단추 그림을 _sysButtons 에서
+        if (_stage != MenuStage.System && _actor == null) return;
         if (!_buttonsTried)
         {
             _buttonsTried = true;
             try { _buttons = new Buttons(_dir, _pal); }
             catch (Exception e) when (e is IOException or IndexOutOfRangeException or ArgumentOutOfRangeException) { _buttons = null; }
         }
-        var (sx, sy) = sys ? TileScreen(_cursor.X, _cursor.Y) : TileScreen(_actor!.X, _actor.Y);
+        var (sx, sy) = _stage == MenuStage.System ? TileScreen(_cursor.X, _cursor.Y) : TileScreen(_actor!.X, _actor.Y);
         if (_buttons is not { Count: > 3 * 15 + 2 } bank) { DrawTextCross(sx, sy); return; }
 
         int s = _zoom, blink = (int)(_time * 18.2 / 4) & 1;
@@ -1858,6 +1874,7 @@ internal sealed partial class GameWindow
     private void DrawMenu(int fs)
     {
         if (AskBoxOpen) { DrawAskBox(); return; }
+        if (_stage == MenuStage.ItemPick) { DrawItemWindow(); return; }
         if (CrossMenu) { DrawCrossMenu(fs); return; }
         var (sx, sy) = _actor is { } u ? TileScreen(u.X, u.Y) : TileScreen(_cursor.X, _cursor.Y);
         int cell = T * _zoom;
