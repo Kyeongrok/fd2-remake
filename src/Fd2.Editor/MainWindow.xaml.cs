@@ -253,6 +253,7 @@ public partial class MainWindow : Window
         _exe = System.IO.File.Exists(exe) && new System.IO.FileInfo(exe).Length == GameTables.ExeSize ? System.IO.File.ReadAllBytes(exe) : null;
         _field = System.IO.File.Exists(field) ? System.IO.File.ReadAllBytes(field) : null;
         _faces.Clear();
+        _towns.Clear();
         if (_tableEditors.Count == 0) BuildTableEditors();
         foreach (var t in _tableEditors) t.Refresh();
     }
@@ -279,7 +280,8 @@ public partial class MainWindow : Window
         ItemsHost.Content = new TableEditor(this, StatTables.Items, () => _exe, "FD2.EXE 에 저장", SaveExe, LoadStats);
         SpellsHost.Content = new TableEditor(this, StatTables.Spells, () => _exe, "FD2.EXE 에 저장", SaveExe, LoadStats);
         ShopsHost.Content = new TableEditor(this, StatTables.Shops, () => _exe, "FD2.EXE 에 저장", SaveExe, LoadStats,
-            null, Label("마을마다 무기 12 · 도구 8 · 비밀 8칸에 아이템 번호(255 = 빈 칸) — 빈 칸에 넣으면 추가, 255 로 바꾸면 삭제"));
+            TownPicture, Label("마을마다 무기점 12 · 도구점 8 · 비밀상점 8칸 — 「없음(255)」 칸에 아이템을 고르면 추가, 「없음(255)」으로 바꾸면 삭제"))
+        { PortraitHeight = 100 };
         _tableEditors.AddRange([stats, units, (TableEditor)ItemsHost.Content, (TableEditor)SpellsHost.Content, (TableEditor)ShopsHost.Content]);
     }
 
@@ -296,6 +298,28 @@ public partial class MainWindow : Window
         catch (Exception e) when (e is System.IO.IOException or IndexOutOfRangeException or ArgumentOutOfRangeException) { img = null; }
         return _faces[icon] = img;
     }
+
+    /// <summary>
+    /// 상점 줄의 마을 그림 — 마을 화면(sub_26152)이 기록 +0 으로 고르는 FDOTHER 11 · 61 · 62(표 0x52405, RLE 320x200).
+    /// </summary>
+    private ImageSource? TownPicture(int row)
+    {
+        if (_exe == null || StatTables.Shops().Rows is not { } rows || row >= rows.Count) return null;
+        int look = StatTables.Get(_exe, rows[row].Fields[0]);
+        if (look > 2) return null;
+        int entry = _exe[0x52405 + 0x25014 + look];
+        if (_towns.TryGetValue(entry, out var img)) return img;
+        try
+        {
+            var a = Dat.Load(System.IO.Path.Combine(_dir, "FDOTHER.DAT"), entry);
+            int w = Dat.U16(a, 0), h = Dat.U16(a, 2);
+            img = ToBitmap(Rle.Decode(a, 4, w, h, _pal), w, h);
+        }
+        catch (Exception e) when (e is System.IO.IOException or IndexOutOfRangeException or ArgumentOutOfRangeException) { img = null; }
+        return _towns[entry] = img;
+    }
+
+    private readonly Dictionary<int, ImageSource?> _towns = [];
 
     private bool Confirm(string file) =>
         MessageBox.Show(this, $"{System.IO.Path.Combine(_dir, file)} 에 씁니다.\n처음 한 번은 옆에 백업({System.IO.Path.GetFileNameWithoutExtension(file)}-backup{System.IO.Path.GetExtension(file)})을 남깁니다.",

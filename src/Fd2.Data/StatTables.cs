@@ -9,7 +9,53 @@ namespace Fd2.Data;
 public static class StatTables
 {
     /// <summary>한 칸 — 이름, 표 시작에서 떨어진 곳, 바이트 수(1 · 2), 부호.</summary>
-    public sealed record Field(string Name, int Va, int Size, bool Signed = false, int Empty = 0, bool Absolute = false);
+    public sealed record Field(string Name, int Va, int Size, bool Signed = false, int Empty = 0, bool Absolute = false, Choice Pick = Choice.None);
+
+    /// <summary>칸 값을 이름으로 고르는 갈래 — 편집기가 「이름(번호)」 고르개로 보인다.</summary>
+    public enum Choice { None, Race, Class, Weapon, Armor, Item, Town, Building, Key }
+
+    /// <summary>고르개 목록 — (값, 「이름(번호)」). 빈 칸 값(255)을 쓰는 칸이면 「없음(255)」도.</summary>
+    public static List<(int Value, string Label)> Choices(Field f)
+    {
+        var values = f.Pick switch
+        {
+            Choice.Race => Enumerable.Range(0, GameNames.RaceCount),
+            Choice.Class => Enumerable.Range(0, GameNames.ClassCount),
+            Choice.Weapon => Enumerable.Range(0, 128),
+            Choice.Armor => Enumerable.Range(128, GameTables.ItemCount - 128),
+            Choice.Item => Enumerable.Range(0, GameTables.ItemCount),
+            Choice.Town => Enumerable.Range(0, 3),
+            Choice.Building => Enumerable.Range(0, 5),
+            Choice.Key => Enumerable.Range(0x54, 30),
+            _ => [],
+        };
+        var list = values.Select(v => (v, Label(f, v))).ToList();
+        if (f.Empty == 255) list.Insert(0, (255, Label(f, 255)));
+        return list;
+    }
+
+    /// <summary>마을 건물 0~4(FDTXT 0 의 495~499). 비밀상점 열쇠는 이 건물에 커서를 두고 키를 누른다.</summary>
+    private static readonly string[] Buildings = ["주점", "무기점", "출구", "도구점", "교회"];
+
+    /// <summary>비밀상점 열쇠 키 스캔코드 0x54~0x71 = Shift · Ctrl · Alt + F1~F10.</summary>
+    private static readonly string[] KeyMods = ["Shift", "Ctrl", "Alt"];
+
+    /// <summary>값 하나의 「이름(번호)」 — 이름이 없으면 「(빈 이름)(번호)」.</summary>
+    public static string Label(Field f, int v)
+    {
+        if (v == 255 && f.Empty == 255) return "없음(255)";
+        string name = f.Pick switch
+        {
+            Choice.Race => v == 0 ? "없음" : GameNames.Race(v),
+            Choice.Class => v == 0 ? "없음" : GameNames.Class(v),
+            Choice.Weapon or Choice.Armor or Choice.Item => GameNames.Item(v),
+            Choice.Town => v < 3 ? $"마을 그림 {v + 1}" : "",
+            Choice.Building => v < Buildings.Length ? Buildings[v] : "",
+            Choice.Key => v is >= 0x54 and <= 0x71 ? $"{KeyMods[(v - 0x54) / 10]}+F{(v - 0x54) % 10 + 1}" : "",
+            _ => "",
+        };
+        return $"{(name == "" ? "(빈 이름)" : name)}({v})";
+    }
 
     /// <summary>표 하나 — 줄 이름과 줄마다의 칸들(Va 는 그 줄의 절대 주소).</summary>
     public sealed record Table(string Title, List<(string Name, List<Field> Fields)> Rows);
@@ -19,8 +65,8 @@ public static class StatTables
         int a = 0x61DA1 + 24 * n, g = 0x620A1 + 11 * n;
         return
         [
-            new("종족", a, 1), new("직업", a + 1, 1), new("레벨", a + 2, 1), new("HP", a + 3, 2), new("MP", a + 5, 2), new("이동", a + 7, 1),
-            new("무기", a + 12, 1), new("옷", a + 13, 1), new("역량", a + 18, 2, true), new("내력", a + 20, 2, true), new("속도", a + 22, 2, true),
+            new("종족", a, 1, Pick: Choice.Race), new("직업", a + 1, 1, Pick: Choice.Class), new("레벨", a + 2, 1), new("HP", a + 3, 2), new("MP", a + 5, 2), new("이동", a + 7, 1),
+            new("무기", a + 12, 1, Pick: Choice.Weapon), new("방어구", a + 13, 1, Pick: Choice.Armor), new("역량", a + 18, 2, true), new("내력", a + 20, 2, true), new("속도", a + 22, 2, true),
             new("성장 역량 최소", g, 1), new("성장 역량 최대", g + 1, 1), new("성장 내력 최소", g + 2, 1), new("성장 내력 최대", g + 3, 1),
             new("성장 속도 최소", g + 4, 1), new("성장 속도 최대", g + 5, 1), new("성장 HP 최소", g + 6, 1), new("성장 HP 최대", g + 7, 1),
             new("성장 MP 최소", g + 8, 1), new("성장 MP 최대", g + 9, 1),
@@ -32,7 +78,7 @@ public static class StatTables
         int a = 0x61AF9 + 10 * m;
         return
         [
-            new("종족", a, 1), new("직업", a + 1, 1), new("HP/레벨", a + 2, 2), new("MP/레벨", a + 4, 1), new("역량/레벨", a + 5, 1),
+            new("종족", a, 1, Pick: Choice.Race), new("직업", a + 1, 1, Pick: Choice.Class), new("HP/레벨", a + 2, 2), new("MP/레벨", a + 4, 1), new("역량/레벨", a + 5, 1),
             new("방어/레벨", a + 6, 1), new("속도/레벨", a + 7, 1), new("이동", a + 8, 1), new("경험", a + 9, 1),
         ];
     }
@@ -55,20 +101,20 @@ public static class StatTables
         return [new("세기", a, 2), new("명중 %", a + 2, 1), new("사거리", a + 3, 1), new("범위", a + 4, 1), new("MP", a + 5, 1), new("대상 편", a + 6, 1)];
     }
 
-    /// <summary>상점 기록(0x6238D, 31바이트) — +0 마을 꼴, +1 · +2 비밀 상점 자리 · 키, +3 무기 12칸, +15 도구 8칸, +23 비밀 8칸(255 = 빈 칸).</summary>
+    /// <summary>상점 기록(0x6238D, 31바이트) — +0 마을 그림(FDOTHER 11 · 61 · 62), +1 · +2 비밀상점 열쇠 건물 · 키, +3 무기점 12칸, +15 도구점 8칸, +23 비밀상점 8칸(255 = 빈 칸).</summary>
     private static List<Field> Shop(int n)
     {
         int a = 0x6238D + 31 * n;
-        var f = new List<Field> { new("마을 꼴", a, 1), new("비밀 자리", a + 1, 1), new("비밀 키", a + 2, 1) };
-        for (int i = 0; i < 12; i++) f.Add(new($"무기 {i + 1}", a + 3 + i, 1, Empty: 255));
-        for (int i = 0; i < 8; i++) f.Add(new($"도구 {i + 1}", a + 15 + i, 1, Empty: 255));
-        for (int i = 0; i < 8; i++) f.Add(new($"비밀 {i + 1}", a + 23 + i, 1, Empty: 255));
+        var f = new List<Field> { new("마을 그림", a, 1, Pick: Choice.Town), new("비밀상점 건물", a + 1, 1, Pick: Choice.Building), new("비밀상점 키", a + 2, 1, Pick: Choice.Key) };
+        for (int i = 0; i < 12; i++) f.Add(new($"무기점 {i + 1}", a + 3 + i, 1, Empty: 255, Pick: Choice.Item));
+        for (int i = 0; i < 8; i++) f.Add(new($"도구점 {i + 1}", a + 15 + i, 1, Empty: 255, Pick: Choice.Item));
+        for (int i = 0; i < 8; i++) f.Add(new($"비밀상점 {i + 1}", a + 23 + i, 1, Empty: 255, Pick: Choice.Item));
         return f;
     }
 
-    /// <summary>물건 표(0x602AD, 23바이트) 215줄 — 0~127 무기 쪽, 128~ 옷 · 도구 쪽.</summary>
+    /// <summary>물건 표(0x602AD, 23바이트) 215줄 — 0~127 무기 쪽, 128~ 방어구 · 도구 쪽. 줄 이름은 게임 이름(번호).</summary>
     public static Table Items() =>
-        new("아이템", Enumerable.Range(0, GameTables.ItemCount).Select(i => ($"아이템 {i}", Item(i))).ToList());
+        new("아이템", Enumerable.Range(0, GameTables.ItemCount).Select(i => (Label(new Field("", 0, 1, Pick: Choice.Item), i), Item(i))).ToList());
 
     /// <summary>마법 표(0x619FD, 7바이트) 36줄.</summary>
     public static Table Spells() =>
@@ -146,9 +192,9 @@ public static class StatTables
             {
                 new("편", u, 1, Absolute: true), new("그림", u + 1, 1, Absolute: true), new("레벨", u + 4, 1, Absolute: true),
                 new("x", p, 2, Absolute: true), new("y", p + 2, 2, Absolute: true), new("등장 차례", u + 21, 1, Absolute: true),
-                new("무기", u + 5, 1, Absolute: true, Empty: 255), new("옷", u + 6, 1, Absolute: true, Empty: 255),
+                new("무기", u + 5, 1, Absolute: true, Empty: 255, Pick: Choice.Weapon), new("방어구", u + 6, 1, Absolute: true, Empty: 255, Pick: Choice.Armor),
             };
-            for (int k = 0; k < 6; k++) f.Add(new($"아이템 {k + 1}", u + 7 + k, 1, Absolute: true, Empty: 255));
+            for (int k = 0; k < 6; k++) f.Add(new($"아이템 {k + 1}", u + 7 + k, 1, Absolute: true, Empty: 255, Pick: Choice.Item));
             f.AddRange([new("AI", u + 17, 1, Absolute: true), new("AI x", u + 18, 1, Absolute: true), new("AI y", u + 19, 1, Absolute: true),
                         new("떨굼 종류", u + 22, 1, Absolute: true), new("떨굼 값", u + 23, 2, Absolute: true)]);
             rows.Add(($"{i} {CharacterNames.Of(fdfield[u + 1])}", f));

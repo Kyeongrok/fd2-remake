@@ -20,6 +20,9 @@ internal sealed class TableEditor : DockPanel
     private readonly DataGrid _grid;
     private StatTables.Table? _shown;
 
+    /// <summary>왼쪽 그림 칸 높이 — 초상화 48, 마을 그림처럼 넓은 것은 더 크게.</summary>
+    public double PortraitHeight { get; init; } = 48;
+
     public TableEditor(MainWindow owner, Func<StatTables.Table?> table, Func<byte[]?> buffer, string saveLabel, Action save, Action reload,
                        Func<int, ImageSource?>? portrait = null, params UIElement[] picker)
     {
@@ -60,7 +63,7 @@ internal sealed class TableEditor : DockPanel
             dt.Columns.Add("얼굴", typeof(object));
             var img = new FrameworkElementFactory(typeof(Image));
             img.SetBinding(Image.SourceProperty, new Binding("[얼굴]"));
-            img.SetValue(HeightProperty, 48.0);
+            img.SetValue(HeightProperty, PortraitHeight);
             img.SetValue(Image.StretchProperty, Stretch.Uniform);
             _grid.Columns.Add(new DataGridTemplateColumn { Header = "", CellTemplate = new DataTemplate { VisualTree = img }, IsReadOnly = true });
         }
@@ -68,6 +71,16 @@ internal sealed class TableEditor : DockPanel
         _grid.Columns.Add(new DataGridTextColumn { Header = "이름", Binding = new Binding("[이름]"), IsReadOnly = true });
         foreach (var f in t.Rows[0].Fields)
         {
+            if (f.Pick != StatTables.Choice.None)
+            {
+                // 종족 · 직업 · 아이템 칸은 「이름(번호)」 고르개 — 목록에 없는 값(표에 든 엉뚱한 값)도 그대로 보이게 더한다
+                var labels = StatTables.Choices(f).Select(c => c.Label).ToList();
+                foreach (var (_, fields) in t.Rows)
+                    if (fields.FirstOrDefault(x => x.Name == f.Name) is { } rf && StatTables.Label(f, StatTables.Get(buf, rf)) is var l && !labels.Contains(l)) labels.Add(l);
+                dt.Columns.Add(f.Name, typeof(string));
+                _grid.Columns.Add(new DataGridComboBoxColumn { Header = f.Name, ItemsSource = labels, SelectedItemBinding = new Binding($"[{f.Name}]") });
+                continue;
+            }
             dt.Columns.Add(f.Name, typeof(int));
             _grid.Columns.Add(new DataGridTextColumn { Header = f.Name, Binding = new Binding($"[{f.Name}]") });
         }
@@ -77,7 +90,12 @@ internal sealed class TableEditor : DockPanel
             var row = dt.NewRow();
             if (_portrait != null) row["얼굴"] = _portrait(r);
             row["이름"] = name;
-            for (int i = 0; i < fields.Count && i < t.Rows[0].Fields.Count; i++) row[t.Rows[0].Fields[i].Name] = StatTables.Get(buf, fields[i]);
+            for (int i = 0; i < fields.Count && i < t.Rows[0].Fields.Count; i++)
+            {
+                var f = t.Rows[0].Fields[i];
+                int v = StatTables.Get(buf, fields[i]);
+                row[f.Name] = f.Pick != StatTables.Choice.None ? StatTables.Label(f, v) : v;
+            }
             dt.Rows.Add(row);
         }
         _grid.ItemsSource = dt.DefaultView;
@@ -87,19 +105,29 @@ internal sealed class TableEditor : DockPanel
 
     private void OnCellEdit(object? sender, DataGridCellEditEndingEventArgs e)
     {
-        if (_buffer() is not { } buf || _shown == null || e.EditAction != DataGridEditAction.Commit || e.EditingElement is not TextBox box) return;
+        if (_buffer() is not { } buf || _shown == null || e.EditAction != DataGridEditAction.Commit) return;
         int row = e.Row.GetIndex(), col = FieldColumn(e.Column);
         if (row < 0 || row >= _shown.Rows.Count || col < 0 || col >= _shown.Rows[row].Fields.Count) return;
         var f = _shown.Rows[row].Fields[col];
         var (min, max) = StatTables.Range(f);
-        if (!int.TryParse(box.Text.Trim(), out int v) || v < min || v > max)
+        // 고르개는 「이름(번호)」 끝의 번호를, 글 칸은 적은 숫자를
+        string text = e.EditingElement switch
+        {
+            ComboBox cb when cb.SelectedItem is string label => label[(label.LastIndexOf('(') + 1)..].TrimEnd(')'),
+            TextBox box => box.Text.Trim(),
+            _ => "",
+        };
+        if (text == "") return;
+        if (!int.TryParse(text, out int v) || v < min || v > max)
         {
             e.Cancel = true;
             _owner.Status.Text = $"{f.Name} 은(는) {min} ~ {max} 사이 숫자여야 합니다.";
             return;
         }
         StatTables.Set(buf, f, v);
-        _owner.Status.Text = $"{_shown.Rows[row].Name} {f.Name} = {v} — 저장을 눌러야 파일에 들어갑니다.";
+        // 마을 그림을 바꾸면 왼쪽 그림도 바뀌게 — 편집이 끝난 뒤 다시 채운다
+        if (f.Pick == StatTables.Choice.Town) Dispatcher.BeginInvoke(() => { Refresh(); _grid.SelectedIndex = row; });
+        _owner.Status.Text = $"{_shown.Rows[row].Name} {f.Name} = {(f.Pick != StatTables.Choice.None ? StatTables.Label(f, v) : v)} — 저장을 눌러야 파일에 들어갑니다.";
     }
 
     private void ClearRow()

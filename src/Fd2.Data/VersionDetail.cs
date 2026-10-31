@@ -82,7 +82,7 @@ public static class VersionDetail
     private static readonly Dictionary<string, string> FieldNames = new()
     {
         ["Race"] = "종족", ["Class"] = "직업", ["Level"] = "레벨", ["Hp"] = "HP", ["Mp"] = "MP", ["Move"] = "이동", ["Spells"] = "마법",
-        ["Weapon"] = "무기", ["Armor"] = "옷", ["Bag"] = "가방", ["StrAdd"] = "역량+", ["DefAdd"] = "내력+", ["SpdAdd"] = "속도+",
+        ["Weapon"] = "무기", ["Armor"] = "방어구", ["Bag"] = "가방", ["StrAdd"] = "역량+", ["DefAdd"] = "내력+", ["SpdAdd"] = "속도+",
         ["StrMin"] = "역량 최소", ["StrMax"] = "역량 최대", ["DefMin"] = "내력 최소", ["DefMax"] = "내력 최대", ["SpdMin"] = "속도 최소", ["SpdMax"] = "속도 최대",
         ["HpMin"] = "HP 최소", ["HpMax"] = "HP 최대", ["MpMin"] = "MP 최소", ["MpMax"] = "MP 최대", ["SpellList"] = "마법 표",
         ["Str"] = "역량", ["Def"] = "방어", ["Spd"] = "속도", ["Exp"] = "경험",
@@ -91,7 +91,7 @@ public static class VersionDetail
         ["UseSide"] = "쓰는 편", ["UseArea"] = "쓰는 범위", ["Price"] = "값",
         ["Power"] = "세기", ["Range"] = "사거리", ["Area"] = "범위", ["Side"] = "대상 편",
         ["EquipKinds"] = "장비 종류", ["Crit"] = "필살 %", ["MagicMul"] = "받는 마법 ×/10", ["Revive"] = "부활값", ["MoveCost"] = "지형 이동비",
-        ["Town"] = "마을", ["Weapons"] = "무기 상점", ["Tools"] = "도구 상점", ["Secret"] = "비밀 상점", ["SecretAt"] = "비밀 자리", ["SecretKey"] = "비밀 키",
+        ["Town"] = "마을", ["Weapons"] = "무기 상점", ["Tools"] = "도구 상점", ["Secret"] = "비밀 상점", ["SecretAt"] = "비밀상점 건물", ["SecretKey"] = "비밀상점 키",
     };
 
     private static List<string> Exe(string baseDir, string otherDir, string a, string b)
