@@ -669,8 +669,8 @@ internal sealed partial class GameWindow
             case BattleState.Menu when _stage == MenuStage.Slots:   // 전황 칸 고르기 — 기록 십자 메뉴로
                 OpenRecordMenu();
                 break;
-            case BattleState.Menu when _stage == MenuStage.Mobile && _mobilePage > 0:   // 모바일 메뉴의 아래 쪽 — 맨 위로
-                OpenTouchMenu(_mobilePage - 1);
+            case BattleState.Menu when _stage == MenuStage.Mobile && _mobilePage > 0:   // 모바일 메뉴의 아래 쪽 — 맨 위로(에디트의 사람 쪽은 에디트로)
+                OpenTouchMenu(0, _mobilePage == 4 ? 3 : 0);
                 break;
             case BattleState.Menu when _actor == null || _stage is MenuStage.System or MenuStage.Mobile:
                 _menu.Clear();
@@ -2094,7 +2094,7 @@ internal sealed partial class GameWindow
     /// <summary>메뉴 줄 i 에 원본 글꼴 이름이 붙어 있으면 글 뒤에 이어 붙인다. 물건 그림(<see cref="_menuIcons"/>)이 있으면 그림 · 이름 · 글 차례로.</summary>
     private Text.Image WithGlyphs(Text.Image text, int i, int fs)
     {
-        if (_stage is not (MenuStage.Ask or MenuStage.Deploy or MenuStage.Town or MenuStage.Item) || !_menuGlyphs.TryGetValue(i, out int line) || NameImage(line, Math.Max(1, fs / Font16.Size), 0xFFFFE070) is not { } g) return text;
+        if (_stage is not (MenuStage.Ask or MenuStage.Deploy or MenuStage.Town or MenuStage.Item or MenuStage.Mobile) || !_menuGlyphs.TryGetValue(i, out int line) || NameImage(line, Math.Max(1, fs / Font16.Size), 0xFFFFE070) is not { } g) return text;
         var parts = new List<Text.Image>();
         if (_menuIcons.TryGetValue(i, out int icon) && IconImage(icon, Math.Max(text.H, g.H)) is { } ic) { parts.Add(ic); parts.Add(g); parts.Add(text); }
         else { parts.Add(text); parts.Add(g); }

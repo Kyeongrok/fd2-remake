@@ -114,8 +114,11 @@ internal sealed partial class GameWindow
         return (x, y, w, h);
     }
 
-    /// <summary>모바일 메뉴의 쪽 — 0 맨 위(최대 넷), 1 화면 표시(켜고 끄기), 2 설정(소리 · 단축키).</summary>
+    /// <summary>모바일 메뉴의 쪽 — 0 맨 위(최대 넷), 1 화면 표시(켜고 끄기), 2 설정(소리 · 단축키), 3 에디트(돈 · 사람 고르기), 4 에디트 — 고른 사람 경험치.</summary>
     private int _mobilePage;
+
+    /// <summary>에디트에서 고른 사람.</summary>
+    private Unit? _editUnit;
 
     /// <summary>
     /// 모바일 메뉴 — 맨 위는 화면 표시 · 설정 · 시스템 메뉴 · 닫기(사용자 요청, 파티 정보는 오른쪽 위 「파티」 단추로). Esc · 메뉴 밖 누르기로도 닫힌다.
@@ -164,10 +167,39 @@ internal sealed partial class GameWindow
                 _menu.Add(("소리 크기", () => { Close(); OpenVolume(); }, default));
                 _menu.Add(("단축키 · 패드 설정", () => { Close(); _keysOpen = true; _keysRow = 0; _keysCapture = -1; }, default));
                 break;
+            case 3:
+                // 에디트(사용자 요청) — 돈 올리기, 우리 편마다 경험치. 경험치는 원작 경험 함수(GainExp)로 넣어 100 이 넘으면 바로 레벨이 오른다
+                _menu.Add(($"돈 +1,000  (지금 {_battle.Gold:N0})", () => { _battle.Gold += 1000; OpenTouchMenu(_menuIndex, 3); }, default));
+                _menu.Add(("돈 +10,000", () => { _battle.Gold += 10000; OpenTouchMenu(_menuIndex, 3); }, default));
+                foreach (var u in _scene.Units.Where(u => u.Team == 2 && u.Hp > 0).OrderBy(u => u.Slot))
+                {
+                    var who = u;
+                    _menuGlyphs[_menu.Count] = Battle.NameLine(u);
+                    _menu.Add(($"Lv {u.Level}  EX {u.Exp:00}  ", () => { _editUnit = who; OpenTouchMenu(0, 4); }, default));
+                }
+                break;
+            case 4 when _editUnit is { } eu:
+                _menuGlyphs[_menu.Count] = Battle.NameLine(eu);
+                _menu.Add(($"Lv {eu.Level}  EX {eu.Exp:00} — ", () => { }, default));
+                foreach (int add in new[] { 10, 50, 100 })
+                {
+                    int e = add;
+                    _menu.Add(($"경험치 +{e}{(e == 100 ? "  (레벨 업)" : "")}", () =>
+                    {
+                        var notes = _battle.GainExp(eu, e);
+                        if (notes.Count == 0) { OpenTouchMenu(_menuIndex, 4); return; }   // 최대 레벨 등 — 오르지 않음
+                        int row = _menuIndex;
+                        _menu.Clear();
+                        ShowNotices(notes, () => OpenTouchMenu(row, 4));
+                    }, default));
+                }
+                _menu.Add(("돌아가기", () => OpenTouchMenu(0, 3), default));
+                break;
             default:
                 _menu.Add(("화면 표시", () => OpenTouchMenu(0, 1), default));
                 _menu.Add(("설정", () => OpenTouchMenu(0, 2), default));
                 _menu.Add(("시스템 메뉴", OpenSystemMenu, default));
+                _menu.Add(("에디트 — 돈 · 경험치", () => OpenTouchMenu(0, 3), default));
                 _menu.Add(("버그 리포트", () => { Close(); OpenBugReport(); }, default));
                 break;
         }
