@@ -2204,10 +2204,20 @@ internal sealed partial class GameWindow
         if (a != d) DrawStrikePanel(d, 1 - aSide, bx, by, s);
         if (hit)
         {
-            var dmg = heal ? Text.Render($"+{_strikeDamage}", fs * 3, 0xFF60FF80)
-                    : _strikeMiss ? Text.Render("빗나감", fs * 3, 0xFFC0C0C0)
-                    : Text.Render((_strikeCrit ? "필살! " : "") + (d.Hp == 0 ? $"-{_strikeDamage}  쓰러짐!" : $"-{_strikeDamage}"), fs * 3, 0xFFFF5050);
-            DrawText(dmg, bx + bw * (defenderSide == 1 ? 3 : 1) / 4 - dmg.W / 2, by + bh / 6);
+            string label = heal ? $"+{_strikeDamage}" : _strikeMiss ? "빗나감"
+                         : (_strikeCrit ? "필살! " : "") + (d.Hp == 0 ? $"-{_strikeDamage}  쓰러짐!" : $"-{_strikeDamage}");
+            uint color = heal ? 0xFF60FF80 : _strikeMiss ? 0xFFE0E0E0 : 0xFFFF4040;
+            // 크기는 장면 배율을 따라(세로 화면에서 따로 그려 줄일 때도 같은 비율), 검은 테두리 — 맞는 쪽이 하얗게 번쩍여 글이 묻혔다(사용자 요청)
+            int size = Math.Max(fs * 2, 22 * s);
+            var dmg = Text.Render(label, size, color);
+            var edge = Text.Render(label, size, 0xFF000000);
+            int dx = bx + bw * (defenderSide == 1 ? 3 : 1) / 4 - dmg.W / 2, dy = by + 52 * s;
+            dx = Math.Clamp(dx, bx + 4, Math.Max(bx + 4, bx + bw - dmg.W - 4));
+            int o = Math.Max(2, s);
+            for (int ey = -o; ey <= o; ey += o)
+                for (int ex = -o; ex <= o; ex += o)
+                    if (ex != 0 || ey != 0) DrawText(edge, dx + ex, dy + ey);
+            DrawText(dmg, dx, dy);
         }
     }
 

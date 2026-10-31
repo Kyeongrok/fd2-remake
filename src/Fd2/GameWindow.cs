@@ -167,7 +167,10 @@ internal sealed unsafe partial class GameWindow : IDisposable
                 PointerWheel(Math.Sign((short)((long)wParam >> 16)));
                 return IntPtr.Zero;
             case Win32.WM_RBUTTONDOWN:
-                PointerCancel();
+                // 오른쪽 단추는 Esc 를 누른 것과 같게(사용자 요청) — 메뉴 물리기 · 대사 넘기기 · 다음 안 움직인 아군 등 Esc 가 하는 일 그대로
+                if (_screen == Screen.Title && !_continueOpen) return IntPtr.Zero;   // 타이틀 첫 메뉴의 Esc 는 게임 끝내기 — 잘못 누른 우클릭으로 꺼지지 않게
+                KeyDown(Win32.VK_ESCAPE);
+                KeyUp(Win32.VK_ESCAPE);
                 return IntPtr.Zero;
             case Win32.WM_LBUTTONDOWN:
                 Win32.SetCapture(hWnd);   // 창 밖으로 끌어도 떼는 것을 받게
