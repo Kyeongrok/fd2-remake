@@ -91,7 +91,7 @@ internal sealed partial class GameWindow
     private readonly Dictionary<int, Motion?> _motions = new(), _stands = new();
 
     /// <summary>지금 메뉴가 어느 단계인가 — 취소할 때 어디로 돌아갈지.</summary>
-    private enum MenuStage { System, Mobile, AfterMove, Spell, Over, Ask, Deploy, Town, Item, ItemCross, ItemPick }
+    private enum MenuStage { System, Mobile, AfterMove, Spell, Over, Ask, Deploy, Town, Item, ItemCross, ItemPick, Slots }
     private MenuStage _stage;
 
     /// <summary>이동할 칸을 고르는 중인가(메뉴에서 「이동」을 고른 뒤).</summary>
@@ -199,6 +199,7 @@ internal sealed partial class GameWindow
         void Banner() => PhaseFx(PhasePlayer, () =>   // 원작처럼 「PLAYER PHASE」 모자이크
         {
             _bs = BattleState.Select;
+            AutoSaveBattle();   // 우리 차례가 열릴 때마다 — 최근 3턴(사용자 요청)
             if (!Controlled.Any(u => !u.Paralyzed)) EndPlayerTurn();   // 움직일 우리 편이 모두 마비면 저절로 끝(sub_13565)
         });
         var died = _tickDied;
@@ -660,6 +661,9 @@ internal sealed partial class GameWindow
             case BattleState.Menu when _stage == MenuStage.Town:   // 마을 — 한 단계 앞 메뉴로
                 _townBack?.Invoke();
                 break;
+            case BattleState.Menu when _stage == MenuStage.Slots:   // 전황 칸 고르기 — 기록 십자 메뉴로
+                OpenRecordMenu();
+                break;
             case BattleState.Menu when _stage == MenuStage.Mobile && _mobilePage > 0:   // 모바일 메뉴의 아래 쪽 — 맨 위로
                 OpenTouchMenu(_mobilePage - 1);
                 break;
@@ -968,9 +972,9 @@ internal sealed partial class GameWindow
         _menu.Clear();
         _sysButtons = [12, 13, 14, 15];
         _menu.Add(("지도 보기", () => { _settings.ShowMinimap = true; _settings.Save(); _menu.Clear(); _bs = BattleState.Select; }, default));
-        if (!_enemyPhase) _menu.Add(("전황 기록", () => AskSys(TxtAskSave, SaveBattleRecord), default));
-        if (!_enemyPhase && SaveFile.Load(SavePath).ReadBattle() is { } rec && rec.Scene < _sceneCount)
-            _menu.Add(("전황 부르기", () => AskSys(TxtAskLoad, () => SysBanner(TxtWait, "기다리세요.", () => LoadBattleRecord(rec))), default));
+        // 전황은 여러 칸(사용자 요청 — 창세기전3 파트2 처럼): 기록 · 부르기 모두 칸을 고른다. 부르기에는 자동저장(최근 3턴)도
+        if (!_enemyPhase) _menu.Add(("전황 기록", () => OpenBattleSlots(save: true), default));
+        if (!_enemyPhase && BattleSaves().Count > 0) _menu.Add(("전황 부르기", () => OpenBattleSlots(save: false), default));
         _menu.Add(("전장 이탈", () => AskSys(TxtAskQuit, () => SysBanner(TxtRest, "그럼 쉬세요.", ToTitle)), default));
         _menuIndex = 0;
         _bs = BattleState.Menu;

@@ -160,10 +160,73 @@ internal sealed partial class GameWindow
 
     // ── 싸움 중 기록(전황기록) ───────────────────────────────────────────────
 
+    /// <summary>손으로 기록하는 전황 칸 수 — 1번은 FD2.SAV 의 전황(원작과 같은 자리), 2번부터는 따로 파일.</summary>
+    private const int BattleSlots = 8;
+
+    /// <summary>자동저장 — 우리 차례가 열릴 때마다 턴 번호 % 3 칸에(최근 3턴이 남는다).</summary>
+    private const int AutoSlots = 3;
+
+    private string BattleSlotPath(bool auto, int k) =>
+        !auto && k == 0 ? SavePath : Path.Combine(Path.GetDirectoryName(SavePath)!, auto ? $"자동{k + 1}.SAV" : $"전황{k + 1}.SAV");
+
+    private static BattleRecord? ReadBattleAt(string path) => File.Exists(path) ? SaveFile.Load(path).ReadBattle() : null;
+
+    /// <summary>부를 수 있는 전황 — 손 기록 칸들, 그다음 자동저장(새것부터).</summary>
+    private List<(string Label, BattleRecord Rec)> BattleSaves()
+    {
+        var list = new List<(string, BattleRecord)>();
+        for (int k = 0; k < BattleSlots; k++)
+            if (ReadBattleAt(BattleSlotPath(false, k)) is { } b && b.Scene < _sceneCount)
+                list.Add(($"전황 {k + 1} — {ChapterName(b.Scene)} {b.Turn}턴 · {SavedAt(BattleSlotPath(false, k))}", b));
+        var autos = Enumerable.Range(0, AutoSlots).Select(k => (k, b: ReadBattleAt(BattleSlotPath(true, k))))
+            .Where(x => x.b != null && x.b.Scene < _sceneCount).OrderByDescending(x => File.GetLastWriteTime(BattleSlotPath(true, x.k)));
+        foreach (var (k, b) in autos)
+            list.Add(($"자동 — {ChapterName(b!.Scene)} {b.Turn}턴 · {SavedAt(BattleSlotPath(true, k))}", b));
+        return list;
+    }
+
+    private static string SavedAt(string path) => File.GetLastWriteTime(path).ToString("MM-dd HH:mm");
+
+    /// <summary>전황 칸 고르기 — save 면 기록할 칸(덮어쓰면 묻는다), 아니면 부를 기록.</summary>
+    private void OpenBattleSlots(bool save)
+    {
+        _stage = MenuStage.Slots;
+        _menu.Clear();
+        _menuGlyphs.Clear();
+        if (save)
+        {
+            for (int k = 0; k < BattleSlots; k++)
+            {
+                int slot = k;
+                var b = ReadBattleAt(BattleSlotPath(false, k));
+                string label = b != null && b.Scene < _sceneCount ? $"전황 {k + 1} — {ChapterName(b.Scene)} {b.Turn}턴 · {SavedAt(BattleSlotPath(false, k))}" : $"전황 {k + 1} — 빈 칸";
+                _menu.Add((label, () => AskSys(TxtAskSave, () => SaveBattleRecord(BattleSlotPath(false, slot))), default));
+            }
+        }
+        else
+        {
+            foreach (var (label, rec) in BattleSaves())
+                _menu.Add((label, () => AskSys(TxtAskLoad, () => SysBanner(TxtWait, "기다리세요.", () => LoadBattleRecord(rec))), default));
+        }
+        _menu.Add(("돌아가기", OpenRecordMenu, default));
+        _menuIndex = 0;
+        _bs = BattleState.Menu;
+    }
+
+    /// <summary>자동저장 — 우리 차례가 열릴 때, 턴 % 3 칸에 말없이(실패해도 놀이는 그대로).</summary>
+    private void AutoSaveBattle()
+    {
+        if (!InBattle || _outcome != 0) return;
+        SaveBattleRecord(BattleSlotPath(true, Turn % AutoSlots), quiet: true);
+    }
+
     /// <summary>
     /// 지금 싸움을 기록한다(원작 시스템 메뉴의 전황기록, sub_19DF7) — 우리 차례에만. 마을 슬롯은 그대로 둔다.
+    /// path 가 FD2.SAV 면 그 안의 전황 자리에, 아니면 전황만 든 따로 파일에. quiet 면 알림 없이(자동저장).
     /// </summary>
-    private void SaveBattleRecord()
+    private void SaveBattleRecord() => SaveBattleRecord(SavePath);
+
+    private void SaveBattleRecord(string path, bool quiet = false)
     {
         var b = new BattleRecord
         {
@@ -175,17 +238,18 @@ internal sealed partial class GameWindow
         var bySlot = _scene.Units.Where(u => u.Slot >= 0).ToDictionary(u => u.Slot);
         for (int i = 0; i < _scene.SlotCount; i++) b.Units.Add(bySlot.TryGetValue(i, out var u) ? HeroRecord.From(u) : null);
         b.Chests.UnionWith(_battle.OpenedChests);
-        var save = SaveFile.Load(SavePath);
-        save.WriteBattle(b);
         try
         {
-            save.Save(SavePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            var save = SaveFile.Load(path);
+            save.WriteBattle(b);
+            save.Save(path);
             _hasSaves = null;
-            SysBanner(TxtSaved, "전황을 기록했습니다", () => _bs = BattleState.Select);   // 원작 「전황기록완료」
+            if (!quiet) SysBanner(TxtSaved, "전황을 기록했습니다", () => _bs = BattleState.Select);   // 원작 「전황기록완료」
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            ShowBanner($"기록하지 못했습니다 — {e.Message}", () => _bs = BattleState.Select, 1.5);
+            if (!quiet) ShowBanner($"기록하지 못했습니다 — {e.Message}", () => _bs = BattleState.Select, 1.5);
         }
     }
 
@@ -237,7 +301,7 @@ internal sealed partial class GameWindow
     {
         var list = new List<(string, Campaign)>();
         var mine = SaveFile.Load(SavePath);
-        if (mine.ReadBattle() is { } mb && mb.Scene < _sceneCount) list.Add(($"전황 불러오기 — {ChapterName(mb.Scene)} {mb.Turn}턴", BattleCampaign(mb)));
+        foreach (var (label, rec) in BattleSaves()) list.Add(($"{label}", BattleCampaign(rec)));   // 전황 칸들 · 자동저장
         for (int k = 0; k < SaveFile.Slots; k++)
             if (mine.ReadSlot(k) is { } c && c.NextScene < _sceneCount) list.Add(($"기록 {k + 1} — {SlotLabel(mine, k)}", c));
         if (File.Exists(OriginalSavePath))
