@@ -422,6 +422,14 @@ internal sealed partial class GameWindow
             case BattleState.Target:
             {
                 if (_actor == null || !_attackTiles.Contains((tx, ty))) return;
+                // 폰: 첫 탭은 그 칸에 커서(겨누기), 같은 칸을 한 번 더 탭하면 건다 — 마법을 고르면 가장 좋은 대상에 미리 겨눠 둔다
+                if (TouchUi && _tapAim != (tx, ty))
+                {
+                    (_tapAim, _cursor) = ((tx, ty), (tx, ty));
+                    PlaySfx(Sound.UiBank, Sound.Cursor);
+                    return;
+                }
+                _tapAim = null;
                 var a = _actor;
                 int spell = _pendingSpell;
                 if (_pendingItem >= 0 && _tables != null && _pendingItem < a.Bag.Count && _tables.Items[a.Bag[_pendingItem].Item].Use == 23)
@@ -805,8 +813,37 @@ internal sealed partial class GameWindow
         _targetFrom = from;
         _attackTiles = cells.ToHashSet();
         var first = cells.OrderBy(c => Math.Abs(c.X - u.X) + Math.Abs(c.Y - u.Y) == 0 && spell >= 0 && cells.Count > 1 ? 99 : Math.Abs(c.X - u.X) + Math.Abs(c.Y - u.Y)).First();
+        if (spell >= 0 && BestSpellCenter(u, spell, cells) is { } best) first = best;
         _cursor = first;
+        _tapAim = first;
+        _centerCursor = true;
         _bs = BattleState.Target;
+    }
+
+    /// <summary>폰에서 겨눈 칸 — 이 칸을 한 번 더 탭하면 건다.</summary>
+    private (int X, int Y)? _tapAim;
+
+    /// <summary>
+    /// 마법을 고르면 커서를 보낼 칸 — 공격은 맞는 쪽 점수의 합이 큰 곳: 줄 피해(남은 HP 까지) + 쓰러뜨리면 덤 + 상대 공격력 − 남은 HP 몫
+    /// (곧 HP 가 낮고 · 공격력이 세고 · 이 마법에 크게 맞는 상대). 회복은 잃은 HP 를 가장 많이 채우는 곳. 피해 · 회복이 없는 마법이면 null(가까운 칸).
+    /// </summary>
+    private (int X, int Y)? BestSpellCenter(Unit u, int spell, List<(int X, int Y)> cells)
+    {
+        (int X, int Y)? best = null;
+        double bestScore = 0;
+        foreach (var c in cells)
+        {
+            double score = 0;
+            foreach (var t in _battle.SpellTargets(u, spell, c))
+            {
+                if (_battle.Expected(u, spell, t) is not { } e) continue;
+                int dmg = (e.Min + e.Max) / 2;
+                score += e.Heal ? dmg
+                    : dmg + (e.Min >= t.Hp ? 100 : 0) + t.Atk - t.Hp / 4.0;
+            }
+            if (score > bestScore) (best, bestScore) = (c, score);
+        }
+        return best;
     }
 
     /// <summary>빈 칸에서 고르면 — 턴 끝 · 취소.</summary>
