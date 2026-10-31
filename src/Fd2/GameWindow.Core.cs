@@ -144,7 +144,7 @@ internal sealed partial class GameWindow
         if ((x, y) == (_mouseX, _mouseY)) return;
         (_mouseX, _mouseY) = (x, y);
         _mouseMoved = true;
-        if (PartyMove(x, y) || VolumeMove(x, y)) return;
+        if (PartyMove(x, y) || VolumeMove(x, y) || MenuMove(y)) return;
         if (DragMap(x, y)) return;
         if (_versionsOpen) VersionsHover(_mouseX, _mouseY);
         else if (_screen == Screen.Title && !_keysOpen) TitleHover(_mouseX, _mouseY);
@@ -186,18 +186,19 @@ internal sealed partial class GameWindow
     /// </summary>
     internal void PointerPress(int x, int y, bool defer = false)
     {
-        if (PartyPress(x, y) || VolumePress(x, y)) return;
+        if (PartyPress(x, y) || VolumePress(x, y) || MenuPress(x, y)) return;
         if (!defer && (!CanDragMap || InBattle && HudHit(x, y))) { PointerDown(x, y); return; }
         (_press, _pressCam, _dragging) = ((x, y), (_camX, _camY), false);
     }
 
     /// <summary>누르기를 버린다(안드로이드 길게 누르기로 물렸을 때).</summary>
-    internal void PointerAbort() => (_press, _dragging, _partyDrag, _volumeDrag) = (null, false, null, -1);
+    internal void PointerAbort() => (_press, _dragging, _partyDrag, _volumeDrag, _menuPress, _menuDragging) = (null, false, null, -1, null, false);
 
     /// <summary>뗐다 — 끌지 않았으면 그 자리를 누른 것으로.</summary>
     internal void PointerRelease(int x, int y)
     {
         if (PartyRelease() || VolumeRelease()) { _press = null; return; }
+        if (MenuRelease(x, y)) return;
         if (_press == null) return;
         bool dragged = _dragging;
         (_press, _dragging) = (null, false);
@@ -225,7 +226,7 @@ internal sealed partial class GameWindow
     }
 
     /// <summary>글 · 창(HUD) 크기를 정하는 배율 — 지도 배율과 따로. 폰은 두 손가락으로 지도만 키우고 글은 그대로 둔다.</summary>
-    private int HudZoom => TouchUi ? 3 : _zoom;   // 폰은 메뉴 · 글을 크게(손가락으로 누르기 쉽게, 사용자 요청)
+    private int HudZoom => TouchUi ? Math.Max(3, _clientH / 180) : _zoom;   // 폰은 메뉴 · 글을 크게 — 화면 높이를 따라(1080 줄 폰이면 6배, 손가락으로 누르기 쉽게, 사용자 요청)
 
     private const int MinTouchZoom = 1, MaxTouchZoom = 4;
 

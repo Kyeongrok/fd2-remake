@@ -43,7 +43,10 @@ internal sealed class Settings
     /// <summary>폰 지도 배율(1~4, 두 손가락으로 바꾼다) — 기본 2.</summary>
     public int TouchZoom { get; set; } = 2;
 
-    /// <summary>폰에서 보일 것 — 기본은 모두 숨김, 화면의 ESC 단추 → 모바일 메뉴에서 켠다(사용자 요청). 윈도우판은 늘 보인다.</summary>
+    /// <summary>윈도우판을 폰과 같은 화면으로(큰 글 · ESC · 메뉴 단추 · 지도 끌기) — 설정 「모바일 화면으로 보기」(사용자 요청). 폰은 늘 이 화면.</summary>
+    public bool MobileView { get; set; }
+
+    /// <summary>폰에서 보일 것 — 기본은 모두 숨김, 화면의 메뉴 단추 → 모바일 메뉴에서 켠다(사용자 요청). 윈도우판은 늘 보인다.</summary>
     public bool TouchTileInfo { get; set; }
     public bool TouchUnitInfo { get; set; }
     public bool TouchChests { get; set; }

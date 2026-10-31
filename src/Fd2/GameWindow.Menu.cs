@@ -16,7 +16,7 @@ internal sealed partial class GameWindow
 
     private const int MenuScenePrev = 1001, MenuSceneNext = 1002, MenuSceneBase = 1100;
     private const int MenuResBase = 1300, MenuZoomBase = 1400, MenuFullscreen = 1500, MenuResetView = 1501, MenuKeys = 1502, MenuVolume = 1503;
-    private const int MenuEditor = 1600, MenuExit = 1601, MenuHiRes = 1700, MenuShowRange = 1701, MenuMusic = 1702, MenuSound = 1703, MenuShowHelp = 1704, MenuShowGoals = 1705, MenuControlAllies = 1706;
+    private const int MenuEditor = 1600, MenuExit = 1601, MenuHiRes = 1700, MenuShowRange = 1701, MenuMusic = 1702, MenuSound = 1703, MenuShowHelp = 1704, MenuShowGoals = 1705, MenuControlAllies = 1706, MenuMobileView = 1707;
     private const int MenuBattle = 1003, MenuBattleStop = 1004, MenuVersions = 1005;
 
     private static readonly (int W, int H)[] ResChoices =
@@ -60,6 +60,7 @@ internal sealed partial class GameWindow
             Win32.AppendMenuW(zoom, Win32.MF_STRING, (nuint)(MenuZoomBase + z), z == 0 ? "자동(창을 채움)" : $"{z * 100}%");
         Win32.AppendMenuW(settings, Win32.MF_POPUP, (nuint)zoom, "배율(&Z)");
         Win32.AppendMenuW(settings, Win32.MF_STRING, MenuFullscreen, "전체화면(&F)\tF11");
+        Win32.AppendMenuW(settings, Win32.MF_STRING, MenuMobileView, "모바일 화면으로 보기(&M)");
         Win32.AppendMenuW(settings, Win32.MF_SEPARATOR, 0, null);
         Win32.AppendMenuW(settings, Win32.MF_STRING, MenuShowHelp, "조작법 보기(전투 위 줄)(&H)");
         Win32.AppendMenuW(settings, Win32.MF_STRING, MenuShowGoals, "승패 조건 보기(&G)");
@@ -101,6 +102,12 @@ internal sealed partial class GameWindow
             case MenuShowGoals:
                 _settings.ShowGoals = !_settings.ShowGoals;
                 _settings.Save();
+                break;
+            case MenuMobileView:
+                _settings.MobileView = !_settings.MobileView;
+                _settings.Save();
+                if (_bs == BattleState.Menu && _stage == MenuStage.System) { _menu.Clear(); _bs = BattleState.Select; }   // 열린 모바일 메뉴는 닫는다
+                Layout();
                 break;
             case MenuControlAllies:
                 _settings.ControlAllies = !_settings.ControlAllies;
@@ -178,6 +185,7 @@ internal sealed partial class GameWindow
         check(MenuShowRange, _settings.ShowRange);
         check(MenuShowHelp, _settings.ShowHelp);
         check(MenuShowGoals, _settings.ShowGoals);
+        check(MenuMobileView, _settings.MobileView);
         check(MenuControlAllies, _settings.ControlAllies);
         check(MenuMusic, _settings.Music);
         check(MenuSound, _settings.Sound);
@@ -271,8 +279,8 @@ internal sealed partial class GameWindow
     /// <summary>타이틀 메뉴에 「편집기 열기」를 보이나 — 윈도우는 편집기가 함께 온다.</summary>
     private static readonly bool HasEditor = true;
 
-    /// <summary>안내 글을 터치 기준으로 쓰나 — 윈도우는 키보드 · 마우스.</summary>
-    private static readonly bool TouchUi = false;
+    /// <summary>안내 글 · 화면을 터치 기준으로 쓰나 — 윈도우는 키보드 · 마우스, 설정 「모바일 화면으로 보기」를 켜면 폰과 같은 화면.</summary>
+    private bool TouchUi => _settings.MobileView;
 
     /// <summary>도구 > 편집기 열기 — 같은 폴더의 Fd2.Editor.exe 를 게임 폴더를 주어 띄운다.</summary>
     private partial void OpenEditor()

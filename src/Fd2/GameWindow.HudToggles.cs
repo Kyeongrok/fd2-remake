@@ -1,24 +1,25 @@
 using Fd2.Data;
+using Fd2.Native;
 
 namespace Fd2;
 
 /// <summary>
 /// 전투 정보 패널의 접기 · 펴기(창세기전3 파트1 처럼) — 보물상자 목록 · 미니맵 패널의 오른쪽 위 [−] 를 누르면 제목 줄만 남기고 접고, [+] 로 편다(M · T 키와 같은 설정).
-/// 폰은 오른쪽 위 ESC 단추 하나 → 모바일 메뉴.
+/// 폰은 오른쪽 위 ESC 단추(원작 Esc 그대로 — 물리기 · 다음 아군) 와 메뉴 단추(→ 모바일 메뉴).
 /// </summary>
 internal sealed partial class GameWindow
 {
-    private (int X, int Y, int W, int H) _miniFold, _chestFold, _escIcon;
+    private (int X, int Y, int W, int H) _miniFold, _chestFold, _escIcon, _menuIcon;
 
     /// <summary>오른쪽 위 줄의 아래 끝 — 미니맵 패널을 그 밑에 놓는다(폰은 ESC 단추 밑).</summary>
     private int _hudIconBottom = 12;
 
     private void DrawHudToggles(int fs)
     {
-        _miniFold = _chestFold = _escIcon = default;
+        _miniFold = _chestFold = _escIcon = _menuIcon = default;
         _hudIconBottom = 12;
         if (_bs is BattleState.CutIn or BattleState.Talk) return;
-        if (TouchUi) DrawEscButton(fs);
+        if (TouchUi) DrawTouchButtons(fs);
     }
 
     /// <summary>패널 오른쪽 위 접기 단추 — 펴 있으면 「−」, 접혀 있으면 「+」. 단추 자리를 돌려준다.</summary>
@@ -35,13 +36,14 @@ internal sealed partial class GameWindow
 
     /// <summary>그 자리가 접기 단추 · ESC 단추인가 — 단추 누르기는 지도 끌기로 받지 않는다.</summary>
     private bool HudHit(int mx, int my) =>
-        new[] { _miniFold, _chestFold, _escIcon }.Any(r => r.W > 0 && mx >= r.X - 4 && my >= r.Y - 4 && mx < r.X + r.W + 4 && my < r.Y + r.H + 4);
+        new[] { _miniFold, _chestFold, _escIcon, _menuIcon }.Any(r => r.W > 0 && mx >= r.X - 4 && my >= r.Y - 4 && mx < r.X + r.W + 4 && my < r.Y + r.H + 4);
 
-    /// <summary>단추를 눌렀으면 그 패널을 접고 펴고(ESC 는 모바일 메뉴) true.</summary>
+    /// <summary>단추를 눌렀으면 그 패널을 접고 펴고(ESC 는 원작 Esc, 메뉴는 모바일 메뉴) true.</summary>
     private bool HudToggleClick(int mx, int my)
     {
         static bool In((int X, int Y, int W, int H) r, int x, int y) => r.W > 0 && x >= r.X - 4 && y >= r.Y - 4 && x < r.X + r.W + 4 && y < r.Y + r.H + 4;
-        if (In(_escIcon, mx, my)) { OpenTouchMenu(); return true; }
+        if (In(_escIcon, mx, my)) { _mouseMoved = false; PlaySfx(Sound.UiBank, Sound.Cursor); BattleKey(Win32.VK_ESCAPE); return true; }
+        if (In(_menuIcon, mx, my)) { OpenTouchMenu(); return true; }
         if (In(_miniFold, mx, my)) _settings.ShowMinimap = !_settings.ShowMinimap;
         else if (In(_chestFold, mx, my)) _settings.ShowChests = !_settings.ShowChests;
         else return false;
@@ -49,22 +51,41 @@ internal sealed partial class GameWindow
         return true;
     }
 
-    // ── 폰: 오른쪽 위 ESC 단추 하나 → 모바일 메뉴(보일 것 켜고 끄기 · 시스템 메뉴) ─────────────
+    // ── 폰: 오른쪽 위 ESC 단추(원작 Esc 키와 같다) · 메뉴 단추(→ 모바일 메뉴: 보일 것 켜고 끄기 · 시스템 메뉴) ─────────────
 
     /// <summary>모바일 메뉴를 열 수 있는 때 — 우리 차례에 고르는 중.</summary>
     private bool CanOpenTouchMenu => InBattle && !_enemyPhase && _bs == BattleState.Select;
 
-    private void DrawEscButton(int fs)
+    /// <summary>ESC 단추를 보이는 때 — 우리 차례에 고르기 · 겨누기 · 메뉴(원작 Esc 가 듣는 때).</summary>
+    private bool CanTouchEsc => InBattle && !_enemyPhase && _bs is BattleState.Select or BattleState.Target or BattleState.Menu;
+
+    private void DrawTouchButtons(int fs)
     {
-        if (!CanOpenTouchMenu) return;
-        var label = Text.Render("ESC", fs, 0xFFFFFFFF);
-        int pad = fs / 2, w = label.W + pad * 2, h = label.H + pad, x = _clientW - 14 - w, y = 10;
-        _escIcon = (x, y, w, h);
+        int right = _clientW - 14, y = 10, bottom = 0;
+        if (CanTouchEsc)
+        {
+            _escIcon = DrawHudButton("ESC", fs, right, y);
+            right = _escIcon.X - 10;
+            bottom = _escIcon.Y + _escIcon.H;
+        }
+        if (CanOpenTouchMenu)
+        {
+            _menuIcon = DrawHudButton("메뉴", fs, right, y);
+            bottom = Math.Max(bottom, _menuIcon.Y + _menuIcon.H);
+        }
+        if (bottom > 0) _hudIconBottom = bottom + 6;
+    }
+
+    /// <summary>오른쪽 끝이 right 인 글자 단추를 그리고 자리를 돌려준다.</summary>
+    private (int X, int Y, int W, int H) DrawHudButton(string text, int fs, int right, int y)
+    {
+        var label = Text.Render(text, fs, 0xFFFFFFFF);
+        int pad = fs / 2, w = label.W + pad * 2, h = label.H + pad, x = right - w;
         FillRect(x, y, w, h, 0x90101020);
         FillRect(x, y, w, 1, 0xC0FFFFFF); FillRect(x, y + h - 1, w, 1, 0xC0FFFFFF);
         FillRect(x, y, 1, h, 0xC0FFFFFF); FillRect(x + w - 1, y, 1, h, 0xC0FFFFFF);
         DrawText(label, x + pad, y + pad / 2);
-        _hudIconBottom = y + h + 6;
+        return (x, y, w, h);
     }
 
     /// <summary>모바일 메뉴 — 칸 정보 · 상대 정보 · 보물상자 · 미니맵 · 승패 조건 · 조작법 켜고 끄기, 파티 정보 · 소리 크기, 시스템 메뉴(턴 끝 · 기록 · 타이틀).</summary>

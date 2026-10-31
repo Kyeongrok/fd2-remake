@@ -568,6 +568,7 @@ internal sealed partial class GameWindow
         }
         if (_bs == BattleState.Menu)
         {
+            if (vk is Win32.VK_UP or Win32.VK_DOWN) _menuScrolledByDrag = false;   // 키로 고르면 고른 줄이 보이게 다시 따라간다
             if (vk == Win32.VK_UP) _menuIndex = (_menuIndex + _menu.Count - 1) % _menu.Count;
             else if (vk == Win32.VK_DOWN) _menuIndex = (_menuIndex + 1) % _menu.Count;
             else if (confirm && _menuIndex < _menu.Count) _menu[_menuIndex].Do();
@@ -1598,25 +1599,106 @@ internal sealed partial class GameWindow
         if (CrossMenu) { DrawCrossMenu(fs); return; }
         var (sx, sy) = _actor is { } u ? TileScreen(u.X, u.Y) : TileScreen(_cursor.X, _cursor.Y);
         int cell = T * _zoom;
+        if (TouchUi) fs = fs * 4 / 3;   // 폰은 메뉴 글을 더 크게 — 넘치면 줄이지 않고 손가락으로 끌어 넘긴다(사용자 요청)
         var imgs = _menu.Select((m, i) => WithGlyphs(Text.Render(m.Label, fs, 0xFFFFFFFF), i, fs)).ToList();
-        // 줄이 많아 화면 높이를 넘으면 글을 줄인다(폰은 글이 커서 마법 · 메뉴가 길면 넘친다)
-        while (fs > 12 && (imgs.Max(i => i.H) + 12) * imgs.Count > _clientH - 8)
+        if (!TouchUi)
         {
-            fs -= 2;
-            int f = fs;
-            imgs = _menu.Select((m, i) => WithGlyphs(Text.Render(m.Label, f, 0xFFFFFFFF), i, f)).ToList();
+            // 줄이 많아 화면 높이를 넘으면 글을 줄인다
+            while (fs > 12 && (imgs.Max(i => i.H) + 12) * imgs.Count > _clientH - 8)
+            {
+                fs -= 2;
+                int f = fs;
+                imgs = _menu.Select((m, i) => WithGlyphs(Text.Render(m.Label, f, 0xFFFFFFFF), i, f)).ToList();
+            }
         }
-        int w = imgs.Max(i => i.W) + 32, rowH = imgs.Max(i => i.H) + 12;
-        int x = Math.Min(sx + cell + 6, _clientW - w - 4), y = Math.Max(4, Math.Min(sy, _clientH - rowH * imgs.Count - 4));
+        int pad = TouchUi ? fs / 2 : 12;
+        int w = imgs.Max(i => i.W) + 32, rowH = imgs.Max(i => i.H) + pad;
+        // 보이는 줄 수 — 다 안 들어가면 넘긴다(고른 줄이 보이게 따라가고, 끌거나 휠로 넘기면 그 자리에)
+        int fit = Math.Max(1, (_clientH - 8) / rowH);
+        (_menuRowH, _menuFit) = (rowH, fit);
+        var sig = (_stage, _menu.Count, _menu[0].Label);
+        if (sig != _menuSig) (_menuSig, _menuScroll, _menuScrolledByDrag) = (sig, 0, false);   // 새 메뉴 — 처음부터
+        if (_menu.Count <= fit) _menuScroll = 0;
+        else
+        {
+            if (!_menuScrolledByDrag && _menuIndex >= 0 && _menuIndex < _menu.Count)
+            {
+                if (_menuIndex < _menuScroll) _menuScroll = _menuIndex;
+                else if (_menuIndex >= _menuScroll + fit) _menuScroll = _menuIndex - fit + 1;
+            }
+            _menuScroll = Math.Clamp(_menuScroll, 0, _menu.Count - fit);
+        }
+        int shown = Math.Min(fit, _menu.Count);
+        int x = Math.Min(sx + cell + 6, _clientW - w - 4), y = Math.Max(4, Math.Min(sy, _clientH - rowH * shown - 4));
+        _menuBox = (x, y, w, rowH * shown);
         for (int i = 0; i < _menu.Count; i++)
         {
-            var rect = (x, y + i * rowH, w, rowH);
-            if (_mouseX >= rect.x && _mouseY >= rect.Item2 && _mouseX < x + w && _mouseY < rect.Item2 + rowH && _mouseMoved) _menuIndex = i;
+            int row = i - _menuScroll;
+            if (row < 0 || row >= shown) { _menu[i] = (_menu[i].Label, _menu[i].Do, default); continue; }   // 가려진 줄은 누를 수 없다
+            var rect = (x, y + row * rowH, w, rowH);
+            if (_mouseX >= rect.x && _mouseY >= rect.Item2 && _mouseX < x + w && _mouseY < rect.Item2 + rowH && _mouseMoved && !_menuDragging) _menuIndex = i;
             FillRect(rect.x, rect.Item2, w, rowH - 2, i == _menuIndex ? 0xE0405090u : 0xD0202030u);
-            if (i == _menuIndex) DrawText(Text.Render("▶", fs, 0xFFFFE070), x + 2, rect.Item2 + 5);
-            DrawText(imgs[i], x + 16, rect.Item2 + 5);
+            int ty = rect.Item2 + (rowH - 2 - imgs[i].H) / 2;
+            if (i == _menuIndex) DrawText(Text.Render("▶", fs, 0xFFFFE070), x + 2, ty);
+            DrawText(imgs[i], x + 16, ty);
             _menu[i] = (_menu[i].Label, _menu[i].Do, rect);
         }
+        if (_menu.Count > shown)
+        {
+            // 스크롤 막대 — 오른쪽 가장자리에 지금 보이는 몫
+            int barH = rowH * shown, thumb = Math.Max(fs, barH * shown / _menu.Count), at = (barH - thumb) * _menuScroll / Math.Max(1, _menu.Count - shown);
+            FillRect(x + w - 6, y, 6, barH, 0x80000000);
+            FillRect(x + w - 6, y + at, 6, thumb, 0xE0FFE070);
+        }
+    }
+
+    // ── 긴 메뉴 넘기기 — 폰은 글을 크게 두고 넘치면 끌어서(휠 · 방향키도) ─────────────
+
+    private int _menuScroll, _menuRowH = 1, _menuFit = 1;
+    private (int X, int Y, int W, int H) _menuBox;
+    private (int Y, int Scroll)? _menuPress;
+    private bool _menuDragging, _menuScrolledByDrag;
+    private (MenuStage, int, string) _menuSig;
+
+    /// <summary>메뉴가 화면을 넘어 넘길 수 있는가.</summary>
+    private bool MenuScrollable => InBattle && _bs == BattleState.Menu && !CrossMenu && _menu.Count > _menuFit;
+
+    private bool InMenuBox(int x, int y) => x >= _menuBox.X && y >= _menuBox.Y && x < _menuBox.X + _menuBox.W && y < _menuBox.Y + _menuBox.H;
+
+    /// <summary>넘길 수 있는 메뉴 위를 눌렀다 — 뗄 때까지 기다린다(끌면 넘기기, 안 끌면 그 줄 누르기).</summary>
+    private bool MenuPress(int x, int y)
+    {
+        if (!MenuScrollable || !InMenuBox(x, y)) return false;
+        (_menuPress, _menuDragging) = ((y, _menuScroll), false);
+        return true;
+    }
+
+    private bool MenuMove(int y)
+    {
+        if (_menuPress is not { } p) return false;
+        if (!_menuDragging && Math.Abs(y - p.Y) < DragSlop) return true;
+        _menuDragging = _menuScrolledByDrag = true;
+        _menuScroll = Math.Clamp(p.Scroll - (y - p.Y) / Math.Max(1, _menuRowH), 0, Math.Max(0, _menu.Count - _menuFit));
+        return true;
+    }
+
+    /// <summary>뗐다 — 끌었으면 넘기기만, 아니면 누른 줄을 고른다. 처리했으면 true.</summary>
+    private bool MenuRelease(int x, int y)
+    {
+        if (_menuPress == null) return false;
+        bool dragged = _menuDragging;
+        (_menuPress, _menuDragging) = (null, false);
+        if (!dragged) PointerDown(x, y);
+        return true;
+    }
+
+    /// <summary>휠로 메뉴 넘기기.</summary>
+    private bool MenuWheel(int notches)
+    {
+        if (!MenuScrollable) return false;
+        _menuScrolledByDrag = true;
+        _menuScroll = Math.Clamp(_menuScroll - notches, 0, _menu.Count - _menuFit);
+        return true;
     }
 
     /// <summary>메뉴 줄 i 에 원본 글꼴 이름이 붙어 있으면 글 뒤에 이어 붙인다.</summary>
