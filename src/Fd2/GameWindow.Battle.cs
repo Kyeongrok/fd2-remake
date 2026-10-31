@@ -16,7 +16,7 @@ namespace Fd2;
 /// </remarks>
 internal sealed partial class GameWindow
 {
-    private enum BattleState { None, Select, Moving, Menu, Target, CutIn, Enemy, Banner, Over, Talk, Script, Fx }
+    private enum BattleState { None, Select, Moving, Menu, Target, CutIn, Enemy, Banner, Over, Talk, Script, Fx, March }
 
     private const uint ReachLight = 0x58FFFFFF, ReachColor = 0x5A3C78FF, AttackColor = 0x5AFF4646, TargetColor = 0x80FF3030;
     private const double FigTick = 0.055;
@@ -356,6 +356,9 @@ internal sealed partial class GameWindow
                 break;
             case BattleState.Enemy:
                 EnemyTick(dt);
+                break;
+            case BattleState.March:
+                MarchTick();
                 break;
         }
     }
@@ -848,19 +851,116 @@ internal sealed partial class GameWindow
         return best;
     }
 
-    /// <summary>빈 칸에서 고르면 — 턴 끝 · 취소.</summary>
+    // ── 시스템 메뉴 — 원작(sub_16F55 · sub_19DF7)처럼 커서 칸 둘레 네 단추, 고르면 원작 글(FDTXT)로 묻고 알린다 ─────
+
+    /// <summary>원작 글 줄(sub_15F84 의 FDTXT 번호 = NameTable 줄) — 묻기 · 알림.</summary>
+    private const int TxtAskSave = 410, TxtSaved = 411, TxtNever = 412, TxtAskLoad = 413, TxtWait = 414, TxtAskQuit = 415, TxtRest = 416,
+                      TxtAskMarch = 417, TxtMarch = 418, TxtAskEnd = 419, TxtEnd = 420;
+
+    /// <summary>지금 띄운 시스템 단추 그림(위 · 왼쪽 · 오른쪽 · 아래) — 못 고르는 단추도 빨강으로 그리려고.</summary>
+    private int[] _sysButtons = [7, 5, 6, 4];
+
+    /// <summary>
+    /// 빈 칸에서 고르면(sub_16F55, 단추 7 · 5 · 6 · 4) — 위 기록(하위 메뉴), 왼쪽 행군, 오른쪽 설정, 아래 END 턴 끝.
+    /// 물리기는 Esc · 오른쪽 단추 · 단추 밖 누르기.
+    /// </summary>
     private void OpenSystemMenu()
     {
         PlaySfx(Sound.UiBank, Sound.Menu);   // 메뉴가 뜰 때 원작처럼 소리
         _stage = MenuStage.System;
         _menu.Clear();
-        // 원작(sub_16F55)처럼 커서 칸 둘레 네 단추 — 아래 END 턴 끝 · 위 기록 · 오른쪽 설정 · 왼쪽(원작은 위임) 타이틀로. 물리기는 Esc · 오른쪽 단추 · 빈 곳 누르기
-        _menu.Add(("턴 끝", EndPlayerTurn, default));
-        if (!_enemyPhase) _menu.Add(("전황 기록", SaveBattleRecord, default));
+        _menuGlyphs.Clear();
+        _sysButtons = [7, 5, 6, 4];
+        _menu.Add(("기록", OpenRecordMenu, default));
+        if (!_enemyPhase) _menu.Add(("행군", () => AskSys(TxtAskMarch, () => SysBanner(TxtMarch, "전원 행군합니다.", StartMarch)), default));
         _menu.Add(("설정", () => { _menu.Clear(); _bs = BattleState.Select; OpenVolume(); }, default));
-        _menu.Add(("타이틀로", ToTitle, default));
+        _menu.Add(("턴 끝", () => AskSys(TxtAskEnd, () => SysBanner(TxtEnd, "예. 이번 차례 끝냅니다.", EndPlayerTurn)), default));
+        _menuIndex = _menu.Count - 1;
+        _bs = BattleState.Menu;
+    }
+
+    /// <summary>기록 하위 메뉴(sub_19DF7, 단추 12 · 13 · 14 · 15) — 위 지도, 왼쪽 전황 기록, 오른쪽 전황 부르기(기록이 없으면 빨강), 아래 전장 이탈.</summary>
+    private void OpenRecordMenu()
+    {
+        PlaySfx(Sound.UiBank, Sound.Menu);
+        _stage = MenuStage.System;
+        _menu.Clear();
+        _sysButtons = [12, 13, 14, 15];
+        _menu.Add(("지도 보기", () => { _settings.ShowMinimap = true; _settings.Save(); _menu.Clear(); _bs = BattleState.Select; }, default));
+        if (!_enemyPhase) _menu.Add(("전황 기록", () => AskSys(TxtAskSave, SaveBattleRecord), default));
+        if (!_enemyPhase && SaveFile.Load(SavePath).ReadBattle() is { } rec && rec.Scene < _sceneCount)
+            _menu.Add(("전황 부르기", () => AskSys(TxtAskLoad, () => SysBanner(TxtWait, "기다리세요.", () => LoadBattleRecord(rec))), default));
+        _menu.Add(("전장 이탈", () => AskSys(TxtAskQuit, () => SysBanner(TxtRest, "그럼 쉬세요.", ToTitle)), default));
         _menuIndex = 0;
         _bs = BattleState.Menu;
+    }
+
+    /// <summary>원작 글로 묻는다(sub_16559 · sub_19953) — 「예」면 yes, 「아니오」 · 물리기면 「그럼 됐습니다.」.</summary>
+    private void AskSys(int line, Action yes)
+    {
+        PlaySfx(Sound.UiBank, Sound.Menu);
+        _stage = MenuStage.Ask;
+        _menu.Clear();
+        _menuGlyphs.Clear();
+        _menu.Add(("", () => { }, default));
+        _menuGlyphs[0] = line;
+        _menu.Add(("예", () => { _menuGlyphs.Clear(); _menu.Clear(); yes(); }, default));
+        _menu.Add(("아니오", () => { _menuGlyphs.Clear(); _menu.Clear(); SysBanner(TxtNever, "그럼 됐습니다.", () => _bs = BattleState.Select); }, default));
+        _menuIndex = 1;
+        _bs = BattleState.Menu;
+    }
+
+    /// <summary>원작 글 한 줄을 잠깐 띄운다(sub_15F84 + 0xC8 쉼) — 글꼴이 없으면 같은 뜻의 우리 글.</summary>
+    private void SysBanner(int line, string fallback, Action after)
+    {
+        bool glyph = NameImage(line, 2, 0xFFFFE070) != null;
+        ShowBanner(glyph ? "" : fallback, after, 0.8);
+        _bannerName = glyph ? line : -1;
+    }
+
+    /// <summary>
+    /// 행군(sub_16F55 의 왼쪽 단추) — 아직 안 움직인 우리 편이 배열 차례로 하나씩 커서 칸 쪽으로 걷고(sub_14B78, 치지는 않는다),
+    /// 멈춘 칸의 땅 사건이 일어난 뒤 끝냄 표시 — 다 걸으면 이번 차례를 끝낸다(sub_1A30B).
+    /// </summary>
+    private void StartMarch()
+    {
+        _marchGoal = _cursor;
+        _marchOrder.Clear();
+        _marchOrder.AddRange(Controlled.Where(u => !u.Acted && !u.Paralyzed).OrderBy(u => u.Slot));
+        _marchNow = null;
+        _bs = BattleState.March;
+    }
+
+    private (int X, int Y) _marchGoal;
+    private readonly List<Unit> _marchOrder = new();
+    private Unit? _marchNow;
+
+    private void MarchTick()
+    {
+        if (_marchNow is { } m)
+        {
+            if (m.Moving || m.Path.Count > 0) return;
+            _marchNow = null;
+            _bs = BattleState.None;
+            GroundCheck(m, () => { if (!CheckOver()) _bs = BattleState.March; });
+            return;
+        }
+        while (_marchOrder.Count > 0)
+        {
+            var u = _marchOrder[0];
+            _marchOrder.RemoveAt(0);
+            if (u.Hp <= 0 || u.Acted) continue;
+            u.Acted = true;
+            var path = new BattleAi(_battle).MarchPath(u, _marchGoal);
+            if (path.Count == 0) continue;
+            foreach (var c in path) u.Path.Enqueue(c);
+            _selected = u;
+            _cursor = (u.X, u.Y);
+            _marchNow = u;
+            return;
+        }
+        _cursor = _marchGoal;
+        EndPlayerTurn();
     }
 
     /// <summary>갈 칸(제자리도)을 정한 뒤 메뉴 — 공격 · 마법 · 물건 · 쉬기(취소하면 제자리로 돌아가 다시 갈 칸 고르기).</summary>
@@ -1533,15 +1633,14 @@ internal sealed partial class GameWindow
 
     /// <summary>
     /// 십자 메뉴의 자리 — 원작 행동(sub_18D8C · sub_179D5): 위 공격, 왼쪽 마법, 오른쪽 물건, 아래 쉬기.
-    /// 시스템(sub_16F55, 단추 7 · 5 · 6 · 4): 위 기록, 왼쪽 위임(여기는 타이틀로), 오른쪽 설정, 아래 END 턴 끝.
+    /// 시스템(sub_16F55, 단추 7 · 5 · 6 · 4): 위 기록, 왼쪽 행군, 오른쪽 설정, 아래 END 턴 끝. 기록(sub_19DF7, 12 · 13 · 14 · 15): 위 지도, 왼쪽 전황 기록, 오른쪽 전황 부르기, 아래 전장 이탈.
     /// </summary>
     private static Dir SlotOf(string label) => label switch
     {
-        "공격" or "전황 기록" => Dir.Up, "마법" or "타이틀로" => Dir.Left, "물건" or "설정" => Dir.Right, _ => Dir.Down,
+        "공격" or "기록" or "지도 보기" => Dir.Up, "마법" or "행군" or "전황 기록" => Dir.Left, "물건" or "설정" or "전황 부르기" => Dir.Right, _ => Dir.Down,
     };
 
-    /// <summary>시스템 메뉴 단추 그림(FDOTHER 2) — 위 7(기록), 왼쪽 15(도스 — 나가기), 오른쪽 6(설정), 아래 4(END).</summary>
-    private const int SysRecordButton = 7, SysExitButton = 15, SysSetupButton = 6, SysEndButton = 4;
+
 
     private Buttons? _buttons;
     private bool _buttonsTried;
@@ -1561,11 +1660,11 @@ internal sealed partial class GameWindow
             catch (Exception e) when (e is IOException or IndexOutOfRangeException or ArgumentOutOfRangeException) { _buttons = null; }
         }
         var (sx, sy) = sys ? TileScreen(_cursor.X, _cursor.Y) : TileScreen(_actor!.X, _actor.Y);
-        if (_buttons is not { Count: > 3 * SysExitButton + 2 } bank) { DrawTextCross(sx, sy); return; }
+        if (_buttons is not { Count: > 3 * 15 + 2 } bank) { DrawTextCross(sx, sy); return; }
 
         int s = _zoom, blink = (int)(_time * 18.2 / 4) & 1;
         var slots = sys
-            ? new[] { (Dir.Up, SysRecordButton, 0, -20), (Dir.Left, SysExitButton, -24, 2), (Dir.Right, SysSetupButton, 24, 2), (Dir.Down, SysEndButton, 0, 24) }
+            ? new[] { (Dir.Up, _sysButtons[0], 0, -20), (Dir.Left, _sysButtons[1], -24, 2), (Dir.Right, _sysButtons[2], 24, 2), (Dir.Down, _sysButtons[3], 0, 24) }
             : new[] { (Dir.Up, Buttons.Attack, 0, -20), (Dir.Left, Buttons.Magic, -24, 2), (Dir.Right, Buttons.Item, 24, 2), (Dir.Down, Buttons.Rest, 0, 24) };
         foreach (var (dir, button, ox, oy) in slots)
         {

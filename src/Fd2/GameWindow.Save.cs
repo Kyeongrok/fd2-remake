@@ -175,7 +175,7 @@ internal sealed partial class GameWindow
         {
             save.Save(SavePath);
             _hasSaves = null;
-            ShowBanner("전황을 기록했습니다", () => _bs = BattleState.Select, 0.9);
+            SysBanner(TxtSaved, "전황을 기록했습니다", () => _bs = BattleState.Select);   // 원작 「전황기록완료」
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {

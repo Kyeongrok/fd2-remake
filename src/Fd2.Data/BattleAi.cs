@@ -312,6 +312,9 @@ public sealed class BattleAi(Battle battle)
         return null;
     }
 
+    /// <summary>행군(sub_16F55 → sub_14B78) — 우리 편이 목표 칸 쪽으로 이번 이동력만큼 걸을 길. 못 나아가면 빈 목록.</summary>
+    public List<(int X, int Y)> MarchPath(Unit u, (int X, int Y) goal) => WalkToward(u, goal)?.Path.ToList() ?? [];
+
     /// <summary>다가가기(sub_14121) — 상대를 피해 28걸음 안에서 가장 가까운 상대의 곁 칸을 찾아 그쪽으로.</summary>
     private AiPlan? Approach(Unit u)
     {
