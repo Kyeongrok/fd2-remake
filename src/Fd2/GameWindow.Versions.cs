@@ -29,11 +29,28 @@ internal sealed partial class GameWindow
 
     private int VersionRows => _versions.Count + (CanAddVersion() ? 1 : 0);
 
-    private void OpenVersions()
+    /// <summary>목록을 바꾸지 않고 닫았을 때 할 일 — 켤 때 고르기는 그 뒤에 오프닝.</summary>
+    private Action? _afterVersions;
+
+    private void OpenVersions() => OpenVersions(null);
+
+    /// <summary>판 목록을 연다 — 찾은 판이 min 개보다 적으면 안 열고 거짓.</summary>
+    private bool OpenVersions(Action? after, int min = 0)
     {
         _versions = FindVersions();
+        if (_versions.Count < min) return false;
         _versionIndex = Math.Max(0, _versions.FindIndex(v => SameDir(v.Dir, _dir)));
         _versionsOpen = true;
+        _afterVersions = after;
+        return true;
+    }
+
+    private void CloseVersions()
+    {
+        _versionsOpen = false;
+        var after = _afterVersions;
+        _afterVersions = null;
+        after?.Invoke();
     }
 
     /// <summary>판 목록이 연 동안 받는 키 — 위아래 · 결정 · Esc. 먹었으면 참.</summary>
@@ -46,7 +63,7 @@ internal sealed partial class GameWindow
             case Win32.VK_UP: _versionIndex = (_versionIndex + rows - 1) % rows; break;
             case Win32.VK_DOWN: _versionIndex = (_versionIndex + 1) % rows; break;
             case Win32.VK_RETURN or Win32.VK_SPACE: PickVersionRow(_versionIndex); break;
-            case Win32.VK_ESCAPE: _versionsOpen = false; break;
+            case Win32.VK_ESCAPE: CloseVersions(); break;
         }
         return true;
     }
@@ -59,7 +76,7 @@ internal sealed partial class GameWindow
             var r = _versionRects[i];
             if (mx >= r.X && my >= r.Y && mx < r.X + r.W && my < r.Y + r.H) { PickVersionRow(i); return true; }
         }
-        _versionsOpen = false;   // 목록 밖을 누르면 닫는다
+        CloseVersions();   // 목록 밖을 누르면 닫는다
         return true;
     }
 
@@ -74,10 +91,12 @@ internal sealed partial class GameWindow
 
     private void PickVersionRow(int i)
     {
-        if (i == _versions.Count && CanAddVersion()) { _versionsOpen = false; AddVersion(); return; }
+        if (i == _versions.Count && CanAddVersion()) { CloseVersions(); AddVersion(); return; }
         if (i < 0 || i >= _versions.Count) return;
+        if (SameDir(_versions[i].Dir, _dir)) { CloseVersions(); return; }
         _versionsOpen = false;
-        if (!SameDir(_versions[i].Dir, _dir)) SwitchVersion(_versions[i].Dir);
+        _afterVersions = null;
+        SwitchVersion(_versions[i].Dir);
     }
 
     private static bool SameDir(string a, string b) =>
@@ -91,7 +110,8 @@ internal sealed partial class GameWindow
         if (CanAddVersion()) rows.Add(("+ 버전 더하기 (게임 폴더 하나 더 가져오기)", "", false));
         if (rows.Count == 0) rows.Add(("찾은 버전이 없습니다", "", false));
 
-        var title = Text.Render("버전 고르기 — 고르면 그 버전으로 다시 켭니다 · Esc 닫기", fs, 0xFFFFE070);
+        var title = Text.Render(_afterVersions != null ? "버전 고르기 — 어느 버전으로 할까요 · Esc 지금 버전(●)으로"
+                                                       : "버전 고르기 — 고르면 그 버전으로 다시 켭니다 · Esc 닫기", fs, 0xFFFFE070);
         var imgs = rows.Select(r => (L: Text.Render(r.Now ? $"● {r.Label}" : r.Label, fs, r.Now ? 0xFF90E0FF : 0xFFFFFFFF),
                                      S: Text.Render(r.Sub, Math.Max(11, fs * 2 / 3), 0xFF9098A8, bold: false))).ToList();
         int rowH = imgs.Max(i => i.L.H + (i.S.W > 1 ? i.S.H : 0)) + 10;
@@ -112,4 +132,12 @@ internal sealed partial class GameWindow
             cy += rowH;
         }
     }
+
+    /// <summary>왼쪽 위 구석의 지금 버전 이름 — 어느 화면에서나 작게(Text.Render 가 그림을 기억한다).</summary>
+    private Text.Image VersionLabel => Text.Render(VersionName, Math.Max(11, 5 * _zoom), 0xA0C8D0E0, bold: false);
+
+    private void DrawVersionLabel() => DrawText(VersionLabel, 4, 2);
+
+    /// <summary>버전 이름 줄 밑 — 왼쪽 위에 놓는 창은 여기부터.</summary>
+    private int VersionLabelBottom => 2 + VersionLabel.H;
 }

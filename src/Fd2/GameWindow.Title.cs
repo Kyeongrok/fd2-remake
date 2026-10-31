@@ -324,6 +324,7 @@ internal sealed partial class GameWindow
                 Lighten(_of, _oLight);
                 DrawScreen320(_of);
             }
+            if (_versionsOpen) return;   // 켤 때 버전 고르기 — 오프닝은 고른 뒤에
             var skip = Text.Render(TouchUi ? "누르면 건너뜁니다" : "아무 키나 누르면 건너뜁니다", Math.Max(12, fs * 3 / 4), 0xB0FFFFFF, bold: false);
             DrawText(skip, _clientW - skip.W - 16, _clientH - skip.H - 12);
             return;

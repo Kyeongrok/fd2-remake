@@ -107,11 +107,15 @@ internal sealed partial class GameWindow
     internal int FrameWidth => _fbW;
     internal int FrameHeight => _fbH;
 
-    /// <summary>처음 — 1장 지도를 깔고 오프닝부터.</summary>
+    /// <summary>켤 때 버전 고르기부터 띄우나 — 윈도우에서 손으로 켰을 때(버전을 골라 다시 켠 것은 아니다).</summary>
+    internal bool PickVersionFirst { get; init; }
+
+    /// <summary>처음 — 1장 지도를 깔고 오프닝부터. 버전이 둘 넘으면 그 앞에 버전 고르기(그대로 두면 이 버전으로 오프닝).</summary>
     internal void Start()
     {
         _running = true;
         LoadScene(0);
+        if (PickVersionFirst && !Offscreen && OpenVersions(StartOpening, min: 2)) return;
         StartOpening();
     }
 
@@ -420,6 +424,12 @@ internal sealed partial class GameWindow
 
     /// <summary>사람 층을 창 해상도로 찍는다 — 고해상도 그림이 있으면 그것을, 없으면 원본을 점 그대로 배율만큼 키워.</summary>
     private void Compose()
+    {
+        ComposeScreen();
+        DrawVersionLabel();
+    }
+
+    private void ComposeScreen()
     {
         Array.Clear(_fb);
         if (_screen == Screen.Prologue)

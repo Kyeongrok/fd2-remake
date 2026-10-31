@@ -23,7 +23,8 @@ internal static class Program
         }
         try
         {
-            using var window = new GameWindow(dir);
+            // 손으로 켰으면 버전 고르기부터(버전을 골라 다시 켠 것은 폴더를 인자로 받으니 묻지 않는다)
+            using var window = new GameWindow(dir) { PickVersionFirst = !told };
             window.Run();
         }
         catch (Exception ex)

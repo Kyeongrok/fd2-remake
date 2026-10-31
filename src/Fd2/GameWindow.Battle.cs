@@ -1348,7 +1348,7 @@ internal sealed partial class GameWindow
         if (rows.Count == 0) return;
         var title = Text.Render("보물상자", fs, 0xFFA8C8FF);
         int w = Math.Max(title.W, rows.Max(r => r.W)) + 20, h = title.H + rows.Sum(r => r.H + 2) + 14;
-        int bx = 12, by = 12;
+        int bx = 12, by = Math.Max(12, VersionLabelBottom + 4);
         FillRect(bx, by, w, h, 0xC0101020);
         DrawText(title, bx + 10, by + 6);
         int cy = by + 8 + title.H;

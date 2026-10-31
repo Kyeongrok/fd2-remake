@@ -3,7 +3,7 @@ using Fd2.Data;
 namespace Fd2;
 
 /// <summary>
-/// 장 이어가기와 기록(분석-세이브) — 원작 FD2.SAV 꼴 그대로 %LOCALAPPDATA%\Fd2\FD2.SAV 에 쓴다.
+/// 장 이어가기와 기록(분석-세이브) — 원작 FD2.SAV 꼴 그대로 버전마다 %LOCALAPPDATA%\Fd2\saves\버전 이름\FD2.SAV 에 쓴다.
 /// 새 게임은 사울 · 유니 · 아래스 · 카일로 1장(장면 0)부터, 이기면 동료 표를 고쳐 다음 장면(32 → 31 → 0 → … → 30)으로.
 /// 이긴 뒤 원작의 마을처럼 마을 기록 슬롯 4개 가운데 하나에 기록할 수 있고, 타이틀의 「이어하기」가 슬롯을 읽는다.
 /// 원작 폴더의 FD2.SAV 슬롯도 읽어 온다(쓰지는 않는다).
@@ -16,8 +16,30 @@ internal sealed partial class GameWindow
     /// <summary>마지막 판정 — 2 이기면, 1 지면(<see cref="Battle.Judge"/>).</summary>
     private int _outcome;
 
-    private static string SavePath =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fd2", "FD2.SAV");
+    /// <summary>
+    /// 기록은 버전마다 따로 — %LOCALAPPDATA%\Fd2\saves\버전 이름\FD2.SAV. 그 버전 기록이 아직 없으면
+    /// 예전에 모든 버전이 함께 쓰던 %LOCALAPPDATA%\Fd2\FD2.SAV 를 한 번 베껴 온다(예전 것은 그대로 둔다).
+    /// </summary>
+    private string SavePath => _savePath ??= VersionSavePath();
+
+    private string? _savePath;
+
+    private string VersionSavePath()
+    {
+        string root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fd2");
+        string name = string.Concat(VersionName.Select(ch => Path.GetInvalidFileNameChars().Contains(ch) ? '_' : ch));
+        string path = Path.Combine(root, "saves", name, "FD2.SAV"), shared = Path.Combine(root, "FD2.SAV");
+        try
+        {
+            if (!File.Exists(path) && File.Exists(shared))
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.Copy(shared, path);
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        return path;
+    }
 
     private string OriginalSavePath => Path.Combine(_dir, "FD2.SAV");
 
