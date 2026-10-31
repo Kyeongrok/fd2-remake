@@ -572,6 +572,7 @@ internal sealed partial class GameWindow
         }
         if (_bs == BattleState.Menu)
         {
+            if (AskBoxOpen && vk is Win32.VK_LEFT or Win32.VK_RIGHT) vk = vk == Win32.VK_LEFT ? Win32.VK_UP : Win32.VK_DOWN;   // YES · NO 는 좌우로
             if (vk is Win32.VK_UP or Win32.VK_DOWN) _menuScrolledByDrag = false;   // 키로 고르면 고른 줄이 보이게 다시 따라간다
             if (vk == Win32.VK_UP) _menuIndex = (_menuIndex + _menu.Count - 1) % _menu.Count;
             else if (vk == Win32.VK_DOWN) _menuIndex = (_menuIndex + 1) % _menu.Count;
@@ -730,20 +731,15 @@ internal sealed partial class GameWindow
     private void AskChest(Unit u, int k, bool hidden)
     {
         PlaySfx(Sound.UiBank, Sound.Chest);
-        _stage = MenuStage.Ask;
-        _menu.Clear();
-        _menuGlyphs.Clear();
-        _menu.Add((hidden ? "보물상자 발견 — 꺼낸다" : "보석상자 — 연다", () =>
+        // 원작처럼 대화창에 연 사람 얼굴 · 「보석상자 열까요?」(글 421) · 숨은 보물은 「꺼냅니까?」(글 428), YES · NO
+        AskBox(hidden ? 428 : 421, u.Icon, () =>
         {
             ClearSelection();
             if (_scene.Chests[k].Kind == 0 && u.Bag.Count >= 8) { AskSwap(u, k); return; }
             var (notes, ev) = _battle.OpenChest(u, k);
             ShowNotices(notes, () => { if (ev >= 0) RunEvent(ev, AfterPlayerAction, u.Slot); else AfterPlayerAction(); });
-        }, default));
-        _menu.Add(("그냥 둔다", () => { ClearSelection(); AfterPlayerAction(); }, default));
-        _menuIndex = 0;
+        }, () => { ClearSelection(); AfterPlayerAction(); });
         _selected = u;
-        _bs = BattleState.Menu;
     }
 
     /// <summary>가방이 찼다 — 원작처럼 바꿀 물건을 고르게 한다(고른 물건은 상자에 남는다).</summary>
@@ -895,19 +891,107 @@ internal sealed partial class GameWindow
         _bs = BattleState.Menu;
     }
 
-    /// <summary>원작 글로 묻는다(sub_16559 · sub_19953) — 「예」면 yes, 「아니오」 · 물리기면 「그럼 됐습니다.」.</summary>
+    /// <summary>원작 글로 묻는다(sub_16559 · sub_19953) — 대화창에 YES · NO, 「예」면 yes, 「아니오」 · 물리기면 「그럼 됐습니다.」.</summary>
     private void AskSys(int line, Action yes)
     {
         PlaySfx(Sound.UiBank, Sound.Menu);
+        // 얼굴은 원작처럼(sub_1956B) — 행군은 우리 편 첫 사람, 나머지는 0x4B 번 얼굴
+        int face = line == TxtAskMarch ? Controlled.OrderBy(u => u.Slot).FirstOrDefault()?.Icon ?? -1 : 0x4B;
+        AskBox(line, face, yes, () => SysBanner(TxtNever, "그럼 됐습니다.", () => _bs = BattleState.Select));
+    }
+
+    // ── 묻는 대화창 — 원작(sub_16559 · sub_19953)처럼 아래 파란 창에 얼굴 · 원작 글 한 줄 · 오른쪽 아래 YES · NO 단추(FDOTHER 2 의 16 · 17) ──
+
+    private int _askLine = -1, _askFace = -1;
+
+    /// <summary>원작 글 line 으로 묻는다 — face 는 얼굴 그림(캐릭터 번호, 없으면 -1). 물리기(Esc · 오른쪽 단추)는 「NO」.</summary>
+    private void AskBox(int line, int face, Action yes, Action no)
+    {
         _stage = MenuStage.Ask;
         _menu.Clear();
         _menuGlyphs.Clear();
-        _menu.Add(("", () => { }, default));
-        _menuGlyphs[0] = line;
-        _menu.Add(("예", () => { _menuGlyphs.Clear(); _menu.Clear(); yes(); }, default));
-        _menu.Add(("아니오", () => { _menuGlyphs.Clear(); _menu.Clear(); SysBanner(TxtNever, "그럼 됐습니다.", () => _bs = BattleState.Select); }, default));
-        _menuIndex = 1;
+        (_askLine, _askFace) = (line, face);
+        _menu.Add(("예", () => { _askLine = -1; _menu.Clear(); yes(); }, default));
+        _menu.Add(("아니오", () => { _askLine = -1; _menu.Clear(); no(); }, default));
+        _menuIndex = 0;
         _bs = BattleState.Menu;
+    }
+
+    private bool AskBoxOpen => _bs == BattleState.Menu && _stage == MenuStage.Ask && _askLine >= 0 && _menu.Count == 2;
+
+    private void DrawAskBox()
+    {
+        var faces = _askFace >= 0 ? Face(_askFace) : null;
+        _names ??= TryNames();
+        var codes = _names?.Line(_askLine) ?? [];
+        int g = Math.Max(2, HudZoom), faceW = 0, faceH = 0, boxW = 0, boxH = 0;
+        for (; g >= 1; g--)
+        {
+            faceW = faces is { Count: > 0 } ? faces[0].W * g : 0;
+            faceH = faces is { Count: > 0 } ? faces[0].H * g : 0;
+            boxW = Math.Min(_clientW - 40, Math.Max(faceW + Font16.Size * g * 16 + 80, _clientW * 2 / 3));
+            boxH = Math.Max(faceH + 40, (Font16.Size + 4) * g * 3 + 70);
+            if (boxH <= _clientH - 32) break;
+        }
+        g = Math.Max(1, g);
+        int bx = (_clientW - boxW) / 2, by = _clientH - boxH - 16;
+        FillRect(bx, by, boxW, boxH, 0xFF28458A);
+        FillRect(bx, by, boxW, 3, 0xFF8090C0);
+        FillRect(bx, by + boxH - 3, boxW, 3, 0xFF8090C0);
+        FillRect(bx, by, 3, boxH, 0xFF8090C0);
+        FillRect(bx + boxW - 3, by, 3, boxH, 0xFF8090C0);
+        int textX = bx + 24;
+        if (faces is { Count: > 0 })
+        {
+            var f = faces[0];
+            BlitFrame(f.Px, f.W, f.H, bx + 20, by + (boxH - faceH) / 2, g, false, 0, 0, (0, 0, _clientW, _clientH));
+            textX = bx + 20 + faceW + 24;
+        }
+        _font ??= TryFont();
+        int x = textX, glyph = Font16.Size * g;
+        foreach (int c in codes) { DrawGlyph(c, x, by + 24, g); x += glyph; }
+
+        // YES · NO — 고른 단추는 반짝임 장(원작 sub_17898 처럼 4틱마다)
+        if (!_buttonsTried)
+        {
+            _buttonsTried = true;
+            try { _buttons = new Buttons(_dir, _pal); }
+            catch (Exception e) when (e is IOException or IndexOutOfRangeException or ArgumentOutOfRangeException) { _buttons = null; }
+        }
+        int blink = (int)(_time * 18.2 / 4) & 1, right = bx + boxW - 24;
+        for (int i = 1; i >= 0; i--)
+        {
+            int b = i == 0 ? 16 : 17;
+            (int X, int Y, int W, int H) rect;
+            if (_buttons is { Count: > 3 * 17 + 1 } bank)
+            {
+                var (px, w, h) = bank.Frame(b, red: false, i == _menuIndex ? blink : 0);
+                rect = (right - w * g, by + boxH - 16 - h * g, w * g, h * g);
+                BlitScaled(px, w, h, rect.X, rect.Y, g, 0, 0, _fbW, _fbH);
+            }
+            else
+            {
+                var t = Text.Render(i == 0 ? "YES" : "NO!", Math.Max(14, glyph * 3 / 4), i == _menuIndex ? 0xFFFFE070 : 0xFFFFFFFF);
+                rect = (right - t.W - 16, by + boxH - 16 - t.H - 8, t.W + 16, t.H + 8);
+                FillRect(rect.X, rect.Y, rect.W, rect.H, i == _menuIndex ? 0xFF405090u : 0xFF203060u);
+                DrawText(t, rect.X + 8, rect.Y + 4);
+            }
+            if (_mouseMoved && _mouseX >= rect.X && _mouseY >= rect.Y && _mouseX < rect.X + rect.W && _mouseY < rect.Y + rect.H) _menuIndex = i;
+            _menu[i] = (_menu[i].Label, _menu[i].Do, rect);
+            right = rect.X - 6 * g;
+        }
+    }
+
+    private NameTable? TryNames()
+    {
+        try { return new NameTable(_dir); }
+        catch (Exception e) when (e is IOException or IndexOutOfRangeException or ArgumentOutOfRangeException) { return null; }
+    }
+
+    private Font16? TryFont()
+    {
+        try { return new Font16(_dir); }
+        catch (Exception e) when (e is IOException or IndexOutOfRangeException or ArgumentOutOfRangeException) { return null; }
     }
 
     /// <summary>원작 글 한 줄을 잠깐 띄운다(sub_15F84 + 0xC8 쉼) — 글꼴이 없으면 같은 뜻의 우리 글.</summary>
@@ -1706,6 +1790,7 @@ internal sealed partial class GameWindow
 
     private void DrawMenu(int fs)
     {
+        if (AskBoxOpen) { DrawAskBox(); return; }
         if (CrossMenu) { DrawCrossMenu(fs); return; }
         var (sx, sy) = _actor is { } u ? TileScreen(u.X, u.Y) : TileScreen(_cursor.X, _cursor.Y);
         int cell = T * _zoom;
