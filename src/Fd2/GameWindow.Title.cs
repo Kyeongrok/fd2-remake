@@ -354,9 +354,18 @@ internal sealed partial class GameWindow
 
         var items = TitleItems;
         int vrow = TitleVersionRow;
-        var imgs = items.Select((it, i) => Text.Render(it.Label, i == vrow ? fs : fs * 3 / 2, i == _titleIndex ? 0xFFFFE070 : 0xFFFFFFFF)).ToList();
         var menuRows = Enumerable.Range(0, items.Length).Where(i => i != vrow).ToList();
-        int rowH = menuRows.Max(i => imgs[i].H) + 14, w = menuRows.Max(i => imgs[i].W) + 120;
+        // 긴 줄(전황 불러오기의 「원작 기록 1 — 27장 앞 · 동료 31명 · 돈 …」)이 화면 폭에 안 들면 글을 줄인다 — 고른 줄의 ▶ 가 첫 글자를 덮었다(사용자 요청)
+        int big = fs * 3 / 2;
+        var arrow = Text.Render("▶", big, 0xFFFFE070);
+        int widest = menuRows.Max(i => Text.Render(items[i].Label, big, 0xFFFFFFFF).W), need = widest + 2 * (arrow.W + 24);
+        if (need > _clientW - 8)
+        {
+            big = Math.Max(12, big * (_clientW - 8) / need);
+            arrow = Text.Render("▶", big, 0xFFFFE070);
+        }
+        var imgs = items.Select((it, i) => Text.Render(it.Label, i == vrow ? fs : big, i == _titleIndex ? 0xFFFFE070 : 0xFFFFFFFF)).ToList();
+        int rowH = menuRows.Max(i => imgs[i].H) + 14, w = Math.Min(_clientW - 8, menuRows.Max(i => imgs[i].W) + 2 * (arrow.W + 24));
         // 팬메이드 알림 — 화면 폭에 안 들면(휴대폰 세로) 문장마다 줄을 나눈다.
         int noticeSize = Math.Max(12, fs * 3 / 4);
         var notice = new[] { Text.Render(FanMadeNotice, noticeSize, 0xE0FFFFFF, bold: false) }.ToList();
@@ -376,7 +385,7 @@ internal sealed partial class GameWindow
             if (i == _titleIndex)
             {
                 FillRect(x + 6, ry, w - 12, rowH - 4, 0xC0405090);
-                DrawText(Text.Render("▶", fs * 3 / 2, 0xFFFFE070), x + 20, ry + 5);
+                DrawText(arrow, Math.Max(x + 8, x + (w - imgs[i].W) / 2 - arrow.W - 8), ry + 5);   // 글 바로 왼쪽에
             }
             DrawText(imgs[i], x + (w - imgs[i].W) / 2, ry + 5);
         }
