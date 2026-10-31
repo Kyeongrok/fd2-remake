@@ -643,22 +643,31 @@ internal sealed partial class GameWindow
     }
 
     /// <summary>
-    /// 지도 그림 캐시 — 캐릭터가 꿀렁일 때마다 지도 타일을 다시 찍지 않게, 카메라 · 배율 · 판 크기 · 바뀐 칸(열린 상자) 수가 그대로면
-    /// 지난번 그림을 통째로 복사한다(폰이 느리던 까닭 하나, 사용자 요청). 밑그림(물결)이 있는 장면은 매번 그린다.
+    /// 지도 전체 그림 캐시 — 장면 · 배율 · 바뀐 칸(열린 상자) 수가 그대로면 지도 전체를 그 배율로 한 번만 찍어 두고,
+    /// 틀마다 보이는 줄만 통째로 복사한다(Array.Copy). 캐릭터가 꿀렁이거나 걸어서 카메라가 움직여도 타일을 다시 찍지 않는다(폰이 느리고 걸을 때 끊기던 까닭, 사용자 요청).
+    /// 밑그림(물결)이 있는 장면과 너무 큰 지도(점 1600만 넘게)는 예전처럼 틀마다 보이는 타일만 찍는다.
     /// </summary>
-    private uint[]? _mapCache;
-    private (Scene?, int, int, int, int, int, int, int, int) _mapCacheKey;
+    private uint[]? _mapAll;
+    private int _mapAllW, _mapAllH;
+    private (Scene?, int, int) _mapAllKey;
+    private const long MapAllMaxPixels = 16_000_000;
 
     private void DrawMapCpu()
     {
         var back = _backdrop;
-        var key = (_scene, _camX, _camY, _zoom, _offX, _offY, _fbW, _fbH, _scene.Patched.Count);
-        if (back == null && _mapCache != null && _mapCache.Length == _fb.Length && key.Equals(_mapCacheKey))
+        Array.Fill(_fb, BgColor);
+        if (back == null && (long)_scene.Width * T * _zoom * _scene.Height * T * _zoom <= MapAllMaxPixels)
         {
-            Array.Copy(_mapCache, _fb, _fb.Length);
+            var key = (_scene, _zoom, _scene.Patched.Count);
+            if (_mapAll == null || !key.Equals(_mapAllKey)) BuildMapAll(key);
+            int left = _offX - _camX * _zoom, top = _offY - _camY * _zoom;
+            int bx0 = Math.Max(_offX, left), bx1 = Math.Min(Math.Min(_fbW, _offX + _boardW * _zoom), left + _mapAllW);
+            int by0 = Math.Max(_offY, top), by1 = Math.Min(Math.Min(_fbH, _offY + _boardH * _zoom), top + _mapAllH);
+            if (bx1 > bx0)
+                for (int y = Math.Max(0, by0); y < by1; y++)
+                    Array.Copy(_mapAll!, (y - top) * _mapAllW + (bx0 - left), _fb, y * _fbW + bx0, bx1 - bx0);
             return;
         }
-        Array.Fill(_fb, BgColor);
         if (back != null) DrawBackdrop(back);
         int cell = T * _zoom;
         int x0 = Math.Max(0, (int)Math.Floor(_camX / (double)T)), y0 = Math.Max(0, (int)Math.Floor(_camY / (double)T));
@@ -679,9 +688,30 @@ internal sealed partial class GameWindow
                     }
                 }
             }
-        if (back != null) return;
-        if (_mapCache == null || _mapCache.Length != _fb.Length) _mapCache = new uint[_fb.Length];
-        Array.Copy(_fb, _mapCache, _fb.Length);
-        _mapCacheKey = key;
+    }
+
+    /// <summary>지도 전체를 지금 배율로 한 장에 찍는다(타일 점을 배율만큼 늘려).</summary>
+    private void BuildMapAll((Scene?, int, int) key)
+    {
+        int z = _zoom, cell = T * z;
+        _mapAllW = _scene.Width * cell;
+        _mapAllH = _scene.Height * cell;
+        if (_mapAll == null || _mapAll.Length != _mapAllW * _mapAllH) _mapAll = new uint[_mapAllW * _mapAllH];
+        for (int ty = 0; ty < _scene.Height; ty++)
+            for (int tx = 0; tx < _scene.Width; tx++)
+            {
+                var tile = _scene.TileAt(tx, ty);
+                for (int py = 0; py < T; py++)
+                {
+                    int row = (ty * cell + py * z) * _mapAllW + tx * cell;
+                    for (int px = 0; px < T; px++)
+                    {
+                        uint c = tile[py * T + px] | 0xFF000000;
+                        for (int k = 0; k < z; k++) _mapAll[row + px * z + k] = c;
+                    }
+                    for (int k = 1; k < z; k++) Array.Copy(_mapAll, row, _mapAll, row + k * _mapAllW, cell);
+                }
+            }
+        _mapAllKey = key;
     }
 }
