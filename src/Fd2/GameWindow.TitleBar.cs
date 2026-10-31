@@ -14,10 +14,11 @@ namespace Fd2;
 /// </remarks>
 internal sealed unsafe partial class GameWindow
 {
-    // cds ChromeTitleBar 의 치수(96 DPI 기준) · 색
+    // cds ChromeTitleBar 의 치수(96 DPI 기준). 색은 「청람 정보창」 — 원작 전투 정보창 · 컷인 패널의 파랑 바탕에 옅은 금줄(사용자가 고름)
     private const int BarBaseH = 32, BarMenuBaseW = 40, BarButtonBaseW = 46;
-    private const uint BarFrame = 0xFF2A1A15, BarFrameIdle = 0xFF221612;
-    private const uint BarTitle = 0xFFF2EAD6, BarTitleIdle = 0xFF9A8A78;
+    private const uint BarFrame = 0xFF1C2850, BarFrameIdle = 0xFF161D38;
+    private const uint BarTitle = 0xFFEEF0FF, BarTitleIdle = 0xFF8890B0;
+    private const uint BarLine = 0xFFC8A040, BarLineIdle = 0xFF6A5A38;
     private const uint BarHover = 0x1AFFFFFF, BarPress = 0x33FFFFFF;
     private const uint BarCloseHover = 0xFFE81123, BarClosePress = 0xFFF1707A;
 
@@ -195,6 +196,8 @@ internal sealed unsafe partial class GameWindow
         bool on = _focused;
         uint frame = on ? BarFrame : BarFrameIdle, ink = on ? BarTitle : BarTitleIdle;
         Array.Fill(_barFb, frame);
+        int line = Math.Max(1, (int)Math.Round(_barScale));
+        BarFill(0, _barH - line, _winW, line, on ? BarLine : BarLineIdle);   // 아래 금줄
 
         // 마우스가 올라간 단추 — 매 틱 커서 자리를 본다(제목 줄의 빈 곳은 캡션이라 이동 알림이 안 온다)
         int hover = -1;
