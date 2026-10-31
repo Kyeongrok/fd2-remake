@@ -425,6 +425,7 @@ internal sealed partial class GameWindow
                         return;
                     }
                 if (_stage == MenuStage.System) BattleCancel();   // 십자 시스템 메뉴 밖을 누르면 닫는다
+                else if (_stage == MenuStage.Mobile) { _menu.Clear(); _bs = BattleState.Select; }   // 모바일 메뉴 밖을 누르면 닫는다
                 return;
             case BattleState.Target:
             {
@@ -658,6 +659,9 @@ internal sealed partial class GameWindow
                 break;
             case BattleState.Menu when _stage == MenuStage.Town:   // 마을 — 한 단계 앞 메뉴로
                 _townBack?.Invoke();
+                break;
+            case BattleState.Menu when _stage == MenuStage.Mobile && _mobilePage > 0:   // 모바일 메뉴의 아래 쪽 — 맨 위로
+                OpenTouchMenu(_mobilePage - 1);
                 break;
             case BattleState.Menu when _actor == null || _stage is MenuStage.System or MenuStage.Mobile:
                 _menu.Clear();
@@ -946,7 +950,7 @@ internal sealed partial class GameWindow
         _sysButtons = [7, 5, 6, 4];
         _menu.Add(("기록", OpenRecordMenu, default));
         if (!_enemyPhase) _menu.Add(("행군", () => AskSys(TxtAskMarch, () => SysBanner(TxtMarch, "전원 행군합니다.", StartMarch)), default));
-        _menu.Add(("설정", () => { _menu.Clear(); _bs = BattleState.Select; OpenVolume(); }, default));
+        _menu.Add(("설정", () => { if (TouchUi) OpenTouchMenu(0, 2); else { _menu.Clear(); _bs = BattleState.Select; OpenVolume(); } }, default));   // 폰은 설정 쪽(소리 · 단축키)
         _menu.Add(("턴 끝", () => AskSys(TxtAskEnd, () => SysBanner(TxtEnd, "예. 이번 차례 끝냅니다.", EndPlayerTurn)), default));
         _menuIndex = _menu.Count - 1;
         _bs = BattleState.Menu;

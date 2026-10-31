@@ -93,25 +93,44 @@ internal sealed partial class GameWindow
         return (x, y, w, h);
     }
 
-    /// <summary>모바일 메뉴 — 칸 정보 · 상대 정보 · 보물상자 · 미니맵 · 승패 조건 · 조작법 켜고 끄기, 파티 정보 · 소리 크기, 시스템 메뉴(턴 끝 · 기록 · 타이틀).</summary>
-    private void OpenTouchMenu(int index = 0)
+    /// <summary>모바일 메뉴의 쪽 — 0 맨 위(최대 넷), 1 화면 표시(켜고 끄기), 2 설정(소리 · 단축키).</summary>
+    private int _mobilePage;
+
+    /// <summary>
+    /// 모바일 메뉴 — 맨 위는 넷만: 화면 표시 · 파티 정보 · 설정 · 시스템 메뉴(사용자 요청). 닫기는 Esc · 메뉴 밖 누르기.
+    /// 화면 표시 = 칸 정보 · 상대 정보 · 보물상자 · 승패 조건 · 조작법 켜고 끄기, 설정 = 소리 크기 · 단축키 · 패드 설정(시스템 십자 메뉴의 설정 단추도 여기로).
+    /// </summary>
+    private void OpenTouchMenu(int index = 0, int page = 0)
     {
-        if (!CanOpenTouchMenu && !(_bs == BattleState.Menu && _stage == MenuStage.Mobile)) return;
-        if (_bs != BattleState.Menu) PlaySfx(Sound.UiBank, Sound.Menu);   // 처음 뜰 때만(켜고 끄며 다시 그릴 때는 말고)
+        if (!CanOpenTouchMenu && _bs != BattleState.Menu) return;
+        if (!(_bs == BattleState.Menu && _stage == MenuStage.Mobile)) PlaySfx(Sound.UiBank, Sound.Menu);   // 처음 뜰 때만(켜고 끄며 다시 그릴 때는 말고)
         _stage = MenuStage.Mobile;
+        _mobilePage = page;
         _menu.Clear();
+        _menuGlyphs.Clear();
+        void Close() { _menu.Clear(); _bs = BattleState.Select; }
         void Toggle(string label, bool on, Action flip) =>
-            _menu.Add(($"{label}  [{(on ? "보임" : "숨김")}]", () => { flip(); _settings.Save(); OpenTouchMenu(_menuIndex); }, default));
-        Toggle("칸 정보", _settings.TouchTileInfo, () => _settings.TouchTileInfo = !_settings.TouchTileInfo);
-        Toggle("상대 정보", _settings.TouchUnitInfo, () => _settings.TouchUnitInfo = !_settings.TouchUnitInfo);
-        Toggle("보물상자", _settings.TouchChests, () => _settings.TouchChests = !_settings.TouchChests);
-        Toggle("승패 조건", _settings.TouchGoals, () => _settings.TouchGoals = !_settings.TouchGoals);
-        Toggle("조작법", _settings.TouchHelp, () => _settings.TouchHelp = !_settings.TouchHelp);
-        _menu.Add(("파티 정보", () => { _menu.Clear(); _bs = BattleState.Select; OpenParty(); }, default));
-        _menu.Add(("소리 크기", () => { _menu.Clear(); _bs = BattleState.Select; OpenVolume(); }, default));
-        _menu.Add(("단축키 · 패드 설정", () => { _menu.Clear(); _bs = BattleState.Select; _keysOpen = true; _keysRow = 0; _keysCapture = -1; }, default));   // 타이틀에서 옮김
-        _menu.Add(("시스템 메뉴 (턴 끝 · 기록 · 타이틀)", OpenSystemMenu, default));
-        _menu.Add(("닫기", () => { _menu.Clear(); _bs = BattleState.Select; }, default));
+            _menu.Add(($"{label}  [{(on ? "보임" : "숨김")}]", () => { flip(); _settings.Save(); OpenTouchMenu(_menuIndex, 1); }, default));
+        switch (page)
+        {
+            case 1:
+                Toggle("칸 정보", _settings.TouchTileInfo, () => _settings.TouchTileInfo = !_settings.TouchTileInfo);
+                Toggle("상대 정보", _settings.TouchUnitInfo, () => _settings.TouchUnitInfo = !_settings.TouchUnitInfo);
+                Toggle("보물상자", _settings.TouchChests, () => _settings.TouchChests = !_settings.TouchChests);
+                Toggle("승패 조건", _settings.TouchGoals, () => _settings.TouchGoals = !_settings.TouchGoals);
+                Toggle("조작법", _settings.TouchHelp, () => _settings.TouchHelp = !_settings.TouchHelp);
+                break;
+            case 2:
+                _menu.Add(("소리 크기", () => { Close(); OpenVolume(); }, default));
+                _menu.Add(("단축키 · 패드 설정", () => { Close(); _keysOpen = true; _keysRow = 0; _keysCapture = -1; }, default));
+                break;
+            default:
+                _menu.Add(("화면 표시", () => OpenTouchMenu(0, 1), default));
+                _menu.Add(("파티 정보", () => { Close(); OpenParty(); }, default));
+                _menu.Add(("설정", () => OpenTouchMenu(0, 2), default));
+                _menu.Add(("시스템 메뉴", OpenSystemMenu, default));
+                break;
+        }
         _menuIndex = Math.Clamp(index, 0, _menu.Count - 1);
         _bs = BattleState.Menu;
     }
