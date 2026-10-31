@@ -1554,7 +1554,8 @@ internal sealed partial class GameWindow
     {
         if (!InBattle) return;
         int cell = T * _zoom;
-        foreach (var u in _scene.Units.Where(u => _showGauges && u.MaxHp > 0 && u.Hp > 0))
+        bool town = InTownView;   // 마을 그림 위에는 메뉴 · 알림만
+        foreach (var u in _scene.Units.Where(u => !town && _showGauges && u.MaxHp > 0 && u.Hp > 0))
         {
             int sx = _offX + (int)Math.Round((u.DrawX * T - _camX) * _zoom);
             int sy = _offY + (int)Math.Round((u.DrawY * T - _camY) * _zoom);
@@ -1579,7 +1580,7 @@ internal sealed partial class GameWindow
         };
         // 폰은 위 가운데 줄을 그리지 않는다(지도를 가리지 않게, 사용자 요청)
         int titleBottom = 0;
-        if (!TouchUi)
+        if (!TouchUi && !town)
         {
             var title = Text.Render(top, fs, 0xFFFFFFFF);
             FillRect(_clientW / 2 - title.W / 2 - 12, 8, title.W + 24, title.H + 8, 0xA0000000);
@@ -1587,10 +1588,16 @@ internal sealed partial class GameWindow
             titleBottom = 12 + title.H;
         }
         // 폰은 승패 조건 · 보물상자 · 칸 정보 · 사람 정보를 기본으로 숨기고 「메뉴」 단추의 모바일 메뉴에서 켠다
-        if (TouchUi ? _settings.TouchGoals : _settings.ShowGoals) DrawGoals(fs, titleBottom + 12);
+        if (!town && (TouchUi ? _settings.TouchGoals : _settings.ShowGoals)) DrawGoals(fs, titleBottom + 12);
 
         // 왼쪽 아래 — 마우스 밑 사람(없으면 고른 사람)
         DrawHudToggles(fs);
+        if (town)
+        {
+            if (_bs == BattleState.Menu) DrawMenu(fs);
+            DrawBannerBox(fs);
+            return;
+        }
         _miniBottom = 0;
         if (TouchUi) DrawTouchMinimap();   // 폰은 왼쪽 위 반투명 미니맵, 보물 목록은 그 밑
         if (!TouchUi || _settings.TouchChests) DrawChestList(fs);
@@ -1602,17 +1609,7 @@ internal sealed partial class GameWindow
         if (_bs is BattleState.Select or BattleState.Target or BattleState.Moving && !_mouseMoved) DrawCursor();   // 마우스를 쓰는 동안에는 커서를 숨긴다
         if (_bs == BattleState.Menu) DrawMenu(fs);
 
-        if (_bs is BattleState.Banner or BattleState.Over && (_banner.Length > 0 || _bannerName >= 0))
-        {
-            var b = Text.Render(_banner.Length > 0 ? _banner : " ", fs * 2, 0xFFFFE070);
-            var name = _bannerName >= 0 ? NameImage(_bannerName, Math.Max(2, fs * 2 / Font16.Size), 0xFFFFE070) : null;
-            int w = b.W + (name?.W ?? 0), h = Math.Max(b.H, name?.H ?? 0);
-            FillRect(0, _clientH / 2 - h, _clientW, h * 2, 0xA0000000);
-            int x = _clientW / 2 - w / 2;
-            if (name != null) { DrawText(name, x, _clientH / 2 - name.H / 2); x += name.W; }
-            DrawText(b, x, _clientH / 2 - b.H / 2);
-        }
-
+        DrawBannerBox(fs);
         if (_bs == BattleState.CutIn) DrawCutIn(fs);
         DrawTalk();
     }
@@ -1632,6 +1629,21 @@ internal sealed partial class GameWindow
     private bool _mouseMoved;
 
     /// <summary>커서 — 칸 네 귀퉁이에 꺾쇠(깜박이지 않는다 — 눈이 아프다).</summary>
+    /// <summary>가운데 알림(배너) — 전투 · 마을 모두.</summary>
+    private void DrawBannerBox(int fs)
+    {
+        if (_bs is BattleState.Banner or BattleState.Over && (_banner.Length > 0 || _bannerName >= 0))
+        {
+            var b = Text.Render(_banner.Length > 0 ? _banner : " ", fs * 2, 0xFFFFE070);
+            var name = _bannerName >= 0 ? NameImage(_bannerName, Math.Max(2, fs * 2 / Font16.Size), 0xFFFFE070) : null;
+            int w = b.W + (name?.W ?? 0), h = Math.Max(b.H, name?.H ?? 0);
+            FillRect(0, _clientH / 2 - h, _clientW, h * 2, 0xA0000000);
+            int x = _clientW / 2 - w / 2;
+            if (name != null) { DrawText(name, x, _clientH / 2 - name.H / 2); x += name.W; }
+            DrawText(b, x, _clientH / 2 - b.H / 2);
+        }
+    }
+
     private void DrawCursor()
     {
         var (sx, sy) = TileScreen(_cursor.X, _cursor.Y);
@@ -1960,6 +1972,7 @@ internal sealed partial class GameWindow
         if (_stage == MenuStage.ItemPick) { DrawItemWindow(); return; }
         if (CrossMenu) { DrawCrossMenu(fs); return; }
         var (sx, sy) = _actor is { } u ? TileScreen(u.X, u.Y) : TileScreen(_cursor.X, _cursor.Y);
+        if (InTownView) (sx, sy) = (_clientW, 8);   // 마을 그림 위 — 오른쪽 위에
         int cell = T * _zoom;
         if (TouchUi) fs = _stage == MenuStage.Mobile ? fs * 2 : fs * 4 / 3;   // 폰은 메뉴 글을 더 크게(모바일 메뉴는 두 배) — 넘치면 줄이지 않고 끌어 넘긴다(사용자 요청)
         var imgs = _menu.Select((m, i) => WithGlyphs(Text.Render(m.Label, fs, 0xFFFFFFFF), i, fs)).ToList();

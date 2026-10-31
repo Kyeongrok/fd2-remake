@@ -386,6 +386,7 @@ internal sealed partial class GameWindow
     /// <param name="party">이야기의 동료 표 — 있으면 그 사람들을 세우고 세이브 값으로 덮는다(<see cref="HeroRecord.Apply"/>).</param>
     private void LoadScene(int index, IReadOnlyList<byte[]>? party = null)
     {
+        _town = null;   // 마을 그림을 거둔다
         _bs = BattleState.None;
         ClearSelection();
         MotionFiles.Reload();   // 편집기에서 캐릭터 모션 버전을 바꿨으면 장마다 새로
@@ -595,6 +596,7 @@ internal sealed partial class GameWindow
             _offX += _subX;
             _offY += _subY;
         }
+        DrawTownView();   // 마을이면 지도 위를 마을 그림으로 덮는다(메뉴는 그 위에)
         DrawBattleHud();
         DrawKeysWindow();
     }

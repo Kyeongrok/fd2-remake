@@ -311,6 +311,13 @@ public sealed class GameTables
     public bool HasTown(int scene) => scene is >= 1 and < 30 && U8(0x523E7 + scene) == 0 && Shops[scene - 1].Weapons.Length + Shops[scene - 1].Tools.Length > 0;
 
     /// <summary>다음 장면 n17 의 마을 — sub_4E809(n17) = 기록 n17(1부터).</summary>
+    /// <summary>마을 꼴 kind(기록 [0]) 의 그림 — FDOTHER 번호(표 0x52405: 11 · 61 · 62).</summary>
+    public int TownPicture(int kind) => kind is >= 0 and < 3 ? U8(0x52405 + kind) : -1;
+
+    /// <summary>마을 꼴 kind 에서 건물 n5(0 주점 · 1 무기점 · 2 출구 · 3 도구점 · 4 교회 · 5 ???) 앞 사람 자리 — 그림 점(x 0x52363 · y 0x52375).</summary>
+    public (int X, int Y) TownSpot(int kind, int n5) =>
+        kind is >= 0 and < 3 && n5 is >= 0 and < 6 ? (U8(0x52363 + 6 * kind + n5), U8(0x52375 + 6 * kind + n5)) : (0, 0);
+
     public ShopInfo? ShopFor(int scene) => HasTown(scene) ? Shops[scene - 1] : null;
 
     // ── 이동 대본 ──────────────────────────────────────────────────────────────

@@ -4,7 +4,7 @@ using Fd2.Native;
 namespace Fd2;
 
 /// <summary>
-/// 장 사이 마을(sub_26152) — 이긴 뒤 메뉴의 「마을」. 다음 장면 n17 앞에 마을이 있으면(byte_523E7[n17] = 0) 그 마을 기록 sub_4E809(n17)의
+/// 장 사이 마을(sub_26152) — 이기면 바로 들어온다(사용자 요청 — 예전엔 이긴 뒤 메뉴의 「마을」), 출구는 다음 장으로. 다음 장면 n17 앞에 마을이 있으면(byte_523E7[n17] = 0) 그 마을 기록 sub_4E809(n17)의
 /// 무기점 · 도구점에서 사고팔고, 교회에서 부활 · 전직하고, 주점에서 동료 보기 · 기록 · 불러오기 · 전장 이탈을 한다. 원작의 건물 그림 · 걷기 없이 메뉴로만.
 /// 첫 메뉴 줄은 원작 건물 차례(n5 0 주점 · 1 무기점 · 2 출구 · 3 도구점 · 4 교회) — 기록 +1 건물 줄에서 +2 키(Shift · Ctrl · Alt + F1~F10)를 누르면 비밀상점(n5 = 5)이 열린다.
 /// 고친 것은 동료 표(<see cref="Campaign.Party"/>)와 돈에 바로 들어가, 그 뒤 기록하면 그대로 남는다.
@@ -62,11 +62,11 @@ internal sealed partial class GameWindow
     {
         if (_campaign is not { } c || _tables?.ShopFor(c.NextScene) is not { } shop) { OpenOverMenu(); return; }
         _town = new Town(c, _battle);
-        BeginTownMenu(LeaveTown);
+        BeginTownMenu(() => { });   // 첫 메뉴에서 Esc 는 그대로 — 나가는 것은 출구로
         _menu.Add((GoldLine($"{ChapterName(c.NextScene)} 앞 마을"), () => { }, default));
         _menu.Add(("주점 — 동료 보기 · 기록 · 불러오기", OpenTavern, default));
         _menu.Add(("무기점 — 사기 · 팔기", () => OpenShopMenu(shop, 1), default));
-        _menu.Add(("출구 — 돌아가기", LeaveTown, default));
+        _menu.Add(($"출구 — 다음 장으로({ChapterName(c.NextScene)})", LeaveTown, default));
         _menu.Add(("도구점 — 사기 · 팔기", () => OpenShopMenu(shop, 3), default));
         _menu.Add(("교회 — 부활 · 전직", OpenChurchMenu, default));
         if (_townSecret && shop.Secret.Length > 0) _menu.Add(("??? — 비밀상점", () => OpenShopMenu(shop, 5), default));
@@ -80,7 +80,8 @@ internal sealed partial class GameWindow
         _townBack = null;
         _townTop = _townSecret = false;
         _shopAt = 1;
-        OpenOverMenu();
+        _town = null;
+        PlayCampaign();   // 원작처럼 마을 출구는 다음 장으로
     }
 
     /// <summary>
@@ -335,7 +336,7 @@ internal sealed partial class GameWindow
         {
             _townBack = null;
             _townTop = _townSecret = false;
-            TownBanner("그럼 쉬세요.", ToTitle);
+            TownBanner("그럼 쉬세요.", () => { _town = null; ToTitle(); });
         }, default));
         _menu.Add(("아니오", OpenTavern, default));
         EndTownMenu(2);

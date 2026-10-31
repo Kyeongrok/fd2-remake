@@ -96,6 +96,12 @@ internal sealed partial class GameWindow
         }
         else if (_outcome == 2 && _campaign is { } c)
         {
+            // 다음 장 앞에 마을이 있으면 묻지 않고 바로 마을로(사용자 요청, 원작처럼) — 기록은 주점, 다음 장은 출구
+            if (c.NextScene < _sceneCount && c.NextScene <= Campaign.FinalScene && HasTown && _tables?.ShopFor(c.NextScene) != null)
+            {
+                OpenTownMenu();
+                return;
+            }
             if (c.NextScene < _sceneCount && c.NextScene <= Campaign.FinalScene)
             {
                 _menu.Add(($"다음 장으로 — {ChapterName(c.NextScene)}", PlayCampaign, default));
