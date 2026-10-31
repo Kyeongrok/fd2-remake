@@ -131,6 +131,7 @@ internal sealed partial class GameWindow
                 _menu.Add(("시스템 메뉴", OpenSystemMenu, default));
                 break;
         }
+        _menu.Add(("닫기", Close, default));   // 맨 아래 닫기(사용자 요청) — 밖을 누르거나 Esc 로도 닫힌다
         _menuIndex = Math.Clamp(index, 0, _menu.Count - 1);
         _bs = BattleState.Menu;
     }

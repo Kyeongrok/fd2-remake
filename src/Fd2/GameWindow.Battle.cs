@@ -1967,7 +1967,7 @@ internal sealed partial class GameWindow
         if (CrossMenu) { DrawCrossMenu(fs); return; }
         var (sx, sy) = _actor is { } u ? TileScreen(u.X, u.Y) : TileScreen(_cursor.X, _cursor.Y);
         int cell = T * _zoom;
-        if (TouchUi) fs = fs * 4 / 3;   // 폰은 메뉴 글을 더 크게 — 넘치면 줄이지 않고 손가락으로 끌어 넘긴다(사용자 요청)
+        if (TouchUi) fs = _stage == MenuStage.Mobile ? fs * 2 : fs * 4 / 3;   // 폰은 메뉴 글을 더 크게(모바일 메뉴는 두 배) — 넘치면 줄이지 않고 끌어 넘긴다(사용자 요청)
         var imgs = _menu.Select((m, i) => WithGlyphs(Text.Render(m.Label, fs, 0xFFFFFFFF), i, fs)).ToList();
         if (!TouchUi)
         {
@@ -1998,6 +1998,7 @@ internal sealed partial class GameWindow
         }
         int shown = Math.Min(fit, _menu.Count);
         int x = Math.Min(sx + cell + 6, _clientW - w - 4), y = Math.Max(4, Math.Min(sy, _clientH - rowH * shown - 4));
+        if (_stage == MenuStage.Mobile) { w = Math.Max(w, _clientW / 3); (x, y) = ((_clientW - w) / 2, Math.Max(4, (_clientH - rowH * shown) / 2)); }   // 모바일 메뉴는 화면 가운데에 넓게
         _menuBox = (x, y, w, rowH * shown);
         for (int i = 0; i < _menu.Count; i++)
         {
