@@ -1013,7 +1013,8 @@ internal sealed partial class GameWindow
             faceH = faces is { Count: > 0 } ? faces[0].H * g : 0;
             boxW = Math.Min(_clientW - 40, Math.Max(faceW + Font16.Size * g * 16 + 80, _clientW * 2 / 3));
             boxH = Math.Max(faceH + 40, (Font16.Size + 4) * g * 3 + 70);
-            if (boxH <= _clientH - 32) break;
+            int textW = (_askLine >= 0 ? codes.Length * Font16.Size * g : Text.Render(_askText, Math.Max(14, Font16.Size * g * 3 / 4), 0xFFFFFFFF).W) + faceW + 92;
+            if (boxH <= _clientH - 32 && textW <= boxW) break;   // 세로 화면처럼 좁으면 글이 창에 들어가게 줄인다
         }
         g = Math.Max(1, g);
         int bx = (_clientW - boxW) / 2, by = _clientH - boxH - 16;

@@ -19,7 +19,7 @@ namespace Fd2;
 /// </remarks>
 /// <remarks>원작 자료는 앱에 들어 있지 않다 — 갖고 계신 용의기사2 폴더(FDFIELD.DAT 가 있는 곳)를 폰에 넣고 고르면 된다.</remarks>
 [Activity(Label = "용의기사2", MainLauncher = true, Icon = "@mipmap/appicon", Theme = "@android:style/Theme.Black.NoTitleBar.Fullscreen",
-          ScreenOrientation = ScreenOrientation.SensorLandscape,
+          ScreenOrientation = ScreenOrientation.FullSensor,   // 가로 · 세로 모두(폰을 돌리면 화면도 — 지도가 넓어 세로로도 볼 만하다, 사용자 요청)
           ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.KeyboardHidden | ConfigChanges.Keyboard | ConfigChanges.Navigation,
           LaunchMode = LaunchMode.SingleTask)]
 // 파일 앱 · 브라우저에서 받은 .zip 을 「용의기사2로 열기」 — 버전 묶음이면 풀어서 그 버전으로(MainActivity.Zips.cs)
