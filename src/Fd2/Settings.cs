@@ -33,6 +33,9 @@ internal sealed class Settings
     public bool ShowHelp { get; set; } = true;
     public bool ShowGoals { get; set; } = true;
 
+    /// <summary>NPC 아군(컴퓨터가 움직이는 우리 편)도 내가 움직인다 — 설정(사용자 요청). 끄면 원작처럼 컴퓨터 아군 차례에 컴퓨터가.</summary>
+    public bool ControlAllies { get; set; }
+
     /// <summary>폰 지도 배율(1~4, 두 손가락으로 바꾼다) — 기본 2.</summary>
     public int TouchZoom { get; set; } = 2;
 

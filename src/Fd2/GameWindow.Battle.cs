@@ -160,7 +160,10 @@ internal sealed partial class GameWindow
     private IEnumerable<Unit> Opponents(Unit u) => _scene.Units.Where(o => o.Hp > 0 && o.Team == 0 != (u.Team == 0));
 
     /// <summary>내가 움직이는 아군(컴퓨터가 움직이는 아군은 빼고).</summary>
-    private IEnumerable<Unit> Controlled => Living(Side.Player).Where(u => !u.Ai);
+    private IEnumerable<Unit> Controlled => Living(Side.Player).Where(u => !AiControlled(u));
+
+    /// <summary>컴퓨터가 움직이는 아군(NPC)인가 — 설정 「NPC 아군도 내가 움직이기」를 켜면 아니다.</summary>
+    private bool AiControlled(Unit u) => u.Ai && !_settings.ControlAllies;
 
     /// <summary>무기로 칠 수 있는 상대(편 0) — 지금 자리에서.</summary>
     private List<Unit> StrikeTargets(Unit u) => Living(Side.Other).Where(e => _battle.CanStrike(u, (u.X, u.Y), e)).ToList();
@@ -253,7 +256,7 @@ internal sealed partial class GameWindow
         _alliesPhase = allies;
         _ai = new BattleAi(_battle);
         _aiOrder.Clear();
-        _aiOrder.AddRange(_scene.Units.Where(u => u.Team == (allies ? 1 : 0)).OrderBy(u => u.Slot));
+        _aiOrder.AddRange(_scene.Units.Where(u => u.Team == (allies ? 1 : 0) && (!allies || !_settings.ControlAllies)).OrderBy(u => u.Slot));
         _aiIndex = 0;
         _aiPass = allies ? 2 : 1;
         _bs = BattleState.Enemy;
@@ -394,7 +397,7 @@ internal sealed partial class GameWindow
     }
 
     /// <summary>내가 고를 수 있는 우리 편인가 — 편 2, 아직 안 끝냈고 마비가 아님(sub_117E7).</summary>
-    private static bool Ready(Unit u) => u.Side == Side.Player && !u.Acted && !u.Ai && !u.Paralyzed;
+    private bool Ready(Unit u) => u.Side == Side.Player && !u.Acted && !AiControlled(u) && !u.Paralyzed;
 
     private void BattleClick(int tx, int ty, int mx, int my)
     {
@@ -697,7 +700,7 @@ internal sealed partial class GameWindow
         if (u.Bag.Count > 0) _menu.Add(("물건", () => { _itemFrom = stage; OpenItemMenu(u, stage); }, default));
         _menu.Add(("대기", () =>
         {
-            if ((u.X, u.Y) == _origin) { _battle.Rest(u); PlaySfx(Sound.UiBank, Sound.Rest); }   // 안 걸었으면 쉬어 회복
+            if ((u.X, u.Y) == _origin) { _battle.Rest(u); u.Facing = Dir.Down; PlaySfx(Sound.UiBank, Sound.Rest); }   // 안 걸었으면 쉬어 회복 — 쉬는 사람은 앞을 본다
             u.Acted = true;
             if (_battle.ChestAt(u) is { } chest) { AskChest(u, chest.Index, chest.Hidden); return; }
             ClearSelection();
@@ -1106,7 +1109,7 @@ internal sealed partial class GameWindow
             return;
         }
         if (plan.ItemSlot >= 0) { UseItem(u, plan.ItemSlot, plan.Center, AiDone); return; }
-        if (plan.Rest) { _battle.Rest(u); AiDone(); return; }
+        if (plan.Rest) { _battle.Rest(u); u.Facing = Dir.Down; AiDone(); return; }
         if (plan.Path.Count > 0)
         {
             foreach (var c in plan.Path) u.Path.Enqueue(c);
@@ -1612,8 +1615,20 @@ internal sealed partial class GameWindow
         DrawSpellFx(bx, by, s, clip, back: false);
 
         string what = spellName != null ? $"  [{spellName}]" : "";
-        var who = Text.Render($"{CharacterNames.Of(a.Icon)}  →  {CharacterNames.Of(d.Icon)}{what}", fs, 0xFFFFFFFF);
-        DrawText(who, _clientW / 2 - who.W / 2, by - who.H - 8);
+        // 위 글 — 「몬스터 0 → 몬스터 28」 대신 원작 이름(원본 글꼴)
+        int ng = Math.Max(1, fs / Font16.Size);
+        var whoA = NameImage(Battle.NameLine(a), ng, 0xFFFFFFFF) ?? Text.Render(CharacterNames.Of(a.Icon), fs, 0xFFFFFFFF);
+        var arrow = Text.Render(a == d ? (what.Length > 0 ? what : " ") : "  →  ", fs, 0xFFFFFFFF);
+        var whoD = a == d ? null : NameImage(Battle.NameLine(d), ng, 0xFFFFFFFF) ?? Text.Render(CharacterNames.Of(d.Icon), fs, 0xFFFFFFFF);
+        var tail = a == d || what.Length == 0 ? null : Text.Render(what, fs, 0xFFFFFFFF);
+        int whoW = whoA.W + arrow.W + (whoD?.W ?? 0) + (tail?.W ?? 0), whoH = Math.Max(whoA.H, arrow.H);
+        int wx = _clientW / 2 - whoW / 2, wy = by - whoH - 8;
+        foreach (var part in new[] { whoA, arrow, whoD, tail })
+        {
+            if (part == null) continue;
+            DrawText(part, wx, wy + (whoH - part.H) / 2);
+            wx += part.W;
+        }
 
         // 두 사람 정보 창(원작) — 오른쪽에 선 사람은 위 오른쪽, 왼쪽 사람은 아래 왼쪽
         int aSide = _strikeMotion != null ? SideOf(_strikeMotion) : a.Side == Side.Player ? 1 : 0;
@@ -1651,7 +1666,7 @@ internal sealed partial class GameWindow
             var n = Text.Render($"{now}", fs, 0xFFFFFFFF);
             DrawText(n, x + (W - 6) * s - n.W, ry + (8 * s - n.H) / 2);
             int barX = x + 24 * s, barW = (W - 30) * s - Math.Max(n.W, 22 * s), barH = 6 * s;
-            FillRect(barX, ry + s, barW, barH, 0xFF000000);
+            FillRect(barX, ry + s, barW, barH, 0xFF3A4670);   // 막대 바탕 — 검정은 너무 짙어 창 바탕보다 조금 어두운 남색으로
             if (max <= 0) return;
             FillRect(barX + s, ry + 2 * s, barW - 2 * s, barH - 2 * s, 0xFFC02020);
             FillRect(barX + s, ry + 2 * s, (barW - 2 * s) * Math.Clamp(now, 0, max) / max, barH - 2 * s, color);
