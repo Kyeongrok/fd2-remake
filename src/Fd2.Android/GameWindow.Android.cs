@@ -20,6 +20,11 @@ internal sealed partial class GameWindow
     /// <summary>판을 바꿔 다시 켜기 — MainActivity 가 채운다.</summary>
     internal static Action<string>? VersionSwitcher;
 
+    /// <summary>버그 리포트 글 쓰는 창(요약, 보내기) — MainActivity 가 채운다.</summary>
+    internal static Action<string, Action<string>>? BugAsker;
+
+    private partial void AskBugText(string summary, Action<string> send) => BugAsker?.Invoke(summary, send);
+
     /// <summary>폴더 하나 더 가져오기 — MainActivity 가 채운다.</summary>
     internal static Action? VersionAdder;
 

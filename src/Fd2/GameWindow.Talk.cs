@@ -77,7 +77,10 @@ internal sealed partial class GameWindow
         after?.Invoke();
     }
 
-    private int PageChars(Dialogue.Page p) => p.Text?.Length ?? p.Lines.Sum(l => l.Count);
+    private int PageChars(Dialogue.Page p) => p.Text?.Length ?? p.Lines.Sum(l => l.Count(c => !IsQuoteGlyph(c)));
+
+    /// <summary>원작 대사의 따옴표 글자(0x180 「"」 · 0x181 「"」) — 창에 이름이 나오니 그리지 않는다(사용자 요청).</summary>
+    private static bool IsQuoteGlyph(int code) => code is 0x180 or 0x181;
 
     private readonly Dictionary<(string, int, int), List<string>> _wrapped = new();
 
@@ -161,9 +164,16 @@ internal sealed partial class GameWindow
         {
             glyph = Font16.Size * g;
             lineH = glyph + g * 4;
-            faceS = g;
-            faceW = faces is { Count: > 0 } ? faces[0].W * faceS : 0;
-            faceH = faces is { Count: > 0 } ? faces[0].H * faceS : 0;
+            // 얼굴 옆에 글이 일곱 자는 들어가게 — 좁은 세로 화면이면 얼굴을 줄이고, 그래도 안 되면 얼굴을 뺀다(사용자 요청)
+            for (faceS = g; faceS >= 0; faceS--)
+            {
+                faceW = faces is { Count: > 0 } && faceS > 0 ? faces[0].W * faceS : 0;
+                boxW = Math.Min(_clientW - 40, Math.Max(faceW + glyph * 16 + 80, _clientW * 2 / 3));
+                if (boxW - faceW - 72 >= glyph * 7) break;
+            }
+            faceS = Math.Max(0, faceS);
+            faceW = faces is { Count: > 0 } && faceS > 0 ? faces[0].W * faceS : 0;
+            faceH = faces is { Count: > 0 } && faceS > 0 ? faces[0].H * faceS : 0;
             boxW = Math.Min(_clientW - 40, Math.Max(faceW + glyph * 16 + 80, _clientW * 2 / 3));
             boxH = Math.Max(faceH + 40, lineH * 3 + 70);
 
@@ -176,7 +186,7 @@ internal sealed partial class GameWindow
                 textLines = Wrap(page.Text, textSize, boxW - faceW - 24 * 3);
                 boxH = Math.Max(boxH, textLines.Count * textLineH + textSize * 2 + 50);
             }
-            if (boxH <= _clientH - 32) break;
+            if (boxH <= _clientH - 32 && boxW - faceW - 72 >= glyph * 7) break;
         }
         g = Math.Max(1, g);
 
@@ -190,7 +200,7 @@ internal sealed partial class GameWindow
         FillRect(bx + boxW - 3, by, 3, boxH, 0xFF8090C0);
 
         int textX = bx + 24, faceX = bx + 20;
-        if (faces is { Count: > 0 })
+        if (faces is { Count: > 0 } && faceS > 0)
         {
             if (page.Right) faceX = bx + boxW - faceW - 20;
             else textX = faceX + faceW + 24;
@@ -263,7 +273,7 @@ internal sealed partial class GameWindow
             var l = page.Lines[i];
             int skip = 0;
             if (i > 0) while (skip < l.Count && l[skip] == GlyphSpace) skip++;   // 이어지는 줄의 들여쓰기
-            all.AddRange(l.Skip(skip));
+            all.AddRange(l.Skip(skip).Where(c => !IsQuoteGlyph(c)));
         }
         lines = new List<List<int>>();
         int start = 0;

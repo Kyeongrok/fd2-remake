@@ -130,6 +130,7 @@ internal sealed partial class GameWindow
                 _menu.Add(("화면 표시", () => OpenTouchMenu(0, 1), default));
                 _menu.Add(("설정", () => OpenTouchMenu(0, 2), default));
                 _menu.Add(("시스템 메뉴", OpenSystemMenu, default));
+                _menu.Add(("버그 리포트", () => { Close(); OpenBugReport(); }, default));
                 break;
         }
         _menu.Add(("닫기", Close, default));   // 맨 아래 닫기(사용자 요청) — 밖을 누르거나 Esc 로도 닫힌다

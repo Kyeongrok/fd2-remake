@@ -51,6 +51,7 @@ public partial class MainActivity : Activity
         GameWindow.VersionsProvider = Versions;
         GameWindow.VersionSwitcher = dir => RunOnUiThread(() => StartGame(dir));
         GameWindow.VersionAdder = () => RunOnUiThread(ShowAddVersion);
+        GameWindow.BugAsker = (summary, send) => RunOnUiThread(() => AskBug(summary, send));
         if (OpenedZip(Intent)) return;
         string chosen = Settings.Load().GameDir;
         var versions = Versions();

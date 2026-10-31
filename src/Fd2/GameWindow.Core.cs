@@ -115,6 +115,7 @@ internal sealed partial class GameWindow
     internal void Start()
     {
         _running = true;
+        UploadBugs();   // 지난번에 못 보낸 버그 리포트가 있으면 뒤에서 보낸다
         LoadScene(0);
         if (PickVersionFirst && !Offscreen && OpenVersions(StartOpening, min: 2)) return;
         StartOpening();
@@ -514,6 +515,7 @@ internal sealed partial class GameWindow
         DrawParty();
         DrawVolume();
         DrawTalkMenu();
+        DrawToast();
         DrawVersionLabel();
     }
 

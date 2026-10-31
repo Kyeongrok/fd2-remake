@@ -1,5 +1,7 @@
 using Android.Content;
 using Android.Content.PM;
+using Android.Views;
+using Android.Widget;
 using Fd2.Data;
 
 // 다운로드 폴더의 버전 묶음(.zip)을 찾아 읽는다 — 안드로이드 11 부터는 「모든 파일 접근」(사용자가 설정에서 한 번 켬), 그 아래는 저장소 읽기
@@ -115,6 +117,21 @@ public partial class MainActivity
             .SetTitle("버전 더하기")!
             .SetItems(items.Select(i => i.Label).ToArray(), (_, e) => items[e.Which].Run())!
             .SetNegativeButton("닫기", (_, _) => { })!
+            .Show();
+    }
+
+    /// <summary>게임 메뉴의 「버그 리포트」 — 여러 줄 글 칸과 함께 보낼 것 요약, 보내기를 누르면 send(글).</summary>
+    private void AskBug(string summary, Action<string> send)
+    {
+        var box = new EditText(this) { Hint = "무엇이 어떻게 잘못됐는지 적어 주세요(어디서 · 무엇을 했더니 · 어떻게 됐나)" };
+        box.SetMinLines(4);
+        box.Gravity = GravityFlags.Top | GravityFlags.Start;
+        new AlertDialog.Builder(this)
+            .SetTitle("버그 리포트")!
+            .SetMessage(summary)!
+            .SetView(box)!
+            .SetPositiveButton("보내기", (_, _) => { if (box.Text is { Length: > 0 } t) send(t); })!
+            .SetNegativeButton("취소", (_, _) => { })!
             .Show();
     }
 

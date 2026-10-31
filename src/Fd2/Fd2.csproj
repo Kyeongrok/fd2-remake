@@ -12,7 +12,14 @@
         <ApplicationIcon>..\..\assets\icons\game.ico</ApplicationIcon>
         <!-- 64비트로 — 고해상도의 DirectML(그래픽 카드 업스케일)이 x64 일 때만 DirectML.dll 을 실어 준다(창세기전3에서 겪은 것). -->
         <PlatformTarget>x64</PlatformTarget>
+        <!-- 버그 리포트 창(GameWindow.BugDialog.cs)만 WinForms 를 쓴다 — 전역 using 은 빼서 게임 쪽 이름(Screen · Text · Font …)과 부딪치지 않게 -->
+        <UseWindowsForms>true</UseWindowsForms>
     </PropertyGroup>
+
+    <ItemGroup>
+        <Using Remove="System.Windows.Forms" />
+        <Using Remove="System.Drawing" />
+    </ItemGroup>
 
     <ItemGroup>
         <!-- 모드 > 고해상도 — 지도 · 캐릭터를 업스케일 모델로 키운다(HiRes.cs). 그래픽 카드(DirectML), 안 되면 CPU. -->
