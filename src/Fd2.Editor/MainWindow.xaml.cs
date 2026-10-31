@@ -64,6 +64,7 @@ public partial class MainWindow : Window
         foreach (var v in FindVersions()) MotionFiles.Ensure(v.Dir);   // 버전마다 .obs 가 없으면 뽑아 둔다
         FillMotionVersions();
         FillMusic();
+        LoadStats();
         Status.Text = $"캐릭터 그림 {_icons.Characters}명 · 전투 모션 {motions}명  ·  ←/→ 한 컷씩, 스페이스 재생/정지";
     }
 
@@ -183,6 +184,83 @@ public partial class MainWindow : Window
     {
         ShowMotionPick();
         LoadMotion();
+    }
+
+    // ── 능력치 — FD2.EXE 의 아군(동료 꼴 · 성장) · 적(몬스터) 표 ────────────────────────────
+
+    private byte[]? _exe;
+    private StatTables.Table? _statTable;
+
+    private void LoadStats()
+    {
+        string path = System.IO.Path.Combine(_dir, "FD2.EXE");
+        _exe = System.IO.File.Exists(path) && new System.IO.FileInfo(path).Length == GameTables.ExeSize ? System.IO.File.ReadAllBytes(path) : null;
+        FillStats();
+    }
+
+    private void FillStats()
+    {
+        if (_exe == null) { StatGrid.ItemsSource = null; return; }
+        _statTable = StatEnemies.IsChecked == true ? StatTables.Enemies() : StatTables.Allies();
+        var t = new System.Data.DataTable();
+        t.Columns.Add("이름", typeof(string)).ReadOnly = true;
+        foreach (var f in _statTable.Rows[0].Fields) t.Columns.Add(f.Name, typeof(int));
+        foreach (var (name, fields) in _statTable.Rows)
+            t.Rows.Add([name, .. fields.Select(f => (object)StatTables.Get(_exe, f))]);
+        StatGrid.ItemsSource = t.DefaultView;
+    }
+
+    private void OnStatColumn(object? sender, DataGridAutoGeneratingColumnEventArgs e)
+    {
+        // 칸 이름에 「/」 · 빈칸이 있으면 기본 묶음 길이 깨진다 — [이름] 으로 다시 묶는다
+        e.Column.Header = e.PropertyName;
+        if (e.Column is DataGridTextColumn c)
+        {
+            c.Binding = new System.Windows.Data.Binding($"[{e.PropertyName}]");
+            if (e.PropertyName != "이름") c.Width = new DataGridLength(1, DataGridLengthUnitType.Auto);
+        }
+    }
+
+    private void OnStatTableChanged(object sender, RoutedEventArgs e)
+    {
+        if (IsLoaded) FillStats();
+    }
+
+    private void OnStatCellEdit(object? sender, DataGridCellEditEndingEventArgs e)
+    {
+        if (_exe == null || _statTable == null || e.EditAction != DataGridEditAction.Commit || e.EditingElement is not TextBox box) return;
+        int row = e.Row.GetIndex(), col = e.Column.DisplayIndex - 1;
+        if (row < 0 || row >= _statTable.Rows.Count || col < 0 || col >= _statTable.Rows[row].Fields.Count) return;
+        var f = _statTable.Rows[row].Fields[col];
+        var (min, max) = StatTables.Range(f);
+        if (!int.TryParse(box.Text.Trim(), out int v) || v < min || v > max)
+        {
+            e.Cancel = true;
+            Status.Text = $"{f.Name} 은(는) {min} ~ {max} 사이 숫자여야 합니다.";
+            return;
+        }
+        StatTables.Set(_exe, f, v);
+        Status.Text = $"{_statTable.Rows[row].Name} {f.Name} = {v} — 「FD2.EXE 에 저장」을 눌러야 파일에 들어갑니다.";
+    }
+
+    private void OnStatSave(object sender, RoutedEventArgs e)
+    {
+        if (_exe == null) { Status.Text = "이 폴더의 FD2.EXE 를 읽지 못했습니다(크기가 원본과 다름)."; return; }
+        StatGrid.CommitEdit(DataGridEditingUnit.Row, true);
+        if (MessageBox.Show(this, $"{System.IO.Path.Combine(_dir, "FD2.EXE")} 에 씁니다.\n처음 한 번은 옆에 FD2-backup.EXE 로 원래 것을 남깁니다.", "능력치 저장",
+                MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
+        try
+        {
+            StatTables.Save(_dir, _exe);
+            Status.Text = "저장했습니다 — 게임은 다시 켜면(또는 버전을 다시 고르면) 새 능력치로 돕니다.";
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException) { Status.Text = $"저장하지 못했습니다: {ex.Message}"; }
+    }
+
+    private void OnStatReload(object sender, RoutedEventArgs e)
+    {
+        LoadStats();
+        Status.Text = "FD2.EXE 에서 다시 읽었습니다(저장 안 한 고침은 버렸습니다).";
     }
 
     // ── 모션 .obs — 버전마다 뽑아 두고, 캐릭터마다 어느 버전 것으로 돌지(MotionFiles) ──────────
