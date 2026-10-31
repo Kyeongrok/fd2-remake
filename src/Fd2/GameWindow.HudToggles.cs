@@ -9,14 +9,14 @@ namespace Fd2;
 /// </summary>
 internal sealed partial class GameWindow
 {
-    private (int X, int Y, int W, int H) _miniFold, _chestFold, _escIcon, _menuIcon, _mapIcon, _partyIcon;
+    private (int X, int Y, int W, int H) _miniFold, _chestFold, _escIcon, _menuIcon, _mapIcon, _partyIcon, _readyIcon;
 
     /// <summary>오른쪽 위 줄의 아래 끝 — 미니맵 패널을 그 밑에 놓는다(폰은 ESC 단추 밑).</summary>
     private int _hudIconBottom = 12;
 
     private void DrawHudToggles(int fs)
     {
-        _miniFold = _chestFold = _escIcon = _menuIcon = _mapIcon = _partyIcon = default;
+        _miniFold = _chestFold = _escIcon = _menuIcon = _mapIcon = _partyIcon = _readyIcon = default;
         _hudIconBottom = 12;
         if (_bs is BattleState.CutIn or BattleState.Talk) return;
         if (TouchUi) DrawTouchButtons(fs);
@@ -36,7 +36,7 @@ internal sealed partial class GameWindow
 
     /// <summary>그 자리가 접기 단추 · ESC 단추인가 — 단추 누르기는 지도 끌기로 받지 않는다.</summary>
     private bool HudHit(int mx, int my) =>
-        new[] { _miniFold, _chestFold, _escIcon, _menuIcon, _mapIcon, _partyIcon, _touchMini }.Any(r => r.W > 0 && mx >= r.X - 4 && my >= r.Y - 4 && mx < r.X + r.W + 4 && my < r.Y + r.H + 4);
+        new[] { _miniFold, _chestFold, _escIcon, _menuIcon, _mapIcon, _partyIcon, _readyIcon, _touchMini }.Any(r => r.W > 0 && mx >= r.X - 4 && my >= r.Y - 4 && mx < r.X + r.W + 4 && my < r.Y + r.H + 4);
 
     /// <summary>단추를 눌렀으면 그 패널을 접고 펴고(ESC 는 원작 Esc, 메뉴는 모바일 메뉴) true.</summary>
     private bool HudToggleClick(int mx, int my)
@@ -44,6 +44,7 @@ internal sealed partial class GameWindow
         static bool In((int X, int Y, int W, int H) r, int x, int y) => r.W > 0 && x >= r.X - 4 && y >= r.Y - 4 && x < r.X + r.W + 4 && y < r.Y + r.H + 4;
         if (In(_escIcon, mx, my)) { _mouseMoved = false; PlaySfx(Sound.UiBank, Sound.Cursor); BattleKey(Win32.VK_ESCAPE); return true; }
         if (In(_menuIcon, mx, my)) { OpenTouchMenu(); return true; }
+        if (In(_readyIcon, mx, my)) { CursorToNextReady(); PlaySfx(Sound.UiBank, Sound.Cursor); return true; }
         if (In(_partyIcon, mx, my)) { PlaySfx(Sound.UiBank, Sound.Menu); OpenParty(); return true; }
         if (In(_mapIcon, mx, my)) { _touchMiniOpen = !_touchMiniOpen; PlaySfx(Sound.UiBank, Sound.Cursor); return true; }
         if (TouchMinimapClick(mx, my)) return true;
@@ -80,6 +81,25 @@ internal sealed partial class GameWindow
             _partyIcon = DrawHudButton("파티", fs, _mapIcon.X - 10, y);   // 파티 정보 — 메뉴에서 빼 단추로(사용자 요청)
         }
         if (bottom > 0) _hudIconBottom = bottom + 6;
+        DrawReadyCount(fs);
+    }
+
+    /// <summary>
+    /// 폰 — 아래 가운데에 아직 안 움직인 우리 편 수(「남은 아군 3 / 5」). 누르면 Esc 처럼 다음 안 움직인 아군으로 커서가 간다(사용자 요청).
+    /// </summary>
+    private void DrawReadyCount(int fs)
+    {
+        if (!InBattle || _enemyPhase || _bs is not (BattleState.Select or BattleState.Target)) return;   // 메뉴 · 묻는 창이 떠 있으면 숨긴다(누르기가 겹치지 않게)
+        var mine = Controlled.Where(u => u.Hp > 0).ToList();
+        if (mine.Count == 0) return;
+        int left = mine.Count(Ready);
+        var label = Text.Render($"남은 아군 {left} / {mine.Count}", fs, left > 0 ? 0xFFFFFFFF : 0xFFB0B0B0);
+        int pad = fs / 2, w = label.W + pad * 2, h = label.H + pad, x = (_clientW - w) / 2, y = _clientH - h - 8;
+        FillRect(x, y, w, h, 0xA0101020);
+        FillRect(x, y, w, 1, 0x80FFFFFF); FillRect(x, y + h - 1, w, 1, 0x80FFFFFF);
+        FillRect(x, y, 1, h, 0x80FFFFFF); FillRect(x + w - 1, y, 1, h, 0x80FFFFFF);
+        DrawText(label, x + pad, y + pad / 2);
+        _readyIcon = (x, y, w, h);
     }
 
     /// <summary>오른쪽 끝이 right 인 글자 단추를 그리고 자리를 돌려준다.</summary>
