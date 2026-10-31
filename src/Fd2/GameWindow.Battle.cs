@@ -1786,7 +1786,7 @@ internal sealed partial class GameWindow
     /// <summary>폰 미니맵의 자리(누르면 그곳으로 지도를 옮긴다)와 칸 크기 · 아래 끝.</summary>
     private (int X, int Y, int W, int H) _touchMini;
 
-    /// <summary>폰 미니맵이 떠 있나 — 「지도」 단추로 열고 미니맵 오른쪽 위 ✕ 로 닫는다(저장하지 않음).</summary>
+    /// <summary>폰 미니맵이 떠 있나 — 「지도」 단추로 열고 닫는다(저장하지 않음).</summary>
     private bool _touchMiniOpen;
     private int _touchMiniCell, _miniBottom;
 
@@ -1831,18 +1831,7 @@ internal sealed partial class GameWindow
         FillRect(vx, vy, vw, 2, 0xFFFFFFFF); FillRect(vx, vy + vh - 2, vw, 2, 0xFFFFFFFF);
         FillRect(vx, vy, 2, vh, 0xFFFFFFFF); FillRect(vx + vw - 2, vy, 2, vh, 0xFFFFFFFF);
         (_touchMini, _touchMiniCell, _miniBottom) = ((mx, my, mw, mh), m, my + mh + 3);
-        // 오른쪽 위 닫기 ✕ — 미니맵 밖 오른쪽에 붙여 손가락으로 누르기 쉽게
-        int cs = Math.Max(24, 7 * HudZoom * 4 / 3), cx = mx + mw + 6, cy = my - 3;
-        FillRect(cx, cy, cs, cs, 0xD0602020);
-        FillRect(cx, cy, cs, 2, 0xFFFFFFFF); FillRect(cx, cy + cs - 2, cs, 2, 0xFFFFFFFF);
-        FillRect(cx, cy, 2, cs, 0xFFFFFFFF); FillRect(cx + cs - 2, cy, 2, cs, 0xFFFFFFFF);
-        int t = Math.Max(2, cs / 10);
-        for (int i = cs / 4; i < cs * 3 / 4; i++)
-        {
-            FillRect(cx + i - t / 2, cy + i - t / 2, t, t, 0xFFFFFFFF);
-            FillRect(cx + cs - 1 - i - t / 2, cy + i - t / 2, t, t, 0xFFFFFFFF);
-        }
-        _miniClose = (cx, cy, cs, cs);
+        // 닫기 ✕ 는 두지 않는다(오른쪽 메뉴를 가렸다, 사용자 요청) — 「지도」 단추를 한 번 더 누르면 닫힌다
     }
 
     /// <summary>폰 미니맵을 눌렀으면 그 칸이 가운데 오게 지도를 옮기고 true.</summary>

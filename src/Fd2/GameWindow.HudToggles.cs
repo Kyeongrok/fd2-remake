@@ -9,14 +9,14 @@ namespace Fd2;
 /// </summary>
 internal sealed partial class GameWindow
 {
-    private (int X, int Y, int W, int H) _miniFold, _chestFold, _escIcon, _menuIcon, _mapIcon, _partyIcon, _miniClose;
+    private (int X, int Y, int W, int H) _miniFold, _chestFold, _escIcon, _menuIcon, _mapIcon, _partyIcon;
 
     /// <summary>오른쪽 위 줄의 아래 끝 — 미니맵 패널을 그 밑에 놓는다(폰은 ESC 단추 밑).</summary>
     private int _hudIconBottom = 12;
 
     private void DrawHudToggles(int fs)
     {
-        _miniFold = _chestFold = _escIcon = _menuIcon = _mapIcon = _partyIcon = _miniClose = default;
+        _miniFold = _chestFold = _escIcon = _menuIcon = _mapIcon = _partyIcon = default;
         _hudIconBottom = 12;
         if (_bs is BattleState.CutIn or BattleState.Talk) return;
         if (TouchUi) DrawTouchButtons(fs);
@@ -36,7 +36,7 @@ internal sealed partial class GameWindow
 
     /// <summary>그 자리가 접기 단추 · ESC 단추인가 — 단추 누르기는 지도 끌기로 받지 않는다.</summary>
     private bool HudHit(int mx, int my) =>
-        new[] { _miniFold, _chestFold, _escIcon, _menuIcon, _mapIcon, _partyIcon, _miniClose, _touchMini }.Any(r => r.W > 0 && mx >= r.X - 4 && my >= r.Y - 4 && mx < r.X + r.W + 4 && my < r.Y + r.H + 4);
+        new[] { _miniFold, _chestFold, _escIcon, _menuIcon, _mapIcon, _partyIcon, _touchMini }.Any(r => r.W > 0 && mx >= r.X - 4 && my >= r.Y - 4 && mx < r.X + r.W + 4 && my < r.Y + r.H + 4);
 
     /// <summary>단추를 눌렀으면 그 패널을 접고 펴고(ESC 는 원작 Esc, 메뉴는 모바일 메뉴) true.</summary>
     private bool HudToggleClick(int mx, int my)
@@ -46,7 +46,6 @@ internal sealed partial class GameWindow
         if (In(_menuIcon, mx, my)) { OpenTouchMenu(); return true; }
         if (In(_partyIcon, mx, my)) { PlaySfx(Sound.UiBank, Sound.Menu); OpenParty(); return true; }
         if (In(_mapIcon, mx, my)) { _touchMiniOpen = !_touchMiniOpen; PlaySfx(Sound.UiBank, Sound.Cursor); return true; }
-        if (In(_miniClose, mx, my)) { _touchMiniOpen = false; PlaySfx(Sound.UiBank, Sound.Cursor); return true; }
         if (TouchMinimapClick(mx, my)) return true;
         if (In(_miniFold, mx, my)) _settings.ShowMinimap = !_settings.ShowMinimap;
         else if (In(_chestFold, mx, my)) _settings.ShowChests = !_settings.ShowChests;
@@ -76,7 +75,7 @@ internal sealed partial class GameWindow
         {
             _menuIcon = DrawHudButton("메뉴", fs, right, y);
             bottom = Math.Max(bottom, _menuIcon.Y + _menuIcon.H);
-            // 지도 — 누르면 미니맵이 뜨고, 미니맵 오른쪽 위 ✕ 로 닫는다(사용자 요청)
+            // 지도 — 누르면 미니맵이 뜨고 한 번 더 누르면 닫힌다(사용자 요청)
             _mapIcon = DrawHudButton("지도", fs, _menuIcon.X - 10, y);
             _partyIcon = DrawHudButton("파티", fs, _mapIcon.X - 10, y);   // 파티 정보 — 메뉴에서 빼 단추로(사용자 요청)
         }
