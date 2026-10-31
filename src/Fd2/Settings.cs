@@ -59,6 +59,12 @@ internal sealed class Settings
     /// <summary>PC 전투 왼쪽 아래 사람 정보 창(이름 · 레벨 · HP · 능력치) — 모드에서 켜고 끈다, 기본 끔(사용자 요청).</summary>
     public bool ShowUnitInfo { get; set; }
 
+    /// <summary>
+    /// 공통 가방(모드, 기본 켬, 사용자 요청) — 싸움터의 우리 편 가방에 든 소모품을 누구나 「사용」할 수 있다(쓰는 사람에게 옮겨 와 쓴다).
+    /// 끄면 원작처럼 제 가방 것만.
+    /// </summary>
+    public bool SharedBag { get; set; } = true;
+
     /// <summary>마법 속도(%) — 100 이 원작. 모드에서 고른다(사용자 요청).</summary>
     public int SpellSpeed { get; set; } = 100;
     public bool TouchChests { get; set; }

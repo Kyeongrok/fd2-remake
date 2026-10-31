@@ -148,6 +148,12 @@ internal sealed partial class GameWindow
                     _settings.Save();
                     OpenTouchMenu(_menuIndex, 2);
                 }, default));
+                _menu.Add(($"공통 가방  [{(_settings.SharedBag ? "켬" : "끔")}]", () =>
+                {
+                    _settings.SharedBag = !_settings.SharedBag;
+                    _settings.Save();
+                    OpenTouchMenu(_menuIndex, 2);
+                }, default));
                 _menu.Add(($"마법 속도  [{SpellSpeedName(_settings.SpellSpeed)}]", () =>
                 {
                     int at = Array.IndexOf(SpellSpeeds, _settings.SpellSpeed);

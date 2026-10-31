@@ -95,9 +95,34 @@ internal sealed partial class GameWindow
         };
     }
 
+    /// <summary>
+    /// 공통 가방(모드) — 싸움터의 다른 우리 편(살아 있는) 가방에 든 소모품(장비 안 한 것). 「사용」 목록의 제 가방 아래에 붙는다.
+    /// </summary>
+    private List<(Unit Owner, int Slot)> SharedItems(Unit u)
+    {
+        var list = new List<(Unit, int)>();
+        if (!_settings.SharedBag || _tables == null || !InBattle) return list;
+        foreach (var o in _scene.Units.Where(o => o != u && o.Team == 2 && o.Hp > 0).OrderBy(o => o.Slot))
+            for (int k = 0; k < o.Bag.Count; k++)
+            {
+                var (id, equipped) = o.Bag[k];
+                var it = _tables.Items[id];
+                if (!equipped && it.Kind >= 32 && UsableItem(it) && ConsumedItem(it.Use)) list.Add((o, k));
+            }
+        return list;
+    }
+
+    /// <summary>「사용」 목록의 공통 가방 줄들(제 가방 줄 뒤에 그 차례로).</summary>
+    private List<(Unit Owner, int Slot)> _sharedRows = new();
+
+    /// <summary>공통 가방 줄을 지금 쓸 수 있나 — 쓰는 사람 가방에 자리가 있고 범위 안에 대상이 있어야.</summary>
+    private bool SharedRowEnabled(Unit u, (Unit Owner, int Slot) row) =>
+        _tables != null && u.Bag.Count < 8 && row.Slot < row.Owner.Bag.Count && ItemCenters(u, _tables.Items[row.Owner.Bag[row.Slot].Item]).Count > 0;
+
     private void OpenItemPick(Unit u, ItemMode mode)
     {
-        if (u.Bag.Count == 0) { OpenItemCross(u); return; }
+        _sharedRows = mode == ItemMode.Use ? SharedItems(u) : new();
+        if (u.Bag.Count == 0 && _sharedRows.Count == 0) { OpenItemCross(u); return; }
         PlaySfx(Sound.UiBank, Sound.Menu);
         _itemMode = mode;
         _stage = MenuStage.ItemPick;
@@ -128,7 +153,24 @@ internal sealed partial class GameWindow
                 }
             }, default));
         }
-        _menuIndex = Math.Max(0, Enumerable.Range(0, u.Bag.Count).FirstOrDefault(i => ItemRowEnabled(u, i, mode), 0));
+        // 공통 가방 — 고르면 그 물건을 쓰는 사람 가방으로 옮겨 와 쓴다(쓰면 없어지는 소모품만)
+        foreach (var row in _sharedRows)
+        {
+            var r = row;
+            _menu.Add(($"[공통] {GameNames.Item(r.Owner.Bag[r.Slot].Item)}", () =>
+            {
+                if (!SharedRowEnabled(u, r)) return;
+                var item = r.Owner.Bag[r.Slot].Item;
+                r.Owner.Bag.RemoveAt(r.Slot);
+                u.Bag.Add((item, false));
+                _battle.Recompute(r.Owner);
+                _battle.Recompute(u);
+                BeginItemTarget(u, u.Bag.Count - 1, _itemFrom);
+            }, default));
+        }
+        int first = Enumerable.Range(0, u.Bag.Count).Where(i => ItemRowEnabled(u, i, mode)).DefaultIfEmpty(-1).First();
+        if (first < 0) first = _sharedRows.FindIndex(r => SharedRowEnabled(u, r)) is int j and >= 0 ? u.Bag.Count + j : 0;
+        _menuIndex = Math.Max(0, first);
         _bs = BattleState.Menu;
     }
 
@@ -158,7 +200,15 @@ internal sealed partial class GameWindow
         int W = Math.Min(_clientW - 24, 16 * g * 26), x0 = (_clientW - W) / 2;
         var faces = Face(u.Icon);
         int faceW = faces is { Count: > 0 } ? faces[0].W * g : 0, faceH = faces is { Count: > 0 } ? faces[0].H * g : 0;
-        int topH = Math.Max(faceH + 16, lineH * 5 + 16), listH = lineH * Math.Max(4, u.Bag.Count) + 24;
+        // 세로 화면은 얼굴을 화면 폭 1/4 안으로(사용자 요청 — 글 배율대로면 너무 컸다)
+        if (_clientW < _clientH && faceW > _clientW / 4 - 8 && faces is { Count: > 0 })
+        {
+            faceW = Math.Max(16, _clientW / 4 - 8);
+            faceH = faces[0].H * faceW / Math.Max(1, faces[0].W);
+        }
+        int rows = u.Bag.Count + (_itemMode == ItemMode.Use ? _sharedRows.Count : 0);
+        int topH = Math.Max(faceH + 16, lineH * 5 + 16), listH = lineH * Math.Max(4, rows) + 24 + (rows >= 4 ? lineH * 2 / 3 : 0);   // 줄이 차면 아래 「사용」 글 자리를 더
+        if (topH + listH + 16 > _clientH) listH = Math.Max(lineH * 4 + 24, _clientH - topH - 16);   // 공통 가방 줄이 많으면 넘치는 줄은 잘린다
         int y0 = Math.Max(8, (_clientH - topH - listH - 8) / 2);
 
         void Panel(int x, int y, int w, int h)
@@ -172,7 +222,7 @@ internal sealed partial class GameWindow
         {
             Panel(x0, y0, faceBoxW, topH);
             var f = faces![0];
-            BlitFrame(f.Px, f.W, f.H, x0 + 8, y0 + (topH - faceH) / 2, g, false, 0, 0, (0, 0, _clientW, _clientH));
+            BlitFit(f.Px, f.W, f.H, x0 + 8, y0 + (topH - faceH) / 2, faceW, faceH);
         }
         int sx = x0 + faceBoxW + (faceBoxW > 0 ? 6 : 0), sw = W - (sx - x0);
         Panel(sx, y0, sw, topH);
@@ -237,7 +287,32 @@ internal sealed partial class GameWindow
             DrawText(nm, ix, ry + (lineH - 4 - nm.H) / 2);
             string eff = id < 128 && it.Atk > 0 ? $"+AP {it.Atk:000}" : id >= 128 && it.Def > 0 ? $"+DP {it.Def:000}"
                        : it.Use is 5 or 13 ? $"+HP {it.UseValue:000}" : it.Use == 11 ? $"+MP {it.UseValue:000}" : "";
-            if (eff.Length > 0) { var e = T(eff, on ? 0xFFC8F0B0 : 0xFF607060); DrawText(e, x0 + W * 2 / 5, ry + (lineH - 4 - e.H) / 2); }
+            if (eff.Length > 0) { var e = T(eff, on ? 0xFFC8F0B0 : 0xFF607060); DrawText(e, Math.Max(x0 + W * 2 / 5, ix + nm.W + 8), ry + (lineH - 4 - e.H) / 2); }   // 이름이 길면(세로 화면) 그 뒤에
+            _menu[i] = (_menu[i].Label, _menu[i].Do, rect);
+        }
+        // 공통 가방 줄 — 「공통」 표시와 가진 사람 이름
+        for (int j = 0; _itemMode == ItemMode.Use && j < _sharedRows.Count && u.Bag.Count + j < _menu.Count; j++)
+        {
+            int i = u.Bag.Count + j;
+            var (owner, slot) = _sharedRows[j];
+            if (slot >= owner.Bag.Count) continue;
+            int id = owner.Bag[slot].Item;
+            var it = _tables.Items[id];
+            int ry = ly + 12 + i * lineH;
+            if (ry + lineH > ly + listH) break;
+            var rect = (X: x0 + 8, Y: ry - 2, W: W - 16, H: lineH);
+            bool on = SharedRowEnabled(u, _sharedRows[j]);
+            if (_mouseMoved && _mouseX >= rect.X && _mouseY >= rect.Y && _mouseX < rect.X + rect.W && _mouseY < rect.Y + rect.H) _menuIndex = i;
+            if (i == _menuIndex) FillRect(rect.X, rect.Y, rect.W, rect.H, 0x804870C0);
+            var tag = T("공통", on ? 0xFFFFE070 : 0xFF807040);
+            DrawText(tag, x0 + 16, ry + (lineH - 4 - tag.H) / 2);
+            int ix = x0 + 16 + tag.W + 12;
+            var nm = NameImage(181 + id, g, on ? 0xFFB8C8FF : 0xFF6878A0) ?? T(GameNames.Item(id), on ? 0xFFB8C8FF : 0xFF6878A0);
+            DrawText(nm, ix, ry + (lineH - 4 - nm.H) / 2);
+            string eff = it.Use is 5 or 13 ? $"+HP {it.UseValue:000}" : it.Use == 11 ? $"+MP {it.UseValue:000}" : "";
+            if (eff.Length > 0) { var e = T(eff, on ? 0xFFC8F0B0 : 0xFF607060); DrawText(e, Math.Max(x0 + W * 2 / 5, ix + nm.W + 8), ry + (lineH - 4 - e.H) / 2); }   // 이름이 길면(세로 화면) 그 뒤에
+            var who = NameImage(Battle.NameLine(owner), Math.Max(1, g * 3 / 4), 0xFF9098B8) ?? T(CharacterNames.Of(owner.Icon).Split('-')[0], 0xFF9098B8);
+            DrawText(who, x0 + W - who.W - 24, ry + (lineH - 4 - who.H) / 2);
             _menu[i] = (_menu[i].Label, _menu[i].Do, rect);
         }
         var mode = T(_itemMode switch { ItemMode.Use => "사용", ItemMode.Give => "건네주기", ItemMode.Equip => "장비", _ => "버리기" }, 0xFFFFE070);

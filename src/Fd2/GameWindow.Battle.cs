@@ -736,7 +736,7 @@ internal sealed partial class GameWindow
         // 걸은 뒤에도 마법을 연다 — 원작 메뉴(sub_18D8C)가 움직인 뒤 마법을 막는지는 아직 안 봤다(짐작)
         if (!u.Sealed && CastableSpells(u).Count > 0)
             _menu.Add(("마법", () => OpenSpellMenu(u, stage), default));
-        if (u.Bag.Count > 0) _menu.Add(("물건", () => { _itemFrom = stage; OpenItemCross(u); }, default));
+        if (u.Bag.Count > 0 || SharedItems(u).Count > 0) _menu.Add(("물건", () => { _itemFrom = stage; OpenItemCross(u); }, default));
         _menu.Add(("대기", () =>
         {
             if ((u.X, u.Y) == _origin) { _battle.Rest(u); u.Facing = Dir.Down; PlaySfx(Sound.UiBank, Sound.Rest); }   // 안 걸었으면 쉬어 회복 — 쉬는 사람은 앞을 본다
