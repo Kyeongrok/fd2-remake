@@ -2082,9 +2082,58 @@ internal sealed partial class GameWindow
     private void DrawCutIn(int fs)
     {
         FillRect(0, 0, _clientW, _clientH, 0xB0000000);
+        if (TouchUi && _clientW < _clientH) { DrawCutInFit(fs); return; }
         int s = Math.Max(1, Math.Min(_clientW * 8 / 10 / Motion.ScreenWidth, _clientH * 7 / 10 / Motion.ScreenHeight));
+        int bx = (_clientW - Motion.ScreenWidth * s) / 2, by = (_clientH - Motion.ScreenHeight * s) / 2;
+        DrawCutInAt(fs, s, bx, by);
+        DrawCutInNames(fs, by);
+    }
+
+    private uint[] _cutBuf = [];
+
+    /// <summary>
+    /// 세로 화면(폰) — 정수 배로는 폭의 3/4 밖에 못 채워서, 장면을 2배로 따로 그린 뒤 화면 폭에 꽉 차게 넓이 평균으로 줄여 넣는다(사용자 요청).
+    /// </summary>
+    private void DrawCutInFit(int fs)
+    {
+        int tw = _clientW - 8, th = tw * Motion.ScreenHeight / Motion.ScreenWidth;
+        int s2 = Math.Max(1, (tw + Motion.ScreenWidth - 1) / Motion.ScreenWidth);
+        int w2 = Motion.ScreenWidth * s2, h2 = Motion.ScreenHeight * s2;
+        if (_cutBuf.Length != w2 * h2) _cutBuf = new uint[w2 * h2];
+        Array.Clear(_cutBuf);
+        var save = (_fb, _fbW, _fbH, _clientW, _clientH);
+        (_fb, _fbW, _fbH, _clientW, _clientH) = (_cutBuf, w2, h2, w2, h2);
+        try { DrawCutInAt(fs, s2, 0, 0); }
+        finally { (_fb, _fbW, _fbH, _clientW, _clientH) = save; }
+        int tx = (_clientW - tw) / 2, ty = (_clientH - th) / 2;
+        // 넓이 평균 — 큰 그림의 점들을 줄인 칸에 고르게(글 · 사람 테두리가 들쭉날쭉하지 않게)
+        for (int y = 0; y < th; y++)
+        {
+            int dy = ty + y;
+            if ((uint)dy >= (uint)_fbH) continue;
+            int sy0 = y * h2 / th, sy1 = Math.Max(sy0 + 1, (y + 1) * h2 / th);
+            for (int x = 0; x < tw; x++)
+            {
+                int dx = tx + x;
+                if ((uint)dx >= (uint)_fbW) continue;
+                int sx0 = x * w2 / tw, sx1 = Math.Max(sx0 + 1, (x + 1) * w2 / tw);
+                uint r = 0, g = 0, b = 0, n = 0;
+                for (int yy = sy0; yy < sy1; yy++)
+                    for (int xx = sx0; xx < sx1; xx++)
+                    {
+                        uint c = _cutBuf[yy * w2 + xx];
+                        r += c >> 16 & 255; g += c >> 8 & 255; b += c & 255; n++;
+                    }
+                _fb[dy * _fbW + dx] = 0xFF000000 | r / n << 16 | g / n << 8 | b / n;
+            }
+        }
+        DrawCutInNames(fs, ty);
+    }
+
+    /// <summary>컷인 한 장면을 (bx, by) 에 s 배로 — 바탕 · 사람 · 마법 효과 · 정보 창 · 피해 숫자.</summary>
+    private void DrawCutInAt(int fs, int s, int bx, int by)
+    {
         int bw = Motion.ScreenWidth * s, bh = Motion.ScreenHeight * s;
-        int bx = (_clientW - bw) / 2, by = (_clientH - bh) / 2;
         FillRect(bx, by, bw, bh, 0xFF181820);
         var clip = (bx, by, bx + bw, by + bh);
 
@@ -2146,6 +2195,24 @@ internal sealed partial class GameWindow
 
         DrawSpellFx(bx, by, s, clip, back: false);
 
+        // 두 사람 정보 창(원작) — 오른쪽에 선 사람은 위 오른쪽, 왼쪽 사람은 아래 왼쪽
+        int aSide = _strikeMotion != null ? SideOf(_strikeMotion) : a.Side == Side.Player ? 1 : 0;
+        DrawStrikePanel(a, aSide, bx, by, s);
+        if (a != d) DrawStrikePanel(d, 1 - aSide, bx, by, s);
+        if (hit)
+        {
+            var dmg = heal ? Text.Render($"+{_strikeDamage}", fs * 3, 0xFF60FF80)
+                    : _strikeMiss ? Text.Render("빗나감", fs * 3, 0xFFC0C0C0)
+                    : Text.Render((_strikeCrit ? "필살! " : "") + (d.Hp == 0 ? $"-{_strikeDamage}  쓰러짐!" : $"-{_strikeDamage}"), fs * 3, 0xFFFF5050);
+            DrawText(dmg, bx + bw * (defenderSide == 1 ? 3 : 1) / 4 - dmg.W / 2, by + bh / 6);
+        }
+    }
+
+    /// <summary>컷인 위 글 — 「사울 → 도적 [화염술]」(원본 글꼴 이름), 장면 윗변 by 위에.</summary>
+    private void DrawCutInNames(int fs, int by)
+    {
+        var (a, d) = (_strike.A, _strike.D);
+        string? spellName = _strike.Spell >= 0 ? SpellNames.Of(_strike.Spell) : _strike.Heal > 0 ? "물건" : null;
         string what = spellName != null ? $"  [{spellName}]" : "";
         // 위 글 — 「몬스터 0 → 몬스터 28」 대신 원작 이름(원본 글꼴)
         int ng = Math.Max(1, fs / Font16.Size);
@@ -2160,18 +2227,6 @@ internal sealed partial class GameWindow
             if (part == null) continue;
             DrawText(part, wx, wy + (whoH - part.H) / 2);
             wx += part.W;
-        }
-
-        // 두 사람 정보 창(원작) — 오른쪽에 선 사람은 위 오른쪽, 왼쪽 사람은 아래 왼쪽
-        int aSide = _strikeMotion != null ? SideOf(_strikeMotion) : a.Side == Side.Player ? 1 : 0;
-        DrawStrikePanel(a, aSide, bx, by, s);
-        if (a != d) DrawStrikePanel(d, 1 - aSide, bx, by, s);
-        if (hit)
-        {
-            var dmg = heal ? Text.Render($"+{_strikeDamage}", fs * 3, 0xFF60FF80)
-                    : _strikeMiss ? Text.Render("빗나감", fs * 3, 0xFFC0C0C0)
-                    : Text.Render((_strikeCrit ? "필살! " : "") + (d.Hp == 0 ? $"-{_strikeDamage}  쓰러짐!" : $"-{_strikeDamage}"), fs * 3, 0xFFFF5050);
-            DrawText(dmg, bx + bw * (defenderSide == 1 ? 3 : 1) / 4 - dmg.W / 2, by + bh / 6);
         }
     }
 
