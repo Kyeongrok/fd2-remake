@@ -66,6 +66,7 @@ internal sealed partial class GameWindow
         _pal = GameFolder.Palette(dir);
         _icons = new IconBank(Path.Combine(dir, "FDICON.B24"), _pal);
         _sceneCount = Dat.Count(Path.Combine(dir, "FDFIELD.DAT")) / 3;
+        TablesJson.EnsureExported(dir);   // 수치 표는 게임 폴더 tables/*.json 을 쓴다 — 처음이면 EXE 에서 뽑아 둔다
         _tables = GameTables.Load(dir);
         PlatformInit();
     }

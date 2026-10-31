@@ -274,6 +274,8 @@ public partial class MainWindow : Window
     {
         string exe = System.IO.Path.Combine(_dir, "FD2.EXE"), field = System.IO.Path.Combine(_dir, "FDFIELD.DAT");
         _exe = System.IO.File.Exists(exe) && new System.IO.FileInfo(exe).Length == GameTables.ExeSize ? System.IO.File.ReadAllBytes(exe) : null;
+        // 게임은 수치 표를 tables/*.json 에서 읽는다 — 편집기도 그 값을 EXE 버퍼에 들여 같은 값을 보이고 고친다
+        if (_exe != null && GameTables.Load(_dir) is { FromJson.Count: > 0 } fromJson) fromJson.WriteTo(_exe);
         _field = System.IO.File.Exists(field) ? System.IO.File.ReadAllBytes(field) : null;
         _faces.Clear();
         _towns.Clear();
@@ -353,7 +355,12 @@ public partial class MainWindow : Window
     {
         if (_exe == null) { Status.Text = "이 폴더의 FD2.EXE 를 읽지 못했습니다(크기가 원본과 다름)."; return; }
         if (!Confirm("FD2.EXE")) return;
-        try { StatTables.Save(_dir, _exe); Status.Text = "저장했습니다 — 게임은 다시 켜면 새 값으로 돕니다."; }
+        try
+        {
+            StatTables.Save(_dir, _exe);
+            TablesJson.Export(GameTables.FromBytes(_exe), _dir);   // 게임이 읽는 tables/*.json 도 같은 값으로
+            Status.Text = "저장했습니다(FD2.EXE · tables/*.json) — 게임은 다시 켜면 새 값으로 돕니다.";
+        }
         catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException) { Status.Text = $"저장하지 못했습니다: {ex.Message}"; }
     }
 

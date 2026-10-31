@@ -77,25 +77,25 @@ public sealed class GameTables
     private readonly byte[] _exe;
 
     /// <summary>동료 표 — 0~31 이 동료. 원본 sub_10C50 은 꼴 32~67 도 같은 식으로 읽는다(그 뒤는 성장표와 겹친 값이다).</summary>
-    public IReadOnlyList<HeroInfo> Heroes { get; }
-    public IReadOnlyList<Growth> Growths { get; }
+    public IReadOnlyList<HeroInfo> Heroes { get; internal set; }
+    public IReadOnlyList<Growth> Growths { get; internal set; }
     /// <summary>몬스터 표 — 캐릭터 번호 − 68.</summary>
-    public IReadOnlyList<MonsterInfo> Monsters { get; }
-    public IReadOnlyList<ItemInfo> Items { get; }
-    public IReadOnlyList<SpellInfo> Spells { get; }
+    public IReadOnlyList<MonsterInfo> Monsters { get; internal set; }
+    public IReadOnlyList<ItemInfo> Items { get; internal set; }
+    public IReadOnlyList<SpellInfo> Spells { get; internal set; }
     /// <summary>직업 0~28(0 은 쓰지 않는 칸, 이동비는 「다 1」 = 지형을 안 따지는 걸음 수).</summary>
-    public IReadOnlyList<ClassInfo> Classes { get; }
+    public IReadOnlyList<ClassInfo> Classes { get; internal set; }
     /// <summary>레벨에 배우는 마법 표(0x626B3, 12바이트 = (레벨, 마법) 6쌍, 255 끝) 20개.</summary>
-    public IReadOnlyList<(int Level, int Spell)[]> SpellLearn { get; }
+    public IReadOnlyList<(int Level, int Spell)[]> SpellLearn { get; internal set; }
     /// <summary>전직 뒤 꼴(32~67) 의 (직업, 이동력 덧값) — 0x615FE, 꼴 − 32.</summary>
-    public IReadOnlyList<(int Class, int MoveAdd)> ClassChange { get; }
+    public IReadOnlyList<(int Class, int MoveAdd)> ClassChange { get; internal set; }
     /// <summary>처음 꼴(0~17) 의 아이템 전직에 드는 물건(0x523D5, 255 없음).</summary>
-    public IReadOnlyList<int> ClassChangeItem { get; }
+    public IReadOnlyList<int> ClassChangeItem { get; internal set; }
     /// <summary>지형 종류 0~5 의 공격 % (0x51A12) · 방어 % (0x51A2A).</summary>
-    public IReadOnlyList<int> TerrainAttack { get; }
-    public IReadOnlyList<int> TerrainDefense { get; }
+    public IReadOnlyList<int> TerrainAttack { get; internal set; }
+    public IReadOnlyList<int> TerrainDefense { get; internal set; }
     /// <summary>마을 상점 — 기록 번호 1 부터(원본 sub_4E809), [0] 은 기록 1.</summary>
-    public IReadOnlyList<ShopInfo> Shops { get; }
+    public IReadOnlyList<ShopInfo> Shops { get; internal set; }
 
     private GameTables(byte[] exe)
     {
@@ -146,12 +146,103 @@ public sealed class GameTables
         }).ToList();
     }
 
-    /// <summary>게임 폴더의 FD2.EXE 를 읽는다 — 없거나 크기가 다르면 null(원작 규칙 없이 돈다).</summary>
-    public static GameTables? Load(string dir)
+    /// <summary>게임 폴더 tables 의 .json 으로 덮은 표 이름들(<see cref="TablesJson"/>) — 비면 모두 EXE 값.</summary>
+    public IReadOnlyList<string> FromJson { get; private set; } = [];
+
+    /// <summary>
+    /// 게임 폴더의 FD2.EXE 를 읽는다 — 없거나 크기가 다르면 null(원작 규칙 없이 돈다).
+    /// 폴더에 tables/*.json(<see cref="TablesJson"/>)이 있으면 수치 표는 그 값을 쓴다.
+    /// </summary>
+    /// <param name="json">false 면 tables/*.json 을 보지 않고 EXE 값 그대로(편집기가 EXE 에서 JSON 을 새로 뽑을 때).</param>
+    public static GameTables? Load(string dir, bool json = true)
     {
         string path = Path.Combine(dir, "FD2.EXE");
         if (!File.Exists(path) || new FileInfo(path).Length != ExeSize) return null;
-        return new GameTables(File.ReadAllBytes(path));
+        var t = new GameTables(File.ReadAllBytes(path));
+        if (json) t.FromJson = TablesJson.Apply(t, dir);
+        return t;
+    }
+
+    /// <summary>exe 바이트 위에서 읽은 표(EXE 자리 그대로).</summary>
+    public static GameTables FromBytes(byte[] exe) => new((byte[])exe.Clone());
+
+    /// <summary>
+    /// 지금 표 값을 exe 바이트(FD2.EXE 통째)의 제자리에 쓴다 — 생성자가 읽는 것의 거울. 편집기가 tables/*.json 값을 EXE 표에 들일 때.
+    /// 목록 칸(장비 종류 · 상점)은 값 뒤에 255 하나로 끝낸다. 표를 안 고쳤으면 EXE 바이트가 그대로 나온다(원본 · 모션패치5 · 파워 인핸스드로 확인).
+    /// </summary>
+    public void WriteTo(byte[] exe)
+    {
+        void W8(int va, int v) => exe[FileOffset(va)] = (byte)v;
+        void W16(int va, int v) => BinaryPrimitives.WriteUInt16LittleEndian(exe.AsSpan(FileOffset(va)), unchecked((ushort)v));
+        void W32(int va, int v) => BinaryPrimitives.WriteInt32LittleEndian(exe.AsSpan(FileOffset(va)), v);
+        // 목록은 값들 뒤에 255 하나로 끝낸다 — 그 뒤 칸은 원본이 남긴 쓰레기 값일 수 있어 건드리지 않는다(읽을 때도 255 에서 끊는다)
+        void List(int va, int n, IReadOnlyList<int> xs) { for (int i = 0; i < n && i <= xs.Count; i++) W8(va + i, i < xs.Count ? xs[i] : 255); }
+        for (int n = 0; n < Heroes.Count; n++)
+        {
+            var h = Heroes[n];
+            int a = 0x61DA1 + 24 * n;
+            W8(a, h.Race); W8(a + 1, h.Class); W8(a + 2, h.Level); W16(a + 3, h.Hp); W16(a + 5, h.Mp); W8(a + 7, h.Move); W32(a + 8, unchecked((int)h.Spells));
+            W8(a + 12, h.Weapon); W8(a + 13, h.Armor); List(a + 14, 4, h.Bag); W16(a + 18, h.StrAdd); W16(a + 20, h.DefAdd); W16(a + 22, h.SpdAdd);
+        }
+        for (int f = 0; f < Growths.Count; f++)
+        {
+            var g = Growths[f];
+            int[] v = [g.StrMin, g.StrMax, g.DefMin, g.DefMax, g.SpdMin, g.SpdMax, g.HpMin, g.HpMax, g.MpMin, g.MpMax, g.SpellList];
+            for (int i = 0; i < 11; i++) W8(0x620A1 + 11 * f + i, v[i]);
+        }
+        for (int m = 0; m < Monsters.Count; m++)
+        {
+            var x = Monsters[m];
+            int a = 0x61AF9 + 10 * m;
+            W8(a, x.Race); W8(a + 1, x.Class); W16(a + 2, x.Hp); W8(a + 4, x.Mp); W8(a + 5, x.Str); W8(a + 6, x.Def); W8(a + 7, x.Spd); W8(a + 8, x.Move); W8(a + 9, x.Exp);
+        }
+        for (int i = 0; i < Items.Count; i++)
+        {
+            var it = Items[i];
+            int a = 0x602AD + 23 * i;
+            W8(a, it.Kind); W16(a + 1, it.Atk); W16(a + 3, it.Hit); W16(a + 5, it.Def); W16(a + 7, it.Evade); W8(a + 9, it.Special); W8(a + 10, it.SpecialValue);
+            W8(a + 11, it.RangeMin); W8(a + 12, it.RangeMax); W8(a + 13, it.Use); W16(a + 14, it.UseValue); W8(a + 16, it.UseRange); W8(a + 17, it.UseSide);
+            W8(a + 18, it.UseArea); W16(a + 19, it.Price);
+        }
+        for (int m = 0; m < Spells.Count; m++)
+        {
+            var sp = Spells[m];
+            int a = 0x619FD + 7 * m;
+            W16(a, sp.Power); W8(a + 2, sp.Hit); W8(a + 3, sp.Range); W8(a + 4, sp.Area); W8(a + 5, sp.Mp); W8(a + 6, sp.Side);
+        }
+        for (int c = 0; c < Classes.Count; c++)
+        {
+            var k = Classes[c];
+            List(0x6188A + 7 * c, 6, k.EquipKinds);
+            if (c > 0) { W8(0x524A8 + c - 1, k.Crit); W32(0x51F96 + 4 * (c - 1), k.MagicMul); }
+            W16(0x52397 + 2 * c, k.Revive);
+            for (int g = 0; g < 6 && g < k.MoveCost.Length; g++) W8(0x61646 + 20 * c + g, k.MoveCost[g]);
+        }
+        for (int k = 0; k < SpellLearn.Count; k++)
+        {
+            var row = SpellLearn[k];
+            for (int i = 0; i < 6; i++)
+            {
+                // 빈 쌍은 레벨만 255 — 짝의 마법 칸은 원본 값을 둔다(읽을 때 레벨 255 쌍은 건너뛴다)
+                W8(0x626B3 + 12 * k + 2 * i, i < row.Length ? row[i].Level : 255);
+                if (i < row.Length) W8(0x626B3 + 12 * k + 2 * i + 1, row[i].Spell);
+            }
+        }
+        for (int f = 0; f < ClassChange.Count; f++) { W8(0x615FE + 2 * f, ClassChange[f].Class); W8(0x615FE + 2 * f + 1, ClassChange[f].MoveAdd); }
+        for (int f = 0; f < ClassChangeItem.Count; f++) W8(0x523D5 + f, ClassChangeItem[f]);
+        for (int i = 0; i < TerrainAttack.Count; i++) { W32(0x51A12 + 4 * i, TerrainAttack[i]); W32(0x51A2A + 4 * i, TerrainDefense[i]); }
+        for (int n = 0; n < Shops.Count; n++)
+        {
+            var sh = Shops[n];
+            int a = 0x6238D + 31 * n;
+            if (sh.Weapons.Length + sh.Tools.Length + sh.Secret.Length == 0 && sh.Town == 0 && sh.SecretAt <= 0 && sh.SecretKey <= 0)
+            {
+                for (int i = 0; i < 31; i++) W8(a + i, 0);   // 빈 기록은 0 으로(하늘 위 장)
+                continue;
+            }
+            W8(a, sh.Town); W8(a + 1, Math.Max(0, sh.SecretAt)); W8(a + 2, Math.Max(0, sh.SecretKey));
+            List(a + 3, 12, sh.Weapons); List(a + 15, 8, sh.Tools); List(a + 23, 8, sh.Secret);
+        }
     }
 
     /// <summary>
