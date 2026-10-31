@@ -1330,7 +1330,7 @@ internal sealed partial class GameWindow
     /// </summary>
     private void DrawChestList(int fs)
     {
-        if (!_settings.ShowChests || _scene.Index >= 30 || _bs is BattleState.CutIn or BattleState.Talk) return;
+        if (_scene.Index >= 30 || _bs is BattleState.CutIn or BattleState.Talk) return;
         if (_chestCellsFor != _scene)
         {
             _chestCellsFor = _scene;
@@ -1354,10 +1354,14 @@ internal sealed partial class GameWindow
         }
         if (rows.Count == 0) return;
         var title = Text.Render("보물상자", fs, 0xFFA8C8FF);
-        int w = Math.Max(title.W, rows.Max(r => r.W)) + 20, h = title.H + rows.Sum(r => r.H + 2) + 14;
+        int btn = title.H;
+        bool open = _settings.ShowChests;   // 접으면 제목 줄 + [+] 만
+        int w = Math.Max(title.W + btn + 16, open ? rows.Max(r => r.W) : 0) + 20, h = open ? title.H + rows.Sum(r => r.H + 2) + 14 : title.H + 12;
         int bx = 12, by = Math.Max(12, VersionLabelBottom + 4);
         FillRect(bx, by, w, h, 0xC0101020);
         DrawText(title, bx + 10, by + 6);
+        _chestFold = FoldButton(bx + w - btn - 6, by + 6, btn, open);
+        if (!open) return;
         int cy = by + 8 + title.H;
         foreach (var r in rows) { DrawText(r, bx + 10, cy); cy += r.H + 2; }
 
@@ -1379,7 +1383,18 @@ internal sealed partial class GameWindow
     /// </summary>
     private void DrawMinimap()
     {
-        if (!_settings.ShowMinimap || _bs is BattleState.CutIn or BattleState.Talk) return;
+        if (_bs is BattleState.CutIn or BattleState.Talk || TouchUi && !_settings.ShowMinimap) return;
+        int fsM = Math.Max(14, 7 * HudZoom);
+        if (!_settings.ShowMinimap)
+        {
+            // 접힌 미니맵 — 제목 줄 + [+] 만
+            var label = Text.Render("미니맵", fsM, 0xFFA8C8FF);
+            int bw = label.W + label.H + 36, bh = label.H + 12, bx = _clientW - bw - 14, by = _hudIconBottom;
+            FillRect(bx, by, bw, bh, 0xC0101020);
+            DrawText(label, bx + 10, by + 6);
+            _miniFold = FoldButton(bx + bw - label.H - 6, by + 6, label.H, false);
+            return;
+        }
         if (_miniFor != _scene)
         {
             _miniFor = _scene;
@@ -1396,6 +1411,7 @@ internal sealed partial class GameWindow
         int m = Math.Max(2, Math.Min(260 / _scene.Width, 200 / _scene.Height) * Math.Max(1, _clientW / 1280));
         int mw = _scene.Width * m, mh = _scene.Height * m, mx = _clientW - mw - 14, my = _hudIconBottom + 3;
         FillRect(mx - 3, my - 3, mw + 6, mh + 6, 0xC0101020);
+        int fb = Math.Max(14, fsM * 3 / 4);
         for (int y = 0; y < _scene.Height; y++)
             for (int x = 0; x < _scene.Width; x++) FillRect(mx + x * m, my + y * m, m, m, _mini![y * _scene.Width + x]);
         foreach (var u in _scene.Units.Where(u => u.Alive && u.Hp > 0))
@@ -1408,6 +1424,7 @@ internal sealed partial class GameWindow
         int vw = Math.Min(mw, _boardW * m / T), vh = Math.Min(mh, _boardH * m / T);
         FillRect(vx, vy, vw, 1, 0xFFFFFFFF); FillRect(vx, vy + vh - 1, vw, 1, 0xFFFFFFFF);
         FillRect(vx, vy, 1, vh, 0xFFFFFFFF); FillRect(vx + vw - 1, vy, 1, vh, 0xFFFFFFFF);
+        _miniFold = FoldButton(mx + mw - fb, my, fb, true);   // 오른쪽 위 [−] — 누르면 접는다
     }
 
     private Scene? _miniFor;
