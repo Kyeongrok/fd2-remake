@@ -1492,7 +1492,7 @@ internal sealed partial class GameWindow
 
     /// <summary>
     /// 왼쪽 위 보물 목록(창세기전3 처럼) — 이 장의 안 연 보석상자(칸 속성 0x20)마다 든 것: 물건은 원본 글꼴 이름, 돈은 액수, 사건 상자는 「?」.
-    /// 숨은 보물(0x40)은 찾는 재미를 남기려고 넣지 않는다. 커서가 그 상자 칸이면 노랗게.
+    /// 숨은 보물(0x40, 땅에 묻힌 비밀상자)도 보랏빛 「비밀」을 붙여 아래에(사용자 요청). 커서가 그 상자 칸이면 노랗게.
     /// </summary>
     private void DrawChestList(int fs)
     {
@@ -1501,18 +1501,20 @@ internal sealed partial class GameWindow
         {
             _chestCellsFor = _scene;
             _chestCells.Clear();
-            for (int y = 0; y < _scene.Height; y++)
-                for (int x = 0; x < _scene.Width; x++)
-                    if ((_scene.TileFlags(x, y) & 0x60) == 0x20 && _scene.Mark(x, y) is var k && k < _scene.Chests.Count) _chestCells.Add((x, y, k));
+            foreach (int flag in new[] { 0x20, 0x40 })   // 보석상자 먼저, 비밀상자는 뒤에
+                for (int y = 0; y < _scene.Height; y++)
+                    for (int x = 0; x < _scene.Width; x++)
+                        if ((_scene.TileFlags(x, y) & 0x60) == flag && _scene.Mark(x, y) is var k && k < _scene.Chests.Count) _chestCells.Add((x, y, k));
         }
         var rows = new List<Text.Image>();
         int g = Math.Max(1, fs / Font16.Size);
         foreach (var (x, y, k) in _chestCells)
         {
             if (_battle.OpenedChests.Contains(k)) continue;
+            bool secret = (_scene.TileFlags(x, y) & 0x60) == 0x40;
             uint c = _cursor == (x, y) ? 0xFFFFE070 : 0xFFFFFFFF;
             var (kind, value) = _scene.Chests[k];
-            var head = Text.Render($"({x},{y}) ", fs, c);
+            var head = secret ? Join(Text.Render("비밀 ", fs, 0xFFD0A0FF), Text.Render($"({x},{y}) ", fs, c)) : Text.Render($"({x},{y}) ", fs, c);
             var what = kind == 0 ? NameImage(181 + value, g, c) ?? Text.Render($"물건 {value}", fs, c)
                      : kind == 1 ? Text.Render(value == 0 ? "빈 상자" : $"{value} 골드", fs, c)
                      : Text.Render("?", fs, c);
