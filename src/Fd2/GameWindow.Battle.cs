@@ -1568,6 +1568,8 @@ internal sealed partial class GameWindow
         bool showDefender = (!ranged || hit) && a != d || a == d && hit;
 
         int defenderSide = 0;   // 맞는 쪽이 선 쪽(오른쪽 1) — 피해 숫자를 그 위에
+        // 맞는 컷의 번쩍임 — 원작(sub_2FF01)은 바탕 색만 6틱 바꾼다. 사람 위에 덮거나 깜빡이면 아군 · 적이 깜빡여 보인다
+        if (_sfxFlash > 0) FillRect(bx, by, bw, bh, SpellFlashColor());
         DrawSpellFx(bx, by, s, clip, back: true);
         if (showDefender)
         {
@@ -1602,16 +1604,9 @@ internal sealed partial class GameWindow
                 var big = _icons.Frame(a.Icon, (int)Dir.Left * 3 + _strikeFrame % 3);
                 BlitFrame(big, T, T, bx + bw * 2 / 3 - T * s, by + bh / 3, s * 3, false, 0, 0, clip);
             }
-            if (magic && !hit)
-            {
-                // 마법을 모으는 빛 — 공격하는 쪽 둘레에 깜박이는 빛
-                uint glow = heal ? 0x3040FF80u : 0x30FF8040u;
-                if ((int)(_time * 10) % 2 == 0) FillRect(bx + bw / 2, by, bw / 2, bh, glow);
-            }
         }
 
         DrawSpellFx(bx, by, s, clip, back: false);
-        if (_sfxFlash > 0 && (int)(_sfxFlash * 33) % 2 == 0) FillRect(bx, by, bw, bh, SpellFlashColor());   // 맞는 컷의 번쩍임
 
         string what = spellName != null ? $"  [{spellName}]" : "";
         var who = Text.Render($"{CharacterNames.Of(a.Icon)}  →  {CharacterNames.Of(d.Icon)}{what}", fs, 0xFFFFFFFF);
