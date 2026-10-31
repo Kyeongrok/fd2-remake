@@ -505,8 +505,8 @@ internal sealed partial class GameWindow
                 if (_choosingMove) return;   // 범위 밖 — 무시(취소는 Esc · 오른쪽 단추)
                 if (who == null)
                 {
-                    // 빈 칸 — 키(Enter)와 터치면 원작처럼 시스템 십자 메뉴(커서 칸 둘레), PC 마우스 클릭은 고른 것만 푼다(시스템 메뉴는 X 키)
-                    if (_actor == null && _reach == null) { if (mx < 0 || TouchUi) OpenSystemMenu(); }
+                    // 빈 칸 — 원작처럼 시스템 십자 메뉴(커서 칸 둘레). PC 마우스 왼쪽 클릭도 같게(사용자 요청), 고른 것이 있으면 푼다
+                    if (_actor == null && _reach == null) OpenSystemMenu();
                     else ClearSelection();
                     return;
                 }
