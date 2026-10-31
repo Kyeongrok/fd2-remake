@@ -9,57 +9,81 @@ namespace Fd2;
 /// </summary>
 internal sealed partial class GameWindow
 {
-    private static readonly Font DialogFont = new("맑은 고딕", 10f);
+    private GameDialog? _dlg;
 
-    /// <summary>창 꼴 — 위에 탭, 아래 「닫기」.</summary>
+    /// <summary>
+    /// 창 꼴(<see cref="GameDialog"/>) — 위에 금테 탭 단추들, 그 밑에 고른 탭의 칸들, 아래 「닫기」. 탭은 가장 큰 쪽 높이에 맞춰 바꿔도 창이 들썩이지 않는다.
+    /// </summary>
     private void ShowSettingsForm(string title, params (string Name, Action<FlowLayoutPanel> Fill)[] tabs)
     {
         if (Offscreen) return;
-        using var form = new Form
+        using var dlg = _dlg = new GameDialog(title, 460);
+        var pages = new List<FlowLayoutPanel>();
+        var tabRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0, 0, 0, dlg.Px(6)), BackColor = GameDialog.Back };
+        var tabButtons = new List<Label>();
+        void Select(int i)
         {
-            Text = title, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false, ShowInTaskbar = false,
-            StartPosition = FormStartPosition.CenterParent, ClientSize = new Size(460, 420), Font = DialogFont, AutoScaleMode = AutoScaleMode.Dpi,
-        };
-        var tab = new TabControl { Dock = DockStyle.Fill, Padding = new Point(14, 5) };
+            for (int k = 0; k < pages.Count; k++)
+            {
+                pages[k].Visible = k == i;
+                tabButtons[k].BackColor = k == i ? GameDialog.ButtonBack : GameDialog.Back;
+                tabButtons[k].ForeColor = k == i ? GameDialog.GoldText : GameDialog.Dim;
+            }
+        }
         foreach (var (name, fill) in tabs)
         {
-            var page = new TabPage(name) { Padding = new Padding(12) };
-            var flow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
-            fill(flow);
-            page.Controls.Add(flow);
-            tab.TabPages.Add(page);
+            int at = pages.Count;
+            var t = new Label
+            {
+                Text = name, AutoSize = true, Font = GameDialog.Bold, Cursor = Cursors.Hand, BorderStyle = BorderStyle.FixedSingle,
+                Padding = new Padding(dlg.Px(14), dlg.Px(5), dlg.Px(14), dlg.Px(5)), Margin = new Padding(0, 0, dlg.Px(4), 0),
+            };
+            t.Click += (_, _) => Select(at);
+            tabButtons.Add(t);
+            if (tabs.Length > 1) tabRow.Controls.Add(t);
+            var page = new FlowLayoutPanel
+            {
+                AutoSize = true, Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, BackColor = GameDialog.Panel,
+                Padding = new Padding(dlg.Px(12), dlg.Px(8), dlg.Px(12), dlg.Px(12)), Margin = new Padding(0),
+            };
+            fill(page);
+            pages.Add(page);
         }
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 46, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(8, 6, 8, 6) };
-        var close = new Button { Text = "닫기", DialogResult = DialogResult.OK, Width = 90, Height = 30 };
-        buttons.Controls.Add(close);
-        form.Controls.Add(tab);
-        form.Controls.Add(buttons);
-        form.AcceptButton = close;
-        form.CancelButton = close;
-        var owner = new NativeWindow();
-        owner.AssignHandle(_hwnd);
-        try { form.ShowDialog(owner); }
-        finally { owner.ReleaseHandle(); }
+        if (tabs.Length > 1) dlg.Content.Controls.Add(tabRow);
+        var stack = new Panel { AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0), BackColor = GameDialog.Panel };
+        int maxH = pages.Max(p => p.PreferredSize.Height), maxW = pages.Max(p => p.PreferredSize.Width);
+        foreach (var p in pages) { p.MinimumSize = new Size(maxW, maxH); p.Dock = DockStyle.None; stack.Controls.Add(p); }
+        dlg.Content.Controls.Add(stack);
+        dlg.Footer.Controls.Add(dlg.MakeButton("닫기", dlg.Close));
+        Select(0);
+        dlg.ShowOver(_hwnd);
+        _dlg = null;
         _keys.Clear();   // 창이 떠 있는 동안 뗀 키가 눌린 채로 남지 않게
     }
 
-    private static Label Heading(string text) =>
-        new() { Text = text, AutoSize = true, Margin = new Padding(0, 10, 0, 4), Font = new Font(DialogFont, FontStyle.Bold) };
+    private Label Heading(string text) => _dlg!.MakeHeading(text);
 
     /// <summary>켜고 끄기 — 바꾸면 그 메뉴 명령을 그대로.</summary>
     private CheckBox Toggle(string text, bool on, int command)
     {
-        var box = new CheckBox { Text = text, Checked = on, AutoSize = true, Margin = new Padding(4, 3, 0, 3) };
+        var box = new CheckBox
+        {
+            Text = text, Checked = on, AutoSize = true, ForeColor = GameDialog.Ink, FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand,
+            Margin = new Padding(_dlg!.Px(4), _dlg.Px(4), 0, _dlg.Px(4)),
+        };
+        box.FlatAppearance.BorderColor = GameDialog.Gold;
+        box.FlatAppearance.CheckedBackColor = GameDialog.ButtonBack;
         box.CheckedChanged += (_, _) => OnMenuCommand(command);
         return box;
     }
 
-    /// <summary>고르기 칸 — 고르면 base + 고른 번호 명령.</summary>
+    /// <summary>고르기 칸 — 고르면 pick(고른 번호).</summary>
     private FlowLayoutPanel Choice(string label, string[] items, int selected, Action<int> pick)
     {
-        var row = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Margin = new Padding(0, 3, 0, 3) };
-        row.Controls.Add(new Label { Text = label, AutoSize = true, Margin = new Padding(4, 7, 8, 0) });
-        var combo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
+        var d = _dlg!;
+        var row = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Margin = new Padding(0, d.Px(3), 0, d.Px(3)), BackColor = GameDialog.Panel };
+        row.Controls.Add(new Label { Text = label, AutoSize = true, ForeColor = GameDialog.Ink, Margin = new Padding(d.Px(4), d.Px(6), d.Px(8), 0), MinimumSize = new Size(d.Px(110), 0) });
+        var combo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = d.Px(200), FlatStyle = FlatStyle.Flat, BackColor = GameDialog.Back, ForeColor = GameDialog.Ink };
         combo.Items.AddRange(items);
         combo.SelectedIndex = Math.Clamp(selected, -1, items.Length - 1);
         combo.SelectedIndexChanged += (_, _) => { if (combo.SelectedIndex >= 0) pick(combo.SelectedIndex); };
@@ -70,19 +94,22 @@ internal sealed partial class GameWindow
     /// <summary>0~100 소리 크기 막대.</summary>
     private FlowLayoutPanel Slider(string label, int value, Action<int> set)
     {
-        var row = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Margin = new Padding(0, 3, 0, 3) };
-        row.Controls.Add(new Label { Text = label, AutoSize = true, Margin = new Padding(4, 12, 8, 0), Width = 70 });
-        var bar = new TrackBar { Minimum = 0, Maximum = 100, TickFrequency = 10, SmallChange = 5, LargeChange = 10, Value = Math.Clamp(value, 0, 100), Width = 220 };
-        var shown = new Label { Text = $"{bar.Value}%", AutoSize = true, Margin = new Padding(4, 12, 0, 0) };
+        var d = _dlg!;
+        var row = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Margin = new Padding(0, d.Px(3), 0, d.Px(3)), BackColor = GameDialog.Panel };
+        row.Controls.Add(new Label { Text = label, AutoSize = true, ForeColor = GameDialog.Ink, Margin = new Padding(d.Px(4), d.Px(10), d.Px(8), 0), MinimumSize = new Size(d.Px(80), 0) });
+        var bar = new TrackBar { Minimum = 0, Maximum = 100, TickFrequency = 10, SmallChange = 5, LargeChange = 10, Value = Math.Clamp(value, 0, 100), Width = d.Px(220), BackColor = GameDialog.Panel };
+        var shown = new Label { Text = $"{bar.Value}%", AutoSize = true, ForeColor = GameDialog.GoldText, Margin = new Padding(d.Px(4), d.Px(10), 0, 0) };
         bar.ValueChanged += (_, _) => { shown.Text = $"{bar.Value}%"; set(bar.Value); };
         row.Controls.Add(bar);
         row.Controls.Add(shown);
         return row;
     }
 
-    private static Button ActionButton(string text, Action act) =>
-        new Button { Text = text, AutoSize = true, Margin = new Padding(4, 6, 0, 2), Padding = new Padding(8, 2, 8, 2) }
-            .Also(b => b.Click += (_, _) => { b.FindForm()?.Close(); act(); });
+    private Button ActionButton(string text, Action act)
+    {
+        var d = _dlg!;
+        return d.MakeButton(text, () => { d.Close(); act(); }).Also(b => b.Margin = new Padding(d.Px(4), d.Px(8), 0, d.Px(2)));
+    }
 
     /// <summary>햄버거 「설정」 — 화면 · 게임 · 소리와 조작.</summary>
     private void OpenSettingsDialog() => ShowSettingsForm("설정",
