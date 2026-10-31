@@ -542,7 +542,7 @@ internal sealed partial class GameWindow
     {
         int cell = T * _zoom;
         // 아래쪽 사람이 위쪽 사람을 가리도록 y 순서로. 쓰러진 사람은 안 그린다.
-        foreach (var u in _scene.Units.Where(u => u.Alive).OrderBy(u => u.DrawY))
+        foreach (var u in _scene.Units.Where(u => u.Alive || DeathShown(u)).OrderBy(u => u.DrawY))
         {
             int sx = _offX + (int)Math.Round((u.DrawX * T - _camX) * _zoom);
             int sy = _offY + (int)Math.Round((u.DrawY * T - _camY) * _zoom);

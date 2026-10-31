@@ -201,7 +201,8 @@ internal sealed partial class GameWindow
             _bs = BattleState.Select;
             if (!Controlled.Any(u => !u.Paralyzed)) EndPlayerTurn();   // 움직일 우리 편이 모두 마비면 저절로 끝(sub_13565)
         });
-        void Notes() => ShowNotices(notes, () => RunTiming(2, () => { if (!CheckOver()) Banner(); }));
+        var died = _tickDied;
+        void Notes() => PlayDeathFx(died, () => ShowNotices(notes, () => RunTiming(2, () => { if (!CheckOver()) Banner(); })));
         if (heuristic && _scene.Roster.Any(e => e.Phase == turn))
         {
             _bs = BattleState.Talk;
@@ -216,8 +217,12 @@ internal sealed partial class GameWindow
         var died = new List<Unit>();
         var notes = _battle.StatusTick(team, died);
         notes.AddRange(_battle.Drops(died, null));
+        _tickDied = died;
         return notes;
     }
+
+    /// <summary>마지막 <see cref="Tick"/> 에서 독으로 쓰러진 사람 — 알림 앞에 죽음 연출(sub_1A866 → sub_1DB65).</summary>
+    private List<Unit> _tickDied = new();
 
     /// <summary>
     /// 우리 편 차례 끝 — 한 번도 안 움직인 우리 편은 쉬어 최대 HP 의 1/5 회복(독 · 마비 빼고), 컴퓨터 아군 독 · 상태 → 컴퓨터 아군 차례.
@@ -228,11 +233,11 @@ internal sealed partial class GameWindow
         _enemyPhase = true;
         foreach (var u in _scene.Units.Where(u => u.Team == 2 && u.Hp > 0 && !u.Acted)) _battle.Rest(u);
         var notes = Tick(1);
-        ShowNotices(notes, () => RunTiming(1, () =>
+        PlayDeathFx(_tickDied, () => ShowNotices(notes, () => RunTiming(1, () =>
         {
             if (CheckOver()) return;
             StartAi(allies: true);
-        }));
+        })));
     }
 
     /// <summary>적 차례 — 끝냄 표시를 모두 지우고, 적 독 · 상태(sub_1A866(0)), 「적군 차례」 뒤 배열 차례대로.</summary>
@@ -243,11 +248,11 @@ internal sealed partial class GameWindow
         foreach (var u in _scene.Units) u.Acted = false;
         SetMusic(EnemyMusic);
         var notes = Tick(0);
-        ShowNotices(notes, () =>
+        PlayDeathFx(_tickDied, () => ShowNotices(notes, () =>
         {
             if (CheckOver()) return;
             ShowBanner($"{Turn}턴 — 적군 차례", () => StartAi(allies: false));
-        });
+        }));
     }
 
     /// <summary>컴퓨터 차례 시작 — 그 편 사람들을 배열 차례로. 컴퓨터 아군(sub_1D80B)은 한 번, 적(sub_1D8BA)은 두 번 훑는다.</summary>
@@ -945,11 +950,13 @@ internal sealed partial class GameWindow
         var notes = new List<Notice>(_strikeNotes);
         foreach (var group in _fallen.GroupBy(f => f.Killer))
             notes.AddRange(_battle.Drops(group.Select(f => f.Dead), group.Key));
+        var dead = _fallen.Select(f => f.Dead).ToList();
         _strikeNotes.Clear();
         _fallen.Clear();
         var after = _afterStrikes;
         _afterStrikes = null;
-        ShowNotices(notes, () => { _bs = BattleState.Select; after?.Invoke(); });
+        // 쓰러진 사람은 빙글 돌다 펑(sub_1DB65) 한 뒤 알림
+        PlayDeathFx(dead, () => ShowNotices(notes, () => { _bs = BattleState.Select; after?.Invoke(); }));
     }
 
     /// <summary>한 사람의 치기가 끝났다 — 모은 경험을 넣고(sub_1E292) 레벨업 알림.</summary>

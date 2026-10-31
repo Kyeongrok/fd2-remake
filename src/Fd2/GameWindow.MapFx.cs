@@ -162,6 +162,7 @@ internal sealed partial class GameWindow
 
     private void FxTick(double dt)
     {
+        if (DeathFxTick(dt)) return;
         if (_fx == null) return;
         if ((_fxClock += dt) < FxFrame) return;
         _fxClock -= FxFrame;
@@ -175,6 +176,7 @@ internal sealed partial class GameWindow
 
     private void DrawTileFx()
     {
+        DrawDeathFx();
         if (_fx == null) return;
         var (px, w, h) = _fx[_fxStart + _fxAt];
         foreach (var (x, y) in _fxCells)
@@ -210,5 +212,72 @@ internal sealed partial class GameWindow
             if (s > 0) PlaySfx(80, s);
         }
         PlayTileFx(6, start, count, cells, after, Sound);
+    }
+}
+
+/// <summary>
+/// 죽음 연출(sub_1DB65) — HP 0 이 된 사람 가운데 화면에 보이는 이가 있으면: 13 틱 동안 제자리에서 빙글(방향 = 틱 % 4),
+/// 그다음 효과음(FDOTHER 31 의 3)과 함께 FDOTHER 5 의 68~79 장(터지는 불꽃 37x37 → 72x71)을 한 틱에 한 장.
+/// 0~5 장은 앞 장 위에 덧그려(사람도 아직 보임) 쌓이고, 6~11 장은 사람이 빠진 지도 위에 한 장씩. 그림 왼쪽 위 = 사람 칸에서 한 칸 왼쪽 위.
+/// </summary>
+internal sealed partial class GameWindow
+{
+    private const int DeathSpin = 13, DeathFirst = 68, DeathFrames = 12, DeathStack = 6;
+    private const double DeathTick = 1 / 18.2;
+
+    private List<Unit>? _death;
+    private EffectFrames? _deathBank;
+    private int _deathStep;
+    private double _deathClock;
+    private Action? _deathAfter;
+    private BattleState _deathResume;
+
+    /// <summary>쓰러진 사람들의 죽음 연출 뒤 after — 화면에 보이는 사람이 없거나 그림이 없으면 바로 after.</summary>
+    private void PlayDeathFx(IEnumerable<Unit> dead, Action after)
+    {
+        var list = dead.Where(u => u.MaxHp > 0 && u.Hp <= 0).Distinct()
+            .Where(u => CellOnScreen(u.Y * _scene.Width + u.X, out _, out _)).ToList();
+        var bank = list.Count > 0 ? FxBank(5) : null;
+        if (bank == null || bank.Count < DeathFirst + DeathFrames) { after(); return; }
+        (_death, _deathBank, _deathStep, _deathClock, _deathAfter) = (list, bank, 0, 0, after);
+        _deathResume = _bs;
+        _bs = BattleState.Fx;
+        foreach (var u in list) u.Facing = Dir.Down;
+    }
+
+    /// <summary>빙글 도는 동안과 불꽃 0~5 장 동안은 쓰러진 사람도 그린다.</summary>
+    private bool DeathShown(Unit u) => _death != null && _deathStep < DeathSpin + DeathStack && _death.Contains(u);
+
+    /// <returns>죽음 연출 중이면 true.</returns>
+    private bool DeathFxTick(double dt)
+    {
+        if (_death == null) return false;
+        if ((_deathClock += dt) < DeathTick) return true;
+        _deathClock -= DeathTick;
+        if (++_deathStep < DeathSpin)
+            foreach (var u in _death) u.Facing = (Dir)(_deathStep % 4);
+        else if (_deathStep == DeathSpin) PlaySfx(31, 3);
+        if (_deathStep < DeathSpin + DeathFrames) return true;
+        _death = null;
+        _bs = _deathResume;
+        var a = _deathAfter;
+        _deathAfter = null;
+        a?.Invoke();
+        return true;
+    }
+
+    private void DrawDeathFx()
+    {
+        if (_death == null || _deathBank == null || _deathStep < DeathSpin) return;
+        int k = _deathStep - DeathSpin;
+        for (int f = k < DeathStack ? 0 : k; f <= k; f++)
+        {
+            var (px, w, h) = _deathBank[DeathFirst + f];
+            foreach (var u in _death)
+            {
+                int sx = _offX + ((u.X - 1) * T - _camX) * _zoom, sy = _offY + ((u.Y - 1) * T - 6 - _camY) * _zoom;
+                BlitScaled(px, w, h, sx, sy, _zoom, 0, 0, _fbW, _fbH);
+            }
+        }
     }
 }

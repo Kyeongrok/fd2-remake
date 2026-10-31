@@ -658,34 +658,52 @@ public sealed class Buttons
 /// <summary>
 /// LMI1 묶음(FDOTHER 6 지도 위 마법 그림 · 9 나타나는 그림) — 「LMI1」 + u16 장 수 + u32 오프셋, 장마다 u16 w · u16 h 뒤
 /// PCX 꼴 RLE(sub_4EBAB → sub_4EC66): 0xC0 보다 큰 바이트는 (b − 0xC0) 번 되풀이할 다음 바이트, 아니면 그 바이트 하나. 줄을 넘어 이어진다. 0 = 투명.
+/// 「LLLLLL」 묶음(FDOTHER 5 — 죽을 때 터지는 그림 68~79, sub_1DB65)도 같은 자리에 오프셋 표가 있어 받는다. 장은 처음 볼 때 푼다(5 는 다른 꼴 그림이 섞여 있다).
 /// </summary>
 public sealed class EffectFrames
 {
-    private readonly (uint[] Px, int W, int H)[] _frames;
+    private readonly byte[] _d;
+    private readonly uint[] _pal;
+    private readonly (uint[] Px, int W, int H)?[] _frames;
 
     public EffectFrames(string dir, int entry, uint[] pal)
     {
-        var d = Dat.Load(Path.Combine(dir, "FDOTHER.DAT"), entry);
-        if (d.Length < 6 || !d.AsSpan(0, 4).SequenceEqual("LMI1"u8)) { _frames = []; return; }
-        int n = Dat.U16(d, 4);
-        _frames = new (uint[], int, int)[n];
-        for (int i = 0; i < n; i++)
-        {
-            int o = Dat.U32(d, 6 + 4 * i), w = Dat.U16(d, o), h = Dat.U16(d, o + 2), p = o + 4;
-            var px = new uint[w * h];
-            for (int k = 0; k < px.Length && p < d.Length;)
-            {
-                int b = d[p++], run = 1;
-                if (b > 0xC0 && p < d.Length) { run = b - 0xC0; b = d[p++]; }
-                for (; run > 0 && k < px.Length; run--) px[k++] = b == 0 ? 0 : pal[b];
-            }
-            _frames[i] = (px, w, h);
-        }
+        _d = Dat.Load(Path.Combine(dir, "FDOTHER.DAT"), entry);
+        _pal = pal;
+        int n = 0;
+        if (_d.Length >= 6 && _d.AsSpan(0, 4).SequenceEqual("LMI1"u8)) n = Dat.U16(_d, 4);
+        else if (_d.Length >= 10 && _d.AsSpan(0, 6).SequenceEqual("LLLLLL"u8)) n = Math.Max(0, (Dat.U32(_d, 6) - 6) / 4);
+        if (6 + 4 * n > _d.Length) n = 0;
+        _frames = new (uint[], int, int)?[n];
     }
 
     public int Count => _frames.Length;
 
-    public (uint[] Px, int W, int H) this[int i] => _frames[Math.Clamp(i, 0, _frames.Length - 1)];
+    public (uint[] Px, int W, int H) this[int i]
+    {
+        get
+        {
+            i = Math.Clamp(i, 0, _frames.Length - 1);
+            return _frames[i] ??= Decode(i);
+        }
+    }
+
+    private (uint[] Px, int W, int H) Decode(int i)
+    {
+        var d = _d;
+        int o = Dat.U32(d, 6 + 4 * i);
+        if (o < 0 || o + 4 > d.Length) return ([], 0, 0);
+        int w = Dat.U16(d, o), h = Dat.U16(d, o + 2), p = o + 4;
+        if (w * h > 320 * 200) return ([], 0, 0);
+        var px = new uint[w * h];
+        for (int k = 0; k < px.Length && p < d.Length;)
+        {
+            int b = d[p++], run = 1;
+            if (b > 0xC0 && p < d.Length) { run = b - 0xC0; b = d[p++]; }
+            for (; run > 0 && k < px.Length; run--) px[k++] = b == 0 ? 0 : _pal[b];
+        }
+        return (px, w, h);
+    }
 }
 
 /// <summary>
