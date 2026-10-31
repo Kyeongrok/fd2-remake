@@ -357,8 +357,14 @@ internal sealed partial class GameWindow
         var imgs = items.Select((it, i) => Text.Render(it.Label, i == vrow ? fs : fs * 3 / 2, i == _titleIndex ? 0xFFFFE070 : 0xFFFFFFFF)).ToList();
         var menuRows = Enumerable.Range(0, items.Length).Where(i => i != vrow).ToList();
         int rowH = menuRows.Max(i => imgs[i].H) + 14, w = menuRows.Max(i => imgs[i].W) + 120;
-        var notice = Text.Render(FanMadeNotice, Math.Max(12, fs * 3 / 4), 0xE0FFFFFF, bold: false);
-        int bottom = _clientH - notice.H - 24;
+        // 팬메이드 알림 — 화면 폭에 안 들면(휴대폰 세로) 문장마다 줄을 나눈다.
+        int noticeSize = Math.Max(12, fs * 3 / 4);
+        var notice = new[] { Text.Render(FanMadeNotice, noticeSize, 0xE0FFFFFF, bold: false) }.ToList();
+        if (notice[0].W > _clientW - 16 && FanMadeNotice.Split(". ") is { Length: > 1 } sentences)
+            notice = sentences.Select((line, k) => k < sentences.Length - 1 ? line + "." : line)
+                .Select(line => Text.Render(line, noticeSize, 0xE0FFFFFF, bold: false)).ToList();
+        int noticeH = notice.Sum(n => n.H + 4) - 4;
+        int bottom = _clientH - noticeH - 24;
         int x = (_clientW - w) / 2, y = Math.Max(8, Math.Min(ly + (int)(162 * ls), bottom - rowH * menuRows.Count - 10));
         _titleRects.Clear();
         for (int i = 0; i < items.Length; i++) _titleRects.Add(default);
@@ -385,7 +391,8 @@ internal sealed partial class GameWindow
         }
 
         // 맨 아래 — 팬메이드 알림
-        FillRect(0, _clientH - notice.H - 20, _clientW, notice.H + 20, 0xA0000000);
-        DrawText(notice, (_clientW - notice.W) / 2, _clientH - notice.H - 10);
+        FillRect(0, _clientH - noticeH - 20, _clientW, noticeH + 20, 0xA0000000);
+        for (int k = 0, ny = _clientH - noticeH - 10; k < notice.Count; ny += notice[k].H + 4, k++)
+            DrawText(notice[k], (_clientW - notice[k].W) / 2, ny);
     }
 }
