@@ -20,8 +20,11 @@ namespace Fd2;
 /// <remarks>원작 자료는 앱에 들어 있지 않다 — 갖고 계신 용의기사2 폴더(FDFIELD.DAT 가 있는 곳)를 폰에 넣고 고르면 된다.</remarks>
 [Activity(Label = "용의기사2", MainLauncher = true, Icon = "@mipmap/appicon", Theme = "@android:style/Theme.Black.NoTitleBar.Fullscreen",
           ScreenOrientation = ScreenOrientation.SensorLandscape,
-          ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.KeyboardHidden | ConfigChanges.Keyboard | ConfigChanges.Navigation)]
-public class MainActivity : Activity
+          ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.KeyboardHidden | ConfigChanges.Keyboard | ConfigChanges.Navigation,
+          LaunchMode = LaunchMode.SingleTask)]
+// 파일 앱 · 브라우저에서 받은 .zip 을 「용의기사2로 열기」 — 버전 묶음이면 풀어서 그 버전으로(MainActivity.Zips.cs)
+[IntentFilter([Intent.ActionView], Categories = [Intent.CategoryDefault], DataMimeTypes = ["application/zip", "application/x-zip-compressed"])]
+public partial class MainActivity : Activity
 {
     private const int PickFolder = 1;
 
@@ -47,13 +50,15 @@ public class MainActivity : Activity
         HideBars();
         GameWindow.VersionsProvider = Versions;
         GameWindow.VersionSwitcher = dir => RunOnUiThread(() => StartGame(dir));
-        GameWindow.VersionAdder = () => RunOnUiThread(PickNewFolder);
+        GameWindow.VersionAdder = () => RunOnUiThread(ShowAddVersion);
+        if (OpenedZip(Intent)) return;
         string chosen = Settings.Load().GameDir;
         var versions = Versions();
         if (chosen.Length > 0 && GameFolder.Missing(chosen) == null) StartGame(chosen);
         else if (versions.Count > 0) StartGame(versions[0].Dir);
         else DownloadOriginal();
         AppUpdate.Check(this);
+        if (_view != null) OfferDownloadedZips(auto: true);
     }
 
     /// <summary>원본 자료 묶음 — 리메이크가 읽는 .DAT · .B24 · FD2.EXE 와 수치 표 tables/*.json(GitHub 릴리즈 fd2-assets).</summary>
@@ -151,6 +156,7 @@ public class MainActivity : Activity
     protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)
     {
         base.OnActivityResult(requestCode, resultCode, data);
+        if (requestCode == FileAccessRequest) { if (HasFileAccess) OfferDownloadedZips(auto: false); return; }
         if (requestCode != PickFolder || resultCode != Result.Ok || data?.Data is not { } tree) return;
         ShowPicker("복사하는 중…");
         Task.Run(() =>
