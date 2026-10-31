@@ -37,8 +37,20 @@ internal sealed partial class GameWindow
         _menu.Clear();
         _menuGlyphs.Clear();
         _townBack = back;
+        _townButtons = false;
         if (_campaign is { } c) _battle.Gold = c.Gold;
     }
+
+    /// <summary>건물 안 첫 메뉴를 원작 네 단추로 — 줄 넷(단추 차례), 주인 말 줄.</summary>
+    private void TownButtons(int greeting)
+    {
+        _townButtons = true;
+        _townGreeting = greeting;
+        _menuIndex = 0;
+        _bs = BattleState.Menu;
+    }
+
+    private void NotYet(string what, Action back) => TownBanner($"{what} — 아직 준비 중입니다", back);
 
     private void EndTownMenu(int row)
     {
@@ -62,6 +74,7 @@ internal sealed partial class GameWindow
     {
         if (_campaign is not { } c || _tables?.ShopFor(c.NextScene) is not { } shop) { OpenOverMenu(); return; }
         _town = new Town(c, _battle);
+        _townGreeting = -1;   // 건물에 새로 들어가면 들어오는 말부터
         BeginTownMenu(() => { });   // 첫 메뉴에서 Esc 는 그대로 — 나가는 것은 출구로
         _menu.Add((GoldLine($"{ChapterName(c.NextScene)} 앞 마을"), () => { }, default));
         _menu.Add(("주점 — 동료 보기 · 기록 · 불러오기", OpenTavern, default));
@@ -112,18 +125,19 @@ internal sealed partial class GameWindow
         _ => ("비밀상점", shop.Secret),
     };
 
-    private void OpenShopMenu(ShopInfo shop) => OpenShopMenu(shop, _shopAt);
+    private void OpenShopMenu(ShopInfo shop) => OpenShopMenu(shop, _shopAt, back: true);
 
-    private void OpenShopMenu(ShopInfo shop, int at)
+    /// <summary>상점(sub_279BC) — 원작 네 단추: 사기 · 팔기 · 정보 · 장비. Esc 로 마을.</summary>
+    private void OpenShopMenu(ShopInfo shop, int at, bool back = false)
     {
         _shopAt = at;
         var (name, goods) = ShopGoods(shop, at);
         BeginTownMenu(() => OpenTownMenu(at));
-        _menu.Add((GoldLine(name), () => { }, default));
-        if (goods.Length > 0) _menu.Add(("사기", () => OpenBuy(shop, goods, 0), default));
+        _menu.Add(("사기", () => { if (goods.Length > 0) OpenBuy(shop, goods, 0); else TownBanner("팔 물건이 없습니다", () => OpenShopMenu(shop)); }, default));
         _menu.Add(("팔기", () => OpenSellWho(shop, 0), default));
-        _menu.Add(("돌아가기", () => OpenTownMenu(at), default));
-        EndTownMenu(1);
+        _menu.Add(("정보", () => NotYet("물건 정보", () => OpenShopMenu(shop)), default));
+        _menu.Add(("장비", () => NotYet("장비 바꾸기", () => OpenShopMenu(shop)), default));
+        TownButtons(at == 1 ? (back ? 503 : 501) : 440);
     }
 
     /// <summary>살 물건 고르기(sub_2872B) — 원본 글꼴 이름 · 값.</summary>
@@ -248,20 +262,21 @@ internal sealed partial class GameWindow
     private void OpenTavern()
     {
         BeginTownMenu(() => OpenTownMenu(0));
-        _menu.Add((GoldLine("주점 — 도와드릴까요?"), () => { }, default));
         _menu.Add(("동료 보기", () => OpenTavernView(0), default));
         _menu.Add(("기록하기", OpenTavernSave, default));
         _menu.Add(("불러오기", OpenTavernLoad, default));
         _menu.Add(("전장 이탈", AskQuit, default));
-        _menu.Add(("돌아가기", () => OpenTownMenu(0), default));
-        EndTownMenu(1);
+        TownButtons(_townGreeting >= 0 ? 586 : 585);
     }
+
+    /// <summary>동료 보기에서 물릴 곳 — 주점이나 교회(교회 단추 0 도 동료 보기).</summary>
+    private Action ViewBack => _townSpot == 4 ? OpenChurchMenu : OpenTavern;
 
     /// <summary>동료 보기 — 고른 사람의 레벨 · HP · MP · 셈한 능력 · 장비(원작 sub_17AED 상태 창 대신 알림 줄로).</summary>
     private void OpenTavernView(int page)
     {
         if (_town is not { } t || _campaign is not { } c) return;
-        BeginTownMenu(OpenTavern);
+        BeginTownMenu(ViewBack);
         _menu.Add(($"동료 {c.Party.Count}명 — 누구를 보나", () => { }, default));
         foreach (int i in Enumerable.Range(0, c.Party.Count).Skip(page * TownPage).Take(TownPage))
         {
@@ -283,7 +298,7 @@ internal sealed partial class GameWindow
             }, default));
         }
         AddPager(c.Party.Count, page, OpenTavernView);
-        _menu.Add(("돌아가기", OpenTavern, default));
+        _menu.Add(("돌아가기", ViewBack, default));
         EndTownMenu(1);
     }
 
@@ -347,11 +362,11 @@ internal sealed partial class GameWindow
     private void OpenChurchMenu()
     {
         BeginTownMenu(() => OpenTownMenu(4));
-        _menu.Add((GoldLine("교회"), () => { }, default));
-        _menu.Add(("부활 — 쓰러진 동료", () => OpenRevive(0), default));
-        _menu.Add(("전직 — Lv 20 이상", () => OpenClassChange(0), default));
-        _menu.Add(("돌아가기", () => OpenTownMenu(4), default));
-        EndTownMenu(1);
+        _menu.Add(("동료 보기", () => OpenTavernView(0), default));
+        _menu.Add(("장비", () => NotYet("장비 바꾸기", OpenChurchMenu), default));
+        _menu.Add(("부활", () => OpenRevive(0), default));
+        _menu.Add(("전직", () => OpenClassChange(0), default));
+        TownButtons(_townGreeting >= 0 ? 586 : 585);
     }
 
     /// <summary>부활(sub_2A43E) — 쓰러진 동료, 값 = 직업 부활값 × 레벨.</summary>

@@ -578,7 +578,7 @@ internal sealed partial class GameWindow
         }
         if (_bs == BattleState.Menu)
         {
-            if (AskBoxOpen && vk is Win32.VK_LEFT or Win32.VK_RIGHT) vk = vk == Win32.VK_LEFT ? Win32.VK_UP : Win32.VK_DOWN;   // YES · NO 는 좌우로
+            if ((AskBoxOpen || _townButtons) && vk is Win32.VK_LEFT or Win32.VK_RIGHT) vk = vk == Win32.VK_LEFT ? Win32.VK_UP : Win32.VK_DOWN;   // YES · NO · 건물 네 단추는 좌우로
             if (vk is Win32.VK_UP or Win32.VK_DOWN) _menuScrolledByDrag = false;   // 키로 고르면 고른 줄이 보이게 다시 따라간다
             if (vk == Win32.VK_UP) _menuIndex = (_menuIndex + _menu.Count - 1) % _menu.Count;
             else if (vk == Win32.VK_DOWN) _menuIndex = (_menuIndex + 1) % _menu.Count;
@@ -1975,6 +1975,7 @@ internal sealed partial class GameWindow
         if (AskBoxOpen) { DrawAskBox(); return; }
         if (_stage == MenuStage.ItemPick) { DrawItemWindow(); return; }
         if (CrossMenu) { DrawCrossMenu(fs); return; }
+        if (_townButtons && InTownView && !_townTop) { DrawTownButtons(fs); return; }   // 건물 안 — 원작 네 단추
         var (sx, sy) = _actor is { } u ? TileScreen(u.X, u.Y) : TileScreen(_cursor.X, _cursor.Y);
         if (InTownView) (sx, sy) = (_clientW, 8);   // 마을 그림 위 — 오른쪽 위에
         int cell = T * _zoom;
