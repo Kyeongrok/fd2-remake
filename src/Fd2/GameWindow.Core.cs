@@ -434,6 +434,8 @@ internal sealed partial class GameWindow
                     for (int k = before; k < (int)(u.Step * 6); k++) StepSound(u);
                 if (u.Moving) continue;
                 (u.FromX, u.FromY) = (u.X, u.Y);
+                // 전투에서 다 걸었으면 앞(얼굴)을 본다 — 걸어온 쪽 뒷모습으로 서 있지 않게(사용자 요청). 사건 연출은 대본이 정한 쪽 그대로
+                if (InBattle && u.Path.Count == 0 && _bs != BattleState.Script) u.Facing = Dir.Down;
             }
             if (u.Path.TryDequeue(out var next))
             {
