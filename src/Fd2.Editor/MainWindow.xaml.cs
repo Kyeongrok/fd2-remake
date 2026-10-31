@@ -225,7 +225,14 @@ public partial class MainWindow : Window
     private void FillStats()
     {
         if (_exe == null) { StatGrid.ItemsSource = null; return; }
-        _statTable = StatEnemies.IsChecked == true ? StatTables.Enemies() : StatTables.Allies();
+        _statTable = StatKind.SelectedIndex switch
+        {
+            1 => StatTables.Enemies(),
+            2 => StatTables.Items(),
+            3 => StatTables.Spells(),
+            4 => StatTables.Shops(),
+            _ => StatTables.Allies(),
+        };
         var t = new System.Data.DataTable();
         t.Columns.Add("이름", typeof(string)).ReadOnly = true;
         foreach (var f in _statTable.Rows[0].Fields) t.Columns.Add(f.Name, typeof(int));
@@ -265,6 +272,19 @@ public partial class MainWindow : Window
         }
         StatTables.Set(_exe, f, v);
         Status.Text = $"{_statTable.Rows[row].Name} {f.Name} = {v} — 「FD2.EXE 에 저장」을 눌러야 파일에 들어갑니다.";
+    }
+
+    private void OnStatClearRow(object sender, RoutedEventArgs e)
+    {
+        if (_exe == null || _statTable == null || StatGrid.SelectedIndex < 0 || StatGrid.SelectedIndex >= _statTable.Rows.Count) { Status.Text = "비울 줄을 먼저 고르세요."; return; }
+        var (name, fields) = _statTable.Rows[StatGrid.SelectedIndex];
+        if (MessageBox.Show(this, $"{name} 줄을 비웁니다(수치 0, 상점 칸은 빈 칸). 저장 전에는 「되돌리기」로 살릴 수 있습니다.", "줄 비우기",
+                MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
+        int row = StatGrid.SelectedIndex;
+        StatTables.Clear(_exe, fields);
+        FillStats();
+        StatGrid.SelectedIndex = row;
+        Status.Text = $"{name} 줄을 비웠습니다 — 「FD2.EXE 에 저장」을 눌러야 파일에 들어갑니다.";
     }
 
     private void OnStatSave(object sender, RoutedEventArgs e)

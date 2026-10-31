@@ -158,11 +158,18 @@
             </TabItem>
             <!-- 배경음악: FDMUS.DAT 의 곡들을 MIDI 로 바꿔 듣기 · 저장 -->
             <!-- 능력치: FD2.EXE 의 동료 꼴 · 성장표(아군), 몬스터 표(적) — 칸을 고쳐 저장(처음엔 FD2-backup.EXE 를 남김) -->
-            <TabItem Header="능력치 (아군 · 적)">
+            <TabItem Header="능력치 · 물건 · 마법 · 상점">
                 <DockPanel Margin="8">
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
-                        <RadioButton x:Name="StatAllies" Content="아군 (동료 꼴 · 레벨업 성장)" GroupName="stat" IsChecked="True" Checked="OnStatTableChanged" VerticalAlignment="Center" />
-                        <RadioButton x:Name="StatEnemies" Content="적 (몬스터 — 능력은 레벨당 값)" GroupName="stat" Checked="OnStatTableChanged" Margin="16,0,0,0" VerticalAlignment="Center" />
+                        <TextBlock Text="표" VerticalAlignment="Center" Margin="0,0,6,0" />
+                        <ComboBox x:Name="StatKind" Width="300" SelectionChanged="OnStatTableChanged" SelectedIndex="0">
+                            <ComboBoxItem Content="아군 (동료 꼴 · 레벨업 성장)" />
+                            <ComboBoxItem Content="적 (몬스터 — 능력은 레벨당 값)" />
+                            <ComboBoxItem Content="물건 (215개)" />
+                            <ComboBoxItem Content="마법 (36개)" />
+                            <ComboBoxItem Content="상점 (장마다 무기 · 도구 · 비밀, 255 = 빈 칸)" />
+                        </ComboBox>
+                        <Button Content="고른 줄 비우기(삭제)" Click="OnStatClearRow" Margin="12,0,0,0" Padding="10,2" />
                         <Button Content="FD2.EXE 에 저장" Click="OnStatSave" Margin="24,0,0,0" Padding="14,2" />
                         <Button Content="되돌리기 (파일에서 다시 읽기)" Click="OnStatReload" Margin="8,0,0,0" Padding="10,2" />
                     </StackPanel>
