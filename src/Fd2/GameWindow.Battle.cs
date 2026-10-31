@@ -1058,8 +1058,9 @@ internal sealed partial class GameWindow
             if (_buttons is { Count: > 3 * 17 + 1 } bank)
             {
                 var (px, w, h) = bank.Frame(b, red: false, i == _menuIndex ? blink : 0);
-                rect = (right - w * g, by + boxH - 16 - h * g, w * g, h * g);
-                BlitScaled(px, w, h, rect.X, rect.Y, g, 0, 0, _fbW, _fbH);
+                int bs = TouchUi ? Math.Max(g, Math.Max(3, HudZoom)) : g;   // 폰은 단추를 글 배율과 따로 크게 — 세로 화면에서 글을 줄여도 손가락으로 누르기 쉽게(사용자 요청)
+                rect = (right - w * bs, by + boxH - 16 - h * bs, w * bs, h * bs);
+                BlitScaled(px, w, h, rect.X, rect.Y, bs, 0, 0, _fbW, _fbH);
             }
             else
             {
@@ -1070,7 +1071,7 @@ internal sealed partial class GameWindow
             }
             if (_mouseMoved && _mouseX >= rect.X && _mouseY >= rect.Y && _mouseX < rect.X + rect.W && _mouseY < rect.Y + rect.H) _menuIndex = i;
             _menu[i] = (_menu[i].Label, _menu[i].Do, rect);
-            right = rect.X - 6 * g;
+            right = rect.X - 6 * Math.Max(g, TouchUi ? 3 : g);
         }
     }
 
