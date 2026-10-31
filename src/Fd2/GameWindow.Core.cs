@@ -569,7 +569,7 @@ internal sealed partial class GameWindow
             if (u.Lying) Blit(Rotate(hi ?? _icons.Frame(u.Icon, frame), hi != null ? T * 4 : T), hi != null ? T * 4 : T, sx, sy, cell, dim);
             else if (hi != null) Blit(hi, T * 4, sx, sy, cell, dim);
             else Blit(_icons.Frame(u.Icon, frame), T, sx, sy, cell, dim);
-            if (outline && u == (InBattle ? _actor : _selected)) Frame(sx, sy, cell, cell, 2 * Math.Max(1, _zoom / 2), CursorColor);
+            if (outline && !InBattle && u == _selected) Frame(sx, sy, cell, cell, 2 * Math.Max(1, _zoom / 2), CursorColor);   // 전투에서는 고른 사람 테두리를 그리지 않는다 — 이동 범위만(사용자 요청)
         }
     }
 
