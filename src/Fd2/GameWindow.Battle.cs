@@ -1234,6 +1234,7 @@ internal sealed partial class GameWindow
         DrawGoals(fs, 12 + title.H + 12);
 
         // 왼쪽 아래 — 마우스 밑 사람(없으면 고른 사람)
+        DrawHudToggles(fs);
         DrawChestList(fs);
         DrawMinimap();
         int tileH = DrawTileInfo(fs);
@@ -1368,7 +1369,7 @@ internal sealed partial class GameWindow
     private readonly List<(int X, int Y, int K)> _chestCells = new();
 
     /// <summary>
-    /// 오른쪽 위 미니맵 — 칸마다 타일 평균 색, 우리 편 초록 · 컴퓨터 아군 노랑 · 적 빨강 점, 지금 보이는 곳은 흰 테두리.
+    /// 오른쪽 위 미니맵(접기 아이콘 밑) — 칸마다 타일 평균 색, 우리 편 초록 · 컴퓨터 아군 노랑 · 적 빨강 점, 지금 보이는 곳은 흰 테두리.
     /// </summary>
     private void DrawMinimap()
     {
@@ -1387,7 +1388,7 @@ internal sealed partial class GameWindow
                 }
         }
         int m = Math.Max(2, Math.Min(260 / _scene.Width, 200 / _scene.Height) * Math.Max(1, _clientW / 1280));
-        int mw = _scene.Width * m, mh = _scene.Height * m, mx = _clientW - mw - 14, my = 12;
+        int mw = _scene.Width * m, mh = _scene.Height * m, mx = _clientW - mw - 14, my = _hudIconBottom + 3;
         FillRect(mx - 3, my - 3, mw + 6, mh + 6, 0xC0101020);
         for (int y = 0; y < _scene.Height; y++)
             for (int x = 0; x < _scene.Width; x++) FillRect(mx + x * m, my + y * m, m, m, _mini![y * _scene.Width + x]);
@@ -1419,8 +1420,10 @@ internal sealed partial class GameWindow
         var ld = Text.Render($"D {(td < 0 ? "-" : "+")}{Math.Abs(td):00}", fs * 3 / 2, 0xFFD8E4FF);
         int w = pad * 3 + img + Math.Max(la.W, ld.W) + pad, h = pad * 2 + img;
         int x = 12, y = _clientH - h - 12;
-        FillRect(x, y, w, h, 0xFFA8B8E8);
-        FillRect(x + g, y + g, w - 2 * g, h - 2 * g, 0xFF2C4C9C);
+        // 테두리만 칠하고 파란 바탕은 살짝 비치게(사용자 요청)
+        FillRect(x, y, w, g, 0xFFA8B8E8); FillRect(x, y + h - g, w, g, 0xFFA8B8E8);
+        FillRect(x, y + g, g, h - 2 * g, 0xFFA8B8E8); FillRect(x + w - g, y + g, g, h - 2 * g, 0xFFA8B8E8);
+        FillRect(x + g, y + g, w - 2 * g, h - 2 * g, 0xB02C4C9C);
         int ix = x + pad, iy = y + pad;
         BlitScaled(_scene.TileAt(_cursor.X, _cursor.Y), T, T, ix, iy, g, 0, 0, _fbW, _fbH);
         if (_scene.UnitAt(_cursor.X, _cursor.Y) is { } u)

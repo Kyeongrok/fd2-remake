@@ -158,6 +158,7 @@ internal sealed partial class GameWindow
         if (_screen == Screen.Ending) { EndingNext(); return; }
         if (_screen != Screen.Game) { TitleClick(_mouseX, _mouseY); return; }
         if (Talking) { TalkNext(); return; }
+        if (InBattle && HudToggleClick(x, y)) return;
         MouseToCursor();
         OnClick((int)Math.Floor((_mouseX - _offX) / (double)_zoom), (int)Math.Floor((_mouseY - _offY) / (double)_zoom));
     }
