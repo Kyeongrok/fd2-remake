@@ -937,6 +937,9 @@ internal sealed partial class GameWindow
     /// <summary>지금 띄운 시스템 단추 그림(위 · 왼쪽 · 오른쪽 · 아래) — 못 고르는 단추도 빨강으로 그리려고.</summary>
     private int[] _sysButtons = [7, 5, 6, 4];
 
+    /// <summary>시스템 십자 메뉴의 가운데 칸 — 연 때의 커서 칸.</summary>
+    private (int X, int Y) _sysAt;
+
     /// <summary>
     /// 빈 칸에서 고르면(sub_16F55, 단추 7 · 5 · 6 · 4) — 위 기록(하위 메뉴), 왼쪽 행군, 오른쪽 설정, 아래 END 턴 끝.
     /// 물리기는 Esc · 오른쪽 단추 · 단추 밖 누르기.
@@ -947,6 +950,7 @@ internal sealed partial class GameWindow
         _stage = MenuStage.System;
         _menu.Clear();
         _menuGlyphs.Clear();
+        _sysAt = _cursor;   // 십자 단추는 연 자리에 고정
         _sysButtons = [7, 5, 6, 4];
         _menu.Add(("기록", OpenRecordMenu, default));
         if (!_enemyPhase) _menu.Add(("행군", () => AskSys(TxtAskMarch, () => SysBanner(TxtMarch, "전원 행군합니다.", StartMarch)), default));
@@ -1618,7 +1622,7 @@ internal sealed partial class GameWindow
     /// <summary>마우스가 움직였으면 커서를 그 칸으로.</summary>
     private void MouseToCursor()
     {
-        if (!InBattle || _mouseX < 0) return;
+        if (!InBattle || _mouseX < 0 || _bs == BattleState.Menu) return;   // 메뉴가 떠 있으면 커서를 옮기지 않는다 — 누르는 사이 메뉴가 손가락 밑에서 달아나지 않게
         int gx = (int)Math.Floor((_mouseX - _offX) / (double)_zoom) + _camX, gy = (int)Math.Floor((_mouseY - _offY) / (double)_zoom) + _camY;
         var t = ((int)Math.Floor(gx / (double)T), (int)Math.Floor(gy / (double)T));
         if (_scene.Inside(t.Item1, t.Item2)) _cursor = t;
@@ -1917,7 +1921,7 @@ internal sealed partial class GameWindow
             try { _buttons = new Buttons(_dir, _pal); }
             catch (Exception e) when (e is IOException or IndexOutOfRangeException or ArgumentOutOfRangeException) { _buttons = null; }
         }
-        var (sx, sy) = _stage == MenuStage.System ? TileScreen(_cursor.X, _cursor.Y) : TileScreen(_actor!.X, _actor.Y);
+        var (sx, sy) = _stage == MenuStage.System ? TileScreen(_sysAt.X, _sysAt.Y) : TileScreen(_actor!.X, _actor.Y);
         if (_buttons is not { Count: > 3 * 15 + 2 } bank) { DrawTextCross(sx, sy); return; }
 
         int s = _zoom, blink = (int)(_time * 18.2 / 4) & 1;
