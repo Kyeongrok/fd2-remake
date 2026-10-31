@@ -164,6 +164,41 @@
                 </DockPanel>
             </TabItem>
             <!-- 배경음악: FDMUS.DAT 의 곡들을 MIDI 로 바꿔 듣기 · 저장 -->
+            <!-- 마법 모션: 지도 위 그림(FDOTHER 6) · 전투 화면 효과(FDOTHER 18~44) -->
+            <TabItem Header="마법 모션">
+                <DockPanel>
+                    <ListBox x:Name="SpellMotionList" DockPanel.Dock="Left" Width="160" SelectionChanged="OnSpellMotionSelected" />
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="12,8">
+                        <RadioButton x:Name="SpellOurs" Content="우리 편이 쓸 때" GroupName="spellside" IsChecked="True" Checked="OnSpellSideChanged" VerticalAlignment="Center" />
+                        <RadioButton x:Name="SpellEnemy" Content="적이 쓸 때" GroupName="spellside" Checked="OnSpellSideChanged" Margin="12,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock x:Name="SpellInfo" DockPanel.Dock="Top" Margin="12,0,12,8" FontSize="13" TextWrapping="Wrap" />
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="12,0">
+                            <TextBlock Text="지도 위 그림" FontWeight="Bold" Margin="0,0,0,4" />
+                            <StackPanel Orientation="Horizontal">
+                                <Border Background="{StaticResource Checker}" Width="160" Height="160">
+                                    <Image x:Name="SpellMapImage" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor">
+                                        <Image.LayoutTransform><ScaleTransform ScaleX="2" ScaleY="2" /></Image.LayoutTransform>
+                                    </Image>
+                                </Border>
+                                <ItemsControl x:Name="SpellMapStrip" Margin="12,0" VerticalAlignment="Center">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate><DataTemplate><Border Background="{StaticResource Checker}" Margin="2"><Image Source="{Binding}" Stretch="None" /></Border></DataTemplate></ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                            <TextBlock Text="전투 화면 효과 (320×200 자리)" FontWeight="Bold" Margin="0,16,0,4" />
+                            <Border Background="{StaticResource Checker}" HorizontalAlignment="Left">
+                                <Image x:Name="SpellBattleImage" Width="640" Height="400" RenderOptions.BitmapScalingMode="NearestNeighbor" />
+                            </Border>
+                            <ItemsControl x:Name="SpellBattleStrip" Margin="0,8">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate><DataTemplate><Border Background="{StaticResource Checker}" Margin="2"><Image Source="{Binding}" Width="160" Height="100" /></Border></DataTemplate></ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </DockPanel>
+            </TabItem>
             <!-- 표 편집: FD2.EXE(능력치 · 아이템 · 마법 · 상점) · FDFIELD.DAT(장마다 적 배치) — 칸을 고쳐 저장(처음엔 -backup 을 남김) -->
             <TabItem Header="능력치"><ContentControl x:Name="StatsHost" /></TabItem>
             <TabItem Header="적 배치"><ContentControl x:Name="UnitsHost" /></TabItem>
