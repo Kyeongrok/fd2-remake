@@ -292,7 +292,6 @@ internal sealed partial class GameWindow
             }
             var line = all.GetRange(start, end - start);
             while (line.Count > 0 && line[^1] == GlyphSpace) line.RemoveAt(line.Count - 1);
-            if (lines.Count > 0) line.Insert(0, GlyphSpace);   // 원작처럼 이어지는 줄은 한 칸 들여서
             lines.Add(line);
             start = end;
         }
