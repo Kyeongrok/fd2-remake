@@ -160,7 +160,10 @@ internal sealed partial class GameWindow
         // 글자 · 얼굴 배율 — 큰 것부터 줄여 창이 화면 안에 들어가는 첫 배율(폰처럼 낮은 화면에서 글이 창 밖으로 넘치지 않게)
         int g = 0, glyph = 0, lineH = 0, faceS = 0, faceW = 0, faceH = 0, boxW = 0, boxH = 0, textSize = 0, textLineH = 0;
         List<string>? textLines = null;
-        for (g = Math.Max(2, HudZoom); g >= 1; g--)
+        // 세로 화면 — 글은 원작 글꼴 작게(한 줄 스무 자 남짓), 창은 화면 폭에 맞추고 여백을 좁게(사용자 요청)
+        bool narrow = _clientW < _clientH;
+        int pad = narrow ? 12 : 24;
+        for (g = narrow ? Math.Max(1, Math.Min(HudZoom, _clientW / (Font16.Size * 20))) : Math.Max(2, HudZoom); g >= 1; g--)
         {
             glyph = Font16.Size * g;
             lineH = glyph + g * 4;
@@ -168,14 +171,14 @@ internal sealed partial class GameWindow
             for (faceS = g; faceS >= 0; faceS--)
             {
                 faceW = faces is { Count: > 0 } && faceS > 0 ? faces[0].W * faceS : 0;
-                boxW = Math.Min(_clientW - 40, Math.Max(faceW + glyph * 16 + 80, _clientW * 2 / 3));
+                boxW = narrow ? _clientW - 16 : Math.Min(_clientW - 40, Math.Max(faceW + glyph * 16 + 80, _clientW * 2 / 3));
                 if (boxW - faceW - 72 >= glyph * 7) break;
             }
             faceS = Math.Max(0, faceS);
             faceW = faces is { Count: > 0 } && faceS > 0 ? faces[0].W * faceS : 0;
             faceH = faces is { Count: > 0 } && faceS > 0 ? faces[0].H * faceS : 0;
-            boxW = Math.Min(_clientW - 40, Math.Max(faceW + glyph * 16 + 80, _clientW * 2 / 3));
-            boxH = Math.Max(faceH + 40, lineH * 3 + 70);
+            boxW = narrow ? _clientW - 16 : Math.Min(_clientW - 40, Math.Max(faceW + glyph * 16 + 80, _clientW * 2 / 3));
+            boxH = narrow ? Math.Max(faceH + 24, lineH * 3 + 40) : Math.Max(faceH + 40, lineH * 3 + 70);
 
             // 보통 글(프롤로그) — 얼굴 옆 남는 폭에 맞춰 줄을 나누고, 줄이 많으면 창을 키운다
             textSize = Math.Max(14, glyph * 5 / 8);
@@ -191,7 +194,7 @@ internal sealed partial class GameWindow
         g = Math.Max(1, g);
 
         // 원작처럼 오른쪽에 얼굴이 나오는 사람(FFEF · FFED)은 창을 위에, 왼쪽(FFEE · FFEC)은 아래에
-        int bx = (_clientW - boxW) / 2, by = page.Right ? 16 : _clientH - boxH - 16;
+        int bx = (_clientW - boxW) / 2, by = page.Right ? (TouchUi ? 56 : 16) : _clientH - boxH - (narrow ? 8 : 16);   // 폰은 오른쪽 위 단추 밑으로
         // 바탕은 얼굴 그림(DATO)의 바탕색 #28458A 과 같게 — 얼굴이 창에 붙어 보이도록. 테두리는 네 변 모두
         FillRect(bx, by, boxW, boxH, 0xFF28458A);
         FillRect(bx, by, boxW, 3, 0xFF8090C0);
@@ -199,17 +202,17 @@ internal sealed partial class GameWindow
         FillRect(bx, by, 3, boxH, 0xFF8090C0);
         FillRect(bx + boxW - 3, by, 3, boxH, 0xFF8090C0);
 
-        int textX = bx + 24, faceX = bx + 20;
+        int textX = bx + pad, faceX = bx + pad - 4;
         if (faces is { Count: > 0 } && faceS > 0)
         {
-            if (page.Right) faceX = bx + boxW - faceW - 20;
-            else textX = faceX + faceW + 24;
+            if (page.Right) faceX = bx + boxW - faceW - (pad - 4);
+            else textX = faceX + faceW + pad;
             bool talking = _talkShown < PageChars(page);
             var f = faces[talking ? (int)(_time * 8) % faces.Count : 0];
             BlitFrame(f.Px, f.W, f.H, faceX, by + (boxH - faceH) / 2, faceS, false, 0, 0, (0, 0, _clientW, _clientH));
         }
 
-        int ty = by + 16;
+        int ty = by + (narrow ? 10 : 16);
         if (name.Length > 0)
         {
             // 몬스터 · 장면 사람은 「몬스터 29」 대신 원작 이름 표(FDTXT 0 의 번호+1 줄)의 이름을 원본 글꼴로
@@ -230,7 +233,7 @@ internal sealed partial class GameWindow
         }
         if (textLines != null) left = 0;
         // 원작 글꼴 대사 — 창에 들어가는 줄만큼씩(원작처럼). 더 남았으면 ▼ 를 띄우고 누르면 이어지는 줄(_talkSkip)
-        var lines = Reflow(page, Math.Max(8, (bx + boxW - 24 - textX - (page.Right ? faceW + 24 : 0)) / glyph));
+        var lines = Reflow(page, Math.Max(8, (bx + boxW - pad - textX - (page.Right ? faceW + pad : 0)) / glyph));
         int fit = Math.Max(1, (by + boxH - 12 - ty) / lineH);
         _talkSkip = Math.Clamp(_talkSkip, 0, Math.Max(0, lines.Count - 1));
         int skipped = lines.Take(_talkSkip).Sum(l => l.Count);
@@ -272,7 +275,7 @@ internal sealed partial class GameWindow
         {
             var l = page.Lines[i];
             int skip = 0;
-            if (i > 0) while (skip < l.Count && l[skip] == GlyphSpace) skip++;   // 이어지는 줄의 들여쓰기
+            while (skip < l.Count && l[skip] == GlyphSpace) skip++;   // 줄 앞 들여쓰기(첫 줄은 따옴표를 뺀 자리) — 다시 나눌 때 정한다
             all.AddRange(l.Skip(skip).Where(c => !IsQuoteGlyph(c)));
         }
         lines = new List<List<int>>();
