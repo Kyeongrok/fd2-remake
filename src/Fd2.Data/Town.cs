@@ -88,6 +88,26 @@ public sealed class Town(Campaign campaign, Battle battle)
         return TownResult.Ok;
     }
 
+    /// <summary>
+    /// 건네주기 — 상점 · 교회의 「장비」 단추(sub_28F65): from 의 가방 slot 물건을 to 의 가방으로. 받는 쪽 가방이 8칸이면 BagFull(글 0x5238D),
+    /// 받는 쪽이 장비할 수 없는 장비면 CantEquip. 장비 중이던 것은 풀고 건넨다.
+    /// </summary>
+    public TownResult Give(int from, int slot, int to)
+    {
+        var a = ToUnit(campaign.Party[from]);
+        if (slot < 0 || slot >= a.Bag.Count) return TownResult.Empty;
+        if (from == to) return TownResult.Ok;
+        var b = ToUnit(campaign.Party[to]);
+        if (b.Bag.Count >= 8) return TownResult.BagFull;
+        int item = a.Bag[slot].Item;
+        if (!CanTake(campaign.Party[to], item)) return TownResult.CantEquip;
+        a.Bag.RemoveAt(slot);
+        b.Bag.Add((item, false));
+        Store(from, a);
+        Store(to, b);
+        return TownResult.Ok;
+    }
+
     // ── 교회 ───────────────────────────────────────────────────────────────
 
     /// <summary>부활(sub_2A43E) — 부활 값을 내고 +5 를 0, HP 를 최대로(MP 는 장이 끝날 때 이미 가득).</summary>

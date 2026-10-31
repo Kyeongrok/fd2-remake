@@ -50,7 +50,6 @@ internal sealed partial class GameWindow
         _bs = BattleState.Menu;
     }
 
-    private void NotYet(string what, Action back) => TownBanner($"{what} — 아직 준비 중입니다", back);
 
     private void EndTownMenu(int row)
     {
@@ -135,8 +134,8 @@ internal sealed partial class GameWindow
         BeginTownMenu(() => OpenTownMenu(at));
         _menu.Add(("사기", () => { if (goods.Length > 0) OpenBuy(shop, goods, 0); else TownBanner("팔 물건이 없습니다", () => OpenShopMenu(shop)); }, default));
         _menu.Add(("팔기", () => OpenSellWho(shop, 0), default));
-        _menu.Add(("정보", () => NotYet("물건 정보", () => OpenShopMenu(shop)), default));
-        _menu.Add(("장비", () => NotYet("장비 바꾸기", () => OpenShopMenu(shop)), default));
+        _menu.Add(("정보", () => OpenTavernView(0), default));   // 원작 sub_28EFE — 동료를 골라 상태 창
+        _menu.Add(("장비", () => OpenGiveFrom(0), default));     // 원작 sub_28F65 — 물건 건네주기
         TownButtons(at == 1 ? (back ? 503 : 501) : 440);
     }
 
@@ -202,6 +201,7 @@ internal sealed partial class GameWindow
         int name = _campaign is { } c ? HeroRecord.Id(c.Party[member]) + 1 : -1;
         if (_campaign is { } cc) _battle.Gold = cc.Gold;
         PlaySfx(Sound.UiBank, res == TownResult.Ok ? 5 : 7);
+        if (res == TownResult.Ok) StartDeal();
         TownBanner(res switch
         {
             TownResult.Ok => $" 샀습니다 — 돈 {_campaign?.Gold}원",
@@ -249,6 +249,7 @@ internal sealed partial class GameWindow
                 t.Sell(member, slot);
                 _battle.Gold = c.Gold;
                 PlaySfx(Sound.UiBank, 5);
+                StartDeal();
                 TownBanner($"팔았습니다 +{gain}원 — 돈 {c.Gold}원", () => OpenSellItem(shop, page, member));
             }, default));
         }
@@ -269,8 +270,81 @@ internal sealed partial class GameWindow
         TownButtons(_townGreeting >= 0 ? 586 : 585);
     }
 
-    /// <summary>동료 보기에서 물릴 곳 — 주점이나 교회(교회 단추 0 도 동료 보기).</summary>
-    private Action ViewBack => _townSpot == 4 ? OpenChurchMenu : OpenTavern;
+    /// <summary>동료 보기 · 건네주기에서 물릴 곳 — 지금 건물의 네 단추(주점 · 교회 · 상점).</summary>
+    private Action ViewBack => _townSpot switch
+    {
+        4 => OpenChurchMenu,
+        0 => OpenTavern,
+        _ => () => { if (_campaign is { } c && _tables?.ShopFor(c.NextScene) is { } s) OpenShopMenu(s); },
+    };
+
+    // ── 장비(건네주기, sub_28F65) — 글 512 누구 것을 · 510 누구에게 · 511 물건이 없다 · 0x5238D 가방이 찼다 ──
+
+    private void OpenGiveFrom(int page)
+    {
+        if (_campaign is not { } c) return;
+        BeginTownMenu(ViewBack);
+        _menu.Add((GoldLine("누구의 물건을 건네주나"), () => { }, default));
+        foreach (int i in Enumerable.Range(0, c.Party.Count).Skip(page * TownPage).Take(TownPage))
+        {
+            var r = c.Party[i];
+            _menuGlyphs[_menu.Count] = HeroRecord.Id(r) + 1;
+            _menu.Add(($"Lv{Town.Level(r),-3} 가방 {Town.Bag(r).Count}/8  ", () => OpenGiveItem(page, i), default));
+        }
+        AddPager(c.Party.Count, page, OpenGiveFrom);
+        _menu.Add(("돌아가기", ViewBack, default));
+        EndTownMenu(1);
+    }
+
+    private void OpenGiveItem(int page, int member)
+    {
+        if (_campaign is not { } c) return;
+        var r = c.Party[member];
+        var bag = Town.Bag(r);
+        if (bag.Count == 0) { PlaySfx(Sound.UiBank, 7); TownBanner(" 건넬 물건이 없습니다", () => OpenGiveFrom(page), HeroRecord.Id(r) + 1); return; }
+        BeginTownMenu(() => OpenGiveFrom(page));
+        _menuGlyphs[0] = HeroRecord.Id(r) + 1;
+        _menu.Add((GoldLine("건넬 물건 — "), () => { }, default));
+        for (int k = 0; k < bag.Count; k++)
+        {
+            int slot = k;
+            _menuGlyphs[_menu.Count] = 181 + bag[k].Item;
+            _menu.Add(($"{(bag[k].Equipped ? "(장비) " : "")} ", () => OpenGiveTo(page, member, slot, 0), default));
+        }
+        _menu.Add(("돌아가기", () => OpenGiveFrom(page), default));
+        EndTownMenu(1);
+    }
+
+    private void OpenGiveTo(int fromPage, int member, int slot, int page)
+    {
+        if (_town is not { } t || _campaign is not { } c) return;
+        int item = Town.Bag(c.Party[member])[slot].Item;
+        BeginTownMenu(() => OpenGiveItem(fromPage, member));
+        _menuGlyphs[0] = 181 + item;
+        _menu.Add((GoldLine("누구에게 — "), () => { }, default));
+        foreach (int i in Enumerable.Range(0, c.Party.Count).Where(i => i != member).Skip(page * TownPage).Take(TownPage))
+        {
+            var r = c.Party[i];
+            int to = i;
+            _menuGlyphs[_menu.Count] = HeroRecord.Id(r) + 1;
+            _menu.Add(($"Lv{Town.Level(r),-3} 가방 {Town.Bag(r).Count}/8  ", () =>
+            {
+                var result = t.Give(member, slot, to);
+                PlaySfx(Sound.UiBank, result == TownResult.Ok ? 5 : 7);
+                string msg = result switch
+                {
+                    TownResult.Ok => " 에게 건넸습니다",
+                    TownResult.BagFull => " 의 가방이 꽉 찼습니다",
+                    TownResult.CantEquip => " 은(는) 장비할 수 없습니다",
+                    _ => " 건네지 못했습니다",
+                };
+                TownBanner(msg, () => OpenGiveFrom(fromPage), HeroRecord.Id(r) + 1);
+            }, default));
+        }
+        AddPager(c.Party.Count - 1, page, p => OpenGiveTo(fromPage, member, slot, p));
+        _menu.Add(("돌아가기", () => OpenGiveItem(fromPage, member), default));
+        EndTownMenu(1);
+    }
 
     /// <summary>동료 보기 — 고른 사람의 레벨 · HP · MP · 셈한 능력 · 장비(원작 sub_17AED 상태 창 대신 알림 줄로).</summary>
     private void OpenTavernView(int page)
@@ -363,7 +437,7 @@ internal sealed partial class GameWindow
     {
         BeginTownMenu(() => OpenTownMenu(4));
         _menu.Add(("동료 보기", () => OpenTavernView(0), default));
-        _menu.Add(("장비", () => NotYet("장비 바꾸기", OpenChurchMenu), default));
+        _menu.Add(("장비", () => OpenGiveFrom(0), default));
         _menu.Add(("부활", () => OpenRevive(0), default));
         _menu.Add(("전직", () => OpenClassChange(0), default));
         TownButtons(_townGreeting >= 0 ? 586 : 585);
@@ -387,7 +461,7 @@ internal sealed partial class GameWindow
                 var res = t.Revive(i);
                 _battle.Gold = c.Gold;
                 PlaySfx(Sound.UiBank, res == TownResult.Ok ? 5 : 7);
-                if (res == TownResult.Ok) TownBanner($" 되살아났습니다 — 돈 {c.Gold}원", () => OpenRevive(0), name);
+                if (res == TownResult.Ok) { StartDeal(); TownBanner($" 되살아났습니다 — 돈 {c.Gold}원", () => OpenRevive(0), name); }
                 else TownBanner("돈이 모자랍니다", () => OpenRevive(page));
             }, default));
         }
