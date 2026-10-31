@@ -254,6 +254,7 @@ public partial class MainWindow : Window
         _field = System.IO.File.Exists(field) ? System.IO.File.ReadAllBytes(field) : null;
         _faces.Clear();
         _towns.Clear();
+        _unitMapBase = null;
         if (_tableEditors.Count == 0) BuildTableEditors();
         foreach (var t in _tableEditors) t.Refresh();
     }
@@ -275,7 +276,7 @@ public partial class MainWindow : Window
             r => Units() is { } t && r < t.Rows.Count && _field != null ? Face(StatTables.Get(_field, t.Rows[r].Fields[1])) : null,
             Label("장"), scene, Label("   편 · 그림 · 레벨 · 자리 · 등장 차례 · 장비 · 아이템(255 = 없음) · AI · 떨굼"));
         scene.SelectionChanged += (_, _) => units.Refresh();
-        UnitsHost.Content = units;
+        UnitsHost.Content = UnitsWithMap(units, scene);
 
         ItemsHost.Content = new TableEditor(this, StatTables.Items, () => _exe, "FD2.EXE 에 저장", SaveExe, LoadStats);
         SpellsHost.Content = new TableEditor(this, StatTables.Spells, () => _exe, "FD2.EXE 에 저장", SaveExe, LoadStats);

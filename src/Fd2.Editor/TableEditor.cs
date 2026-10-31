@@ -20,6 +20,24 @@ internal sealed class TableEditor : DockPanel
     private readonly DataGrid _grid;
     private StatTables.Table? _shown;
 
+    /// <summary>버퍼 값이 바뀌었거나 표를 다시 채웠을 때 — 적 배치 지도처럼 표를 따라 그리는 곳이 듣는다.</summary>
+    public event Action? Changed;
+
+    /// <summary>고른 줄이 바뀌었을 때.</summary>
+    public event Action? RowSelected;
+
+    /// <summary>고른 줄(없으면 -1). 넣으면 그 줄을 골라 보이게 한다.</summary>
+    public int SelectedRow
+    {
+        get => _grid.SelectedIndex;
+        set
+        {
+            if (value < 0 || value >= _grid.Items.Count) return;
+            _grid.SelectedIndex = value;
+            _grid.ScrollIntoView(_grid.Items[value]);
+        }
+    }
+
     /// <summary>왼쪽 그림 칸 높이 — 초상화 48, 마을 그림처럼 넓은 것은 더 크게.</summary>
     public double PortraitHeight { get; init; } = 48;
 
@@ -41,6 +59,7 @@ internal sealed class TableEditor : DockPanel
             HeadersVisibility = DataGridHeadersVisibility.Column, FrozenColumnCount = portrait != null ? 2 : 1, SelectionMode = DataGridSelectionMode.Single,
         };
         _grid.CellEditEnding += OnCellEdit;
+        _grid.SelectionChanged += (_, _) => RowSelected?.Invoke();
         Children.Add(_grid);
     }
 
@@ -56,7 +75,7 @@ internal sealed class TableEditor : DockPanel
     {
         _grid.Columns.Clear();
         _shown = _table();
-        if (_buffer() is not { } buf || _shown is not { Rows.Count: > 0 } t) { _grid.ItemsSource = null; return; }
+        if (_buffer() is not { } buf || _shown is not { Rows.Count: > 0 } t) { _grid.ItemsSource = null; Changed?.Invoke(); return; }
         var dt = new System.Data.DataTable();
         if (_portrait != null)
         {
@@ -99,6 +118,7 @@ internal sealed class TableEditor : DockPanel
             dt.Rows.Add(row);
         }
         _grid.ItemsSource = dt.DefaultView;
+        Changed?.Invoke();
     }
 
     private int FieldColumn(DataGridColumn c) => c.DisplayIndex - (_portrait != null ? 2 : 1);
@@ -125,6 +145,7 @@ internal sealed class TableEditor : DockPanel
             return;
         }
         StatTables.Set(buf, f, v);
+        Changed?.Invoke();
         // 마을 그림을 바꾸면 왼쪽 그림도 바뀌게 — 편집이 끝난 뒤 다시 채운다
         if (f.Pick == StatTables.Choice.Town) Dispatcher.BeginInvoke(() => { Refresh(); _grid.SelectedIndex = row; });
         _owner.Status.Text = $"{_shown.Rows[row].Name} {f.Name} = {(f.Pick != StatTables.Choice.None ? StatTables.Label(f, v) : v)} — 저장을 눌러야 파일에 들어갑니다.";
