@@ -46,6 +46,9 @@ internal sealed class Settings
     /// <summary>폰 지도 배율(1~4, 두 손가락으로 바꾼다) — 기본 2.</summary>
     public int TouchZoom { get; set; } = 2;
 
+    /// <summary>폰 「고를 때 확대」 — 우리 편을 고르거나 걸은 뒤 메뉴 동안 지도를 두 배로(사용자 요청). 기본 끔.</summary>
+    public bool TouchFocusZoom { get; set; }
+
     /// <summary>윈도우판을 폰과 같은 화면으로(큰 글 · ESC · 메뉴 단추 · 지도 끌기) — 설정 「모바일 화면으로 보기」(사용자 요청). 폰은 늘 이 화면.</summary>
     public bool MobileView { get; set; }
 

@@ -236,7 +236,25 @@ internal sealed partial class GameWindow
     /// <summary>글 · 창(HUD) 크기를 정하는 배율 — 지도 배율과 따로. 폰은 두 손가락으로 지도만 키우고 글은 그대로 둔다.</summary>
     private int HudZoom => TouchUi ? Math.Max(3, Math.Min(_clientW, _clientH) / 180) : _zoom;   // 폰은 메뉴 · 글을 크게 — 화면 짧은 쪽을 따라(1080 폭 폰이면 가로 · 세로 모두 6배, 사용자 요청)
 
-    private const int MinTouchZoom = 1, MaxTouchZoom = 4;
+    private const int MinTouchZoom = 1, MaxTouchZoom = 4, MaxFocusZoom = 6;
+
+    /// <summary>폰 「고를 때 확대」 — 우리 편을 고르거나 걸은 뒤 메뉴 · 대상 고르기 동안 지도를 두 배로(사용자 요청). 끝내거나 물리면 돌아온다.</summary>
+    private bool _focusZoom;
+
+    private void UpdateFocusZoom()
+    {
+        var who = _actor;
+        bool want = TouchUi && _settings.TouchFocusZoom && InBattle && !_enemyPhase && who != null
+                    && _bs is BattleState.Select or BattleState.Moving or BattleState.Menu or BattleState.Target;
+        if (want == _focusZoom) return;
+        _focusZoom = want;
+        Layout();
+        var at = who ?? _selected;
+        if (at == null) return;
+        int mw = _scene.Width * T, mh = _scene.Height * T;
+        _camX = mw <= _boardW ? (mw - _boardW) / 2 : Math.Clamp((int)(at.DrawX * T) + T / 2 - _boardW / 2, 0, mw - _boardW);
+        _camY = mh <= _boardH ? (mh - _boardH) / 2 : Math.Clamp((int)(at.DrawY * T) + T / 2 - _boardH / 2, 0, mh - _boardH);
+    }
 
     /// <summary>
     /// 두 손가락 벌리기(step +1) · 오므리기(−1) — 지도 배율을 한 단계 바꾸고, 보던 곳 가운데를 그대로 둔다.
@@ -244,7 +262,7 @@ internal sealed partial class GameWindow
     internal void PinchZoom(int step)
     {
         int z = Math.Clamp(_zoom + step, MinTouchZoom, MaxTouchZoom);
-        if (!TouchUi || z == _zoom) return;
+        if (!TouchUi || z == _zoom || _focusZoom) return;   // 고를 때 확대 중에는 배율을 그대로(저장된 배율이 두 배로 바뀌지 않게)
         PointerAbort();
         int cx = _camX + _boardW / 2, cy = _camY + _boardH / 2;
         _settings.TouchZoom = z;
@@ -263,6 +281,7 @@ internal sealed partial class GameWindow
         _zoom = _settings.Zoom > 0 ? _settings.Zoom : auto;
         // 폰은 화면이 낮아 1배면 지도가 작다 — 기본 2배로 키워 사람 둘레를 보이고 카메라가 따라간다. 두 손가락으로 1~4배(PinchZoom)
         if (TouchUi) _zoom = Math.Clamp(_settings.TouchZoom, MinTouchZoom, MaxTouchZoom);
+        if (TouchUi && _focusZoom) _zoom = Math.Min(_zoom * 2, MaxFocusZoom);   // 고를 때 확대
         int bw = Math.Max(1, _clientW / _zoom), bh = Math.Max(1, _clientH / _zoom);
         _offX = (_clientW - bw * _zoom) / 2;
         _offY = (_clientH - bh * _zoom) / 2;
@@ -422,6 +441,7 @@ internal sealed partial class GameWindow
             else if (Held(Win32.VK_RIGHT, KeyAction.MoveRight)) TryStep(sel, 1, 0, Dir.Right);
         }
 
+        UpdateFocusZoom();
         MoveUnits(dt);
         Follow();
     }
@@ -680,6 +700,9 @@ internal sealed partial class GameWindow
     private uint[]? _mapAll;
     private int _mapAllW, _mapAllH;
     private (Scene?, int, int) _mapAllKey;
+    private uint[]? _mapPrev;
+    private int _mapPrevW, _mapPrevH;
+    private (Scene?, int, int) _mapPrevKey;
     private const long MapAllMaxPixels = 16_000_000;
 
     private void DrawMapCpu()
@@ -689,7 +712,13 @@ internal sealed partial class GameWindow
         if (back == null && (long)_scene.Width * T * _zoom * _scene.Height * T * _zoom <= MapAllMaxPixels)
         {
             var key = (_scene, _zoom, _scene.Patched.Count);
-            if (_mapAll == null || !key.Equals(_mapAllKey)) BuildMapAll(key);
+            if (_mapAll == null || !key.Equals(_mapAllKey))
+            {
+                // 확대 · 되돌리기를 오가면 바로 앞 배율 것을 다시 쓴다(지도 전체를 다시 찍지 않게)
+                (_mapAll, _mapAllW, _mapAllH, _mapAllKey, _mapPrev, _mapPrevW, _mapPrevH, _mapPrevKey) =
+                    (_mapPrev, _mapPrevW, _mapPrevH, _mapPrevKey, _mapAll, _mapAllW, _mapAllH, _mapAllKey);
+                if (_mapAll == null || !key.Equals(_mapAllKey)) BuildMapAll(key);
+            }
             int left = _offX - _camX * _zoom, top = _offY - _camY * _zoom;
             // 판 경계는 한 점 아래 자리를 빼기 전 것 — 카메라가 반 점 밀려도 오른쪽 · 아래 끝이 비지 않게
             int bx0 = Math.Max(_offX + _subX, left), bx1 = Math.Min(Math.Min(_fbW, _offX + _subX + _boardW * _zoom), left + _mapAllW);

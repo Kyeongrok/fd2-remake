@@ -142,6 +142,12 @@ internal sealed partial class GameWindow
                 Toggle("조작법", _settings.TouchHelp, () => _settings.TouchHelp = !_settings.TouchHelp);
                 break;
             case 2:
+                _menu.Add(($"고를 때 확대  [{(_settings.TouchFocusZoom ? "켬" : "끔")}]", () =>
+                {
+                    _settings.TouchFocusZoom = !_settings.TouchFocusZoom;
+                    _settings.Save();
+                    OpenTouchMenu(_menuIndex, 2);
+                }, default));
                 _menu.Add(("소리 크기", () => { Close(); OpenVolume(); }, default));
                 _menu.Add(("단축키 · 패드 설정", () => { Close(); _keysOpen = true; _keysRow = 0; _keysCapture = -1; }, default));
                 break;
