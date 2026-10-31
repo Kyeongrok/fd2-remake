@@ -8,16 +8,17 @@ using Fd2.Native;
 namespace Fd2;
 
 /// <summary>
-/// 게임 화면 — 뒤 스레드에서 틀마다 <see cref="GameWindow.Step"/> 한 뒤 그 화면(640 x 화면 비율)을 점 그대로 늘려 SurfaceView 에 찍는다.
+/// 게임 화면 — 뒤 스레드에서 틀마다 <see cref="GameWindow.Step"/> 한 뒤 그 화면(긴 쪽 960 점, 짧은 쪽은 화면 비율대로)을 SurfaceView 에 찍는다.
+/// 표면 크기를 그 판 크기로 고정해(SetFixedSize) 화면 크기로 늘리는 일은 GPU 합성기가 하고, 점은 직접 버퍼로 한 번만 옮긴다(폰이 느리던 까닭).
 /// </summary>
 /// <remarks>
 /// 손가락: 누르고 떼면 그 자리를 누른 것(마우스 왼쪽), 0.5초 넘게 누르고 있으면 물리기(오른쪽 단추).
 /// 키: 방향 · 확인(Enter) · 뒤로(Esc), 게임 패드 A 결정 · B 취소 · X 공격 · Y 대기 · Start 시스템 메뉴 · R1 다음 아군 · L1 체력바 · Select 단축키 목록.
 /// 입력은 UI 스레드에서 받아 줄에 넣고, 게임 스레드가 틀마다 꺼내 쓴다.
 /// </remarks>
-public sealed class GameView : SurfaceView, ISurfaceHolderCallback
+public sealed unsafe class GameView : SurfaceView, ISurfaceHolderCallback
 {
-    private const int FrameW = 960;   // 지도는 2배로(Layout — 터치판) 그려 가로 20칸쯤 · 캐릭터 둘레가 크게 보인다
+    private const int FrameW = 960;   // 긴 쪽 — 지도는 2배로(Layout — 터치판) 그려 가로 20칸쯤 · 캐릭터 둘레가 크게 보인다
     private const double LongPress = 0.5;
 
     private readonly Activity _activity;
@@ -78,7 +79,8 @@ public sealed class GameView : SurfaceView, ISurfaceHolderCallback
         }
         var game = _game;
         Bitmap? bitmap = null;
-        int[] pixels = [];
+        Java.Nio.ByteBuffer? buffer = null;
+        IntPtr bufferAt = IntPtr.Zero;
         using var paint = new Paint { FilterBitmap = false };
         var clock = System.Diagnostics.Stopwatch.StartNew();
         double last = 0;
@@ -87,16 +89,18 @@ public sealed class GameView : SurfaceView, ISurfaceHolderCallback
         {
             while (_alive && game.Running)
             {
-                // 그릴 판 크기 — 가로 640 점, 세로는 화면 비율대로(원본 화면 높이 312 보다 작지 않게)
-                if (_surfaceW > 0 && (_surfaceW != sizedW || _surfaceH != sizedH))
+                // 그릴 판 크기 — 긴 쪽 960 점, 짧은 쪽은 화면 비율대로(240 보다 작지 않게). 가로 · 세로를 돌리면 다시 잰다.
+                // 표면을 그 크기로 고정하면 화면에 맞춰 늘리는 일은 합성기(GPU)가 한다 — 예전에는 CPU 캔버스가 화면 점 전부를 매번 칠했다
+                int viewW = Width, viewH = Height;
+                if (viewW > 0 && viewH > 0 && (viewW != sizedW || viewH != sizedH))
                 {
-                    (sizedW, sizedH) = (_surfaceW, _surfaceH);
-                    _fbW = FrameW;
-                    _fbH = Math.Max(240, (int)Math.Round(FrameW * (double)sizedH / sizedW));
+                    (sizedW, sizedH) = (viewW, viewH);
+                    int shortSide = Math.Max(240, (int)Math.Round(FrameW * (double)Math.Min(viewW, viewH) / Math.Max(viewW, viewH)));
+                    (_fbW, _fbH) = viewW >= viewH ? (FrameW, shortSide) : (shortSide, FrameW);
                     game.SetClientSize(_fbW, _fbH);
-                    float s = Math.Min(sizedW / (float)_fbW, sizedH / (float)_fbH);
-                    int w = (int)(_fbW * s), h = (int)(_fbH * s);
-                    _dst = new Rect((sizedW - w) / 2, (sizedH - h) / 2, (sizedW - w) / 2 + w, (sizedH - h) / 2 + h);
+                    int fw0 = _fbW, fh0 = _fbH;
+                    Post(() => Holder!.SetFixedSize(fw0, fh0));
+                    _dst = new Rect(0, 0, viewW, viewH);
                 }
 
                 double now = clock.Elapsed.TotalSeconds;
@@ -113,21 +117,32 @@ public sealed class GameView : SurfaceView, ISurfaceHolderCallback
 
                 int fw = game.FrameWidth, fh = game.FrameHeight;
                 if (fw <= 0 || fh <= 0) continue;
+                if (_surfaceW != fw || _surfaceH != fh) { Thread.Sleep(5); continue; }   // 표면이 새 크기로 바뀌기를 기다린다
                 if (bitmap == null || bitmap.Width != fw || bitmap.Height != fh)
                 {
                     bitmap?.Dispose();
+                    buffer?.Dispose();
                     bitmap = Bitmap.CreateBitmap(fw, fh, Bitmap.Config.Argb8888!)!;
-                    pixels = new int[fw * fh];
+                    buffer = Java.Nio.ByteBuffer.AllocateDirect(fw * fh * 4)!;
+                    bufferAt = buffer.GetDirectBufferAddress();
                 }
-                Buffer.BlockCopy(game.FrameBuffer, 0, pixels, 0, Math.Min(pixels.Length, game.FrameBuffer.Length) * 4);
-                bitmap.SetPixels(pixels, 0, fw, 0, 0, fw, fh);
+                // 게임 점(0xAARRGGBB) → 비트맵 점(바이트 R G B A) — 자바 배열을 거치지 않고 직접 버퍼에 한 번만
+                var src = game.FrameBuffer;
+                int n = Math.Min(fw * fh, src.Length);
+                fixed (uint* s = src)
+                {
+                    uint* d = (uint*)bufferAt;
+                    for (int i = 0; i < n; i++)
+                    {
+                        uint c = s[i];
+                        d[i] = 0xFF000000u | (c & 0x0000FF00u) | (c >> 16 & 0xFFu) | (c & 0xFFu) << 16;
+                    }
+                }
+                buffer!.Rewind();
+                bitmap.CopyPixelsFromBuffer(buffer);
                 var canvas = Holder!.LockCanvas();
                 if (canvas == null) continue;
-                try
-                {
-                    canvas.DrawColor(Color.Black);
-                    canvas.DrawBitmap(bitmap, new Rect(0, 0, fw, fh), _dst, paint);
-                }
+                try { canvas.DrawBitmap(bitmap, 0, 0, paint); }
                 finally { Holder.UnlockCanvasAndPost(canvas); }
 
                 double spent = clock.Elapsed.TotalSeconds - now;
@@ -135,7 +150,7 @@ public sealed class GameView : SurfaceView, ISurfaceHolderCallback
             }
         }
         catch (Exception e) { Fail(e); return; }
-        finally { bitmap?.Dispose(); }
+        finally { bitmap?.Dispose(); buffer?.Dispose(); }
         if (!game.Running) _activity.RunOnUiThread(_activity.Finish);
     }
 

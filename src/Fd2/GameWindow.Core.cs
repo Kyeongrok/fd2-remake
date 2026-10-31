@@ -640,10 +640,23 @@ internal sealed partial class GameWindow
         }
     }
 
+    /// <summary>
+    /// 지도 그림 캐시 — 캐릭터가 꿀렁일 때마다 지도 타일을 다시 찍지 않게, 카메라 · 배율 · 판 크기 · 바뀐 칸(열린 상자) 수가 그대로면
+    /// 지난번 그림을 통째로 복사한다(폰이 느리던 까닭 하나, 사용자 요청). 밑그림(물결)이 있는 장면은 매번 그린다.
+    /// </summary>
+    private uint[]? _mapCache;
+    private (Scene?, int, int, int, int, int, int, int, int) _mapCacheKey;
+
     private void DrawMapCpu()
     {
-        Array.Fill(_fb, BgColor);
         var back = _backdrop;
+        var key = (_scene, _camX, _camY, _zoom, _offX, _offY, _fbW, _fbH, _scene.Patched.Count);
+        if (back == null && _mapCache != null && _mapCache.Length == _fb.Length && key.Equals(_mapCacheKey))
+        {
+            Array.Copy(_mapCache, _fb, _fb.Length);
+            return;
+        }
+        Array.Fill(_fb, BgColor);
         if (back != null) DrawBackdrop(back);
         int cell = T * _zoom;
         int x0 = Math.Max(0, (int)Math.Floor(_camX / (double)T)), y0 = Math.Max(0, (int)Math.Floor(_camY / (double)T));
@@ -664,5 +677,9 @@ internal sealed partial class GameWindow
                     }
                 }
             }
+        if (back != null) return;
+        if (_mapCache == null || _mapCache.Length != _fb.Length) _mapCache = new uint[_fb.Length];
+        Array.Copy(_fb, _mapCache, _fb.Length);
+        _mapCacheKey = key;
     }
 }
