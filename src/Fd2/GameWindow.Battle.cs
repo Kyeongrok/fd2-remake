@@ -762,12 +762,31 @@ internal sealed partial class GameWindow
         foreach (int m in CastableSpells(u))
         {
             int spell = m;
-            _menu.Add(($"{SpellNames.Of(spell)}  (MP {_battle.SpellOf(spell)!.Mp})", () => BeginTarget(u, SpellCenters(u, spell), spell, from), default));
+            _menu.Add(($"{SpellNames.Of(spell)}  MP {_battle.SpellOf(spell)!.Mp}{SpellPreview(u, spell)}", () => BeginTarget(u, SpellCenters(u, spell), spell, from), default));
         }
         _targetFrom = from;
         _stage = MenuStage.Spell;
         _menuIndex = 0;
         _bs = BattleState.Menu;
+    }
+
+    /// <summary>
+    /// 마법 메뉴 줄의 예상 — 지금 자리에서 걸 수 있는 사람들에게 줄 피해(회복) 범위, 피해가 없는 마법은 명중 %.
+    /// 닿는 사람이 없으면 「닿는 대상 없음」.
+    /// </summary>
+    private string SpellPreview(Unit u, int spell)
+    {
+        if (_battle.SpellOf(spell) is not { } s) return "";
+        var targets = SpellCenters(u, spell).SelectMany(c => _battle.SpellTargets(u, spell, c)).Distinct().ToList();
+        var amounts = targets.Select(t => _battle.Expected(u, spell, t)).OfType<(int Min, int Max, bool Heal)>().ToList();
+        if (amounts.Count > 0)
+        {
+            int lo = amounts.Min(a => a.Min), hi = amounts.Max(a => a.Max);
+            string what = amounts[0].Heal ? "회복" : "피해";
+            return lo == hi ? $"  {what} {hi}" : $"  {what} {lo}~{hi}";
+        }
+        if (targets.Count == 0) return "  닿는 대상 없음";
+        return s.Hit is > 0 and < 100 ? $"  명중 {s.Hit}%" : "";
     }
 
     /// <summary>칠 · 걸 칸 고르기 — 무기는 상대가 선 칸, 마법은 가운데 칸(spell ≥ 0). 가까운 칸에 커서.</summary>

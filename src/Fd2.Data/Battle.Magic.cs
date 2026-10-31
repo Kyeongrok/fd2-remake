@@ -72,6 +72,40 @@ public sealed partial class Battle
     private int MagicRoll(int a) => a <= 0 ? 0 : 9 * a / 10 + a * Rng.Next(100) / 1000;
 
     /// <summary>
+    /// 그 마법이 그 사람에게 줄 피해(Heal 이면 회복) 범위 — 굴림 없이 <see cref="CastOn"/> 과 같은 식(90 ~ 99.9%). 피해 · 회복이 없는 마법이면 null.
+    /// 마법을 고르는 메뉴에서 예상 피해를 보이는 데 쓴다.
+    /// </summary>
+    public (int Min, int Max, bool Heal)? Expected(Unit caster, int spell, Unit target)
+    {
+        if (SpellOf(spell) is not { } s) return null;
+        static (int, int) Range(int a) => a <= 0 ? (0, 0) : (9 * a / 10, 9 * a / 10 + a * 99 / 1000);
+        switch (spell)
+        {
+            case <= 12 or 32:
+            {
+                if (spell is >= 10 and <= 12 && IsFlyer(target)) return (0, 0, false);
+                int mul = ClassOf(target) is { } c && target.Class > 0 ? c.MagicMul : 10;
+                var (lo, hi) = Range(mul * s.Power / 10);
+                return (Math.Min(lo, target.Hp), Math.Min(hi, target.Hp), false);
+            }
+            case >= 13 and <= 16 or 33:
+            {
+                var (lo, hi) = Range(spell == 33 ? 950 : s.Power);
+                int room = Math.Max(0, target.MaxHp - target.Hp);
+                return (Math.Min(lo, room), Math.Min(hi, room), true);
+            }
+            case 24 or >= 28 and <= 31:
+            {
+                int mult = spell switch { 24 => 15, 28 => 20, 29 => 13, _ => 18 };
+                var (lo, hi) = Range(Math.Max(0, mult * caster.Atk / 10 - target.Def));
+                return (Math.Min(lo, target.Hp), Math.Min(hi, target.Hp), false);
+            }
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>
     /// 마법 하나를 한 사람에게(MP 는 <see cref="PayMp"/> 로 따로) — 마법 번호마다:
     /// 0~12 · 32 공격(명중 굴림, 10~12 는 나는 유닛 빗나감, 피해 = 세기 × 배율 / 10 의 90~99.9%), 9 주술도 같은 길,
     /// 13~16 회복 · 33 풍요정(950), 17~19 올리기 · 34 셋 다(이미 걸렸으면 빗나감, 2~5 차례),
