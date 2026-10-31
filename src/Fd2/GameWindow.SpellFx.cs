@@ -41,6 +41,14 @@ internal sealed partial class GameWindow
         new(28, 30, [0], [0], [0, 8, 24, 16, 8, 0, 24, 16, 0, 8, 24, 16, 8, 0, 24, 16], 8, 1, 1, 34, false, 0, null, 0, 0, 16),
     ];
 
+    /// <summary>마법 속도 배율(모드, 사용자 요청) — 1 이 원작(한 틱 0.055초), 0.5 면 두 배 느리게. 전투 화면 효과 · 쓰는 사람 몸짓 · 지도 위 마법 그림.</summary>
+    private double SpellRate => Math.Clamp(_settings.SpellSpeed, 10, 400) / 100.0;
+
+    /// <summary>모드 창 · 모바일 설정에서 고르는 마법 속도(%).</summary>
+    private static readonly int[] SpellSpeeds = [25, 50, 75, 100, 150, 200];
+
+    private static string SpellSpeedName(int pct) => pct == 100 ? "1배(원작)" : $"{pct / 100.0:0.##}배{(pct < 100 ? " — 느리게" : " — 빠르게")}";
+
     private readonly Dictionary<int, Motion?> _fxMotions = new();
     private SpellFxSpec? _sfx;
     private Motion? _sfxMotion;
@@ -83,7 +91,7 @@ internal sealed partial class GameWindow
     {
         if (_sfxFlash > 0) _sfxFlash -= dt;
         if (_sfx is not { } spec) return;
-        _sfxClock += dt;
+        _sfxClock += dt * SpellRate;
         while (_sfxClock >= FigTick && _sfx != null)
         {
             _sfxClock -= FigTick;

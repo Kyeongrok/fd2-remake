@@ -58,6 +58,9 @@ internal sealed class Settings
 
     /// <summary>PC 전투 왼쪽 아래 사람 정보 창(이름 · 레벨 · HP · 능력치) — 모드에서 켜고 끈다, 기본 끔(사용자 요청).</summary>
     public bool ShowUnitInfo { get; set; }
+
+    /// <summary>마법 속도(%) — 100 이 원작. 모드에서 고른다(사용자 요청).</summary>
+    public int SpellSpeed { get; set; } = 100;
     public bool TouchChests { get; set; }
     public bool TouchGoals { get; set; }
     public bool TouchHelp { get; set; }

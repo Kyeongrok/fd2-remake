@@ -1377,7 +1377,7 @@ internal sealed partial class GameWindow
             // 맞은 뒤 — 모션 끝까지 돌리고 조금 쉬었다 넘어간다
             _strikeTail += dt;
         }
-        _strikeClock += dt;
+        _strikeClock += _strike.Magic ? dt * SpellRate : dt;   // 마법이면 쓰는 사람 몸짓도 마법 속도 배율로
         int frames = _strikeMotion?.Frames.Count ?? 8;
         while (_strikeClock >= FigTick)
         {

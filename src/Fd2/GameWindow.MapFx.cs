@@ -164,7 +164,7 @@ internal sealed partial class GameWindow
     {
         if (DeathFxTick(dt)) return;
         if (_fx == null) return;
-        if ((_fxClock += dt) < FxFrame) return;
+        if ((_fxClock += dt * SpellRate) < FxFrame) return;   // 지도 위 마법 그림도 마법 속도 배율로
         _fxClock -= FxFrame;
         if (++_fxAt < _fxCount) { _fxSound?.Invoke(_fxAt); return; }
         _fx = null;
