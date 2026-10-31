@@ -167,7 +167,12 @@ internal sealed unsafe partial class GameWindow : IDisposable
                 PointerCancel();
                 return IntPtr.Zero;
             case Win32.WM_LBUTTONDOWN:
-                PointerDown(Win32.LowWord(lParam), Win32.HighWord(lParam) - _barH);
+                Win32.SetCapture(hWnd);   // 창 밖으로 끌어도 떼는 것을 받게
+                PointerPress(Win32.LowWord(lParam), Win32.HighWord(lParam) - _barH);
+                return IntPtr.Zero;
+            case Win32.WM_LBUTTONUP:
+                Win32.ReleaseCapture();
+                PointerRelease(Win32.LowWord(lParam), Win32.HighWord(lParam) - _barH);
                 return IntPtr.Zero;
         }
         return Win32.DefWindowProcW(hWnd, msg, wParam, lParam);

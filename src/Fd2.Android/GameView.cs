@@ -161,7 +161,7 @@ public sealed class GameView : SurfaceView, ISurfaceHolderCallback
                 _downAt = Clock.ElapsedMilliseconds;
                 (_downX, _downY) = (e.GetX(), e.GetY());
                 _longDone = false;
-                _input.Enqueue(g => g.PointerMove(x, y));
+                _input.Enqueue(g => { g.PointerMove(x, y); g.PointerPress(x, y, defer: true); });   // 끌면 지도가 움직인다
                 return true;
             case MotionEventActions.Move:
                 if (Math.Abs(e.GetX() - _downX) > 24 || Math.Abs(e.GetY() - _downY) > 24) _downAt = -1;   // 움직이면 길게 누르기가 아니다
@@ -170,7 +170,8 @@ public sealed class GameView : SurfaceView, ISurfaceHolderCallback
             case MotionEventActions.Up:
                 bool tap = !_longDone;
                 _downAt = -1;
-                if (tap) _input.Enqueue(g => g.PointerDown(x, y));
+                if (tap) _input.Enqueue(g => g.PointerRelease(x, y));
+                else _input.Enqueue(g => g.PointerAbort());
                 return true;
         }
         return base.OnTouchEvent(e);

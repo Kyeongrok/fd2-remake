@@ -144,6 +144,7 @@ internal sealed partial class GameWindow
         if ((x, y) == (_mouseX, _mouseY)) return;
         (_mouseX, _mouseY) = (x, y);
         _mouseMoved = true;
+        if (DragMap(x, y)) return;
         if (_versionsOpen) VersionsHover(_mouseX, _mouseY);
         else if (_screen == Screen.Title && !_keysOpen) TitleHover(_mouseX, _mouseY);
         MouseToCursor();
@@ -162,6 +163,54 @@ internal sealed partial class GameWindow
         if (InBattle && HudToggleClick(x, y)) return;
         MouseToCursor();
         OnClick((int)Math.Floor((_mouseX - _offX) / (double)_zoom), (int)Math.Floor((_mouseY - _offY) / (double)_zoom));
+    }
+
+    // ── 지도 끌기(창세기전3 처럼) — 우리 차례 전투에서 누른 채 끌면 지도가 따라 움직이고, 안 끌고 떼면 그 자리를 누른 것 ──
+
+    private (int X, int Y)? _press;
+    private (int X, int Y) _pressCam;
+    private bool _dragging;
+
+    /// <summary>이 몇 점 넘게 움직여야 끌기 — 손떨림 · 살짝 미끄러진 누르기는 누르기로.</summary>
+    private const int DragSlop = 8;
+
+    /// <summary>지도를 끌 수 있는 때 — 전투 우리 차례에 대사 · 컷인 · 메뉴 창이 없을 때.</summary>
+    private bool CanDragMap => _screen == Screen.Game && InBattle && !_enemyPhase && !Talking && !_versionsOpen && !_keysOpen && !_helpOpen
+                               && _bs is (BattleState.Select or BattleState.Target)
+                               && (_scene.Width * T > _boardW || _scene.Height * T > _boardH);
+
+    /// <summary>
+    /// 왼쪽 단추(손가락)를 눌렀다 — 지도를 끌 수 있으면 뗄 때까지 기다리고, 아니면 바로 누르기.
+    /// defer 면 늘 뗄 때 누른다(안드로이드 — 손가락은 뗄 때 누르기이고 길게 누르기는 물리기다).
+    /// </summary>
+    internal void PointerPress(int x, int y, bool defer = false)
+    {
+        if (!defer && (!CanDragMap || InBattle && HudHit(x, y))) { PointerDown(x, y); return; }
+        (_press, _pressCam, _dragging) = ((x, y), (_camX, _camY), false);
+    }
+
+    /// <summary>누르기를 버린다(안드로이드 길게 누르기로 물렸을 때).</summary>
+    internal void PointerAbort() => (_press, _dragging) = (null, false);
+
+    /// <summary>뗐다 — 끌지 않았으면 그 자리를 누른 것으로.</summary>
+    internal void PointerRelease(int x, int y)
+    {
+        if (_press == null) return;
+        bool dragged = _dragging;
+        (_press, _dragging) = (null, false);
+        if (!dragged) PointerDown(x, y);
+    }
+
+    /// <summary>누른 채 움직이면 지도를 민다. 끄는 중이면 true(커서는 따라가지 않는다).</summary>
+    private bool DragMap(int x, int y)
+    {
+        if (_press is not { } p || !CanDragMap) return false;
+        if (!_dragging && Math.Abs(x - p.X) + Math.Abs(y - p.Y) < DragSlop) return false;
+        _dragging = true;
+        int mapW = _scene.Width * T, mapH = _scene.Height * T;
+        if (mapW > _boardW) _camX = Math.Clamp(_pressCam.X - (x - p.X) / Math.Max(1, _zoom), 0, mapW - _boardW);
+        if (mapH > _boardH) _camY = Math.Clamp(_pressCam.Y - (y - p.Y) / Math.Max(1, _zoom), 0, mapH - _boardH);
+        return true;
     }
 
     /// <summary>오른쪽 단추(안드로이드는 길게 누르기) — 전투에서 한 단계 물리기.</summary>

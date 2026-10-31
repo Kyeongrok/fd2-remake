@@ -28,6 +28,10 @@ internal sealed partial class GameWindow
         _hudIconBottom = y + h + 6;
     }
 
+    /// <summary>그 자리가 오른쪽 위 아이콘인가 — 아이콘 누르기는 지도 끌기로 받지 않는다.</summary>
+    private bool HudHit(int mx, int my) =>
+        new[] { _miniIcon, _chestIcon }.Any(r => r.W > 0 && mx >= r.X - 4 && my >= r.Y - 4 && mx < r.X + r.W + 4 && my < r.Y + r.H + 4);
+
     /// <summary>아이콘을 눌렀으면 그 창을 접고 펴고 true.</summary>
     private bool HudToggleClick(int mx, int my)
     {
