@@ -128,7 +128,7 @@ internal sealed partial class GameWindow
         _stage = MenuStage.Mobile;
         _mobilePage = page;
         _menu.Clear();
-        _menuGlyphs.Clear();
+        _menuGlyphs.Clear(); _menuIcons.Clear();
         void Close() { _menu.Clear(); _bs = BattleState.Select; }
         void Toggle(string label, bool on, Action flip) =>
             _menu.Add(($"{label}  [{(on ? "보임" : "숨김")}]", () => { flip(); _settings.Save(); OpenTouchMenu(_menuIndex, 1); }, default));

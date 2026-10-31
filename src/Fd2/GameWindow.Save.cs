@@ -192,7 +192,7 @@ internal sealed partial class GameWindow
     {
         _stage = MenuStage.Slots;
         _menu.Clear();
-        _menuGlyphs.Clear();
+        _menuGlyphs.Clear(); _menuIcons.Clear();
         if (save)
         {
             for (int k = 0; k < BattleSlots; k++)

@@ -21,14 +21,14 @@ internal sealed partial class GameWindow
     {
         _stage = MenuStage.Item;
         _menu.Clear();
-        _menuGlyphs.Clear();
+        _menuGlyphs.Clear(); _menuIcons.Clear();
         for (int i = 0; i < u.Bag.Count; i++)
         {
             int slot = i;
             _menuGlyphs[_menu.Count] = 181 + u.Bag[i].Item;
             _menu.Add((u.Bag[i].Equipped ? "(장비) " : "", () => OpenItemActions(u, slot, from), default));
         }
-        _menu.Add(("돌아가기", () => { _menuGlyphs.Clear(); BackTo(from); }, default));
+        _menu.Add(("돌아가기", () => { _menuGlyphs.Clear(); _menuIcons.Clear(); BackTo(from); }, default));
         _menuIndex = 0;
         _bs = BattleState.Menu;
     }
@@ -39,7 +39,7 @@ internal sealed partial class GameWindow
         var (id, equipped) = u.Bag[slot];
         var it = _tables.Items[id];
         _menu.Clear();
-        _menuGlyphs.Clear();
+        _menuGlyphs.Clear(); _menuIcons.Clear();
         _menuGlyphs[0] = 181 + id;
         _menu.Add(("", () => { }, default));
         if (UsableItem(it) && ItemCenters(u, it).Count > 0) _menu.Add(("쓰기", () => BeginItemTarget(u, slot, from), default));
@@ -65,7 +65,7 @@ internal sealed partial class GameWindow
         _actor = u;
         _stage = MenuStage.ItemCross;
         _menu.Clear();
-        _menuGlyphs.Clear();
+        _menuGlyphs.Clear(); _menuIcons.Clear();
         _attackTiles.Clear();
         _sysButtons = [8, 9, 10, 11];
         _menu.Add(("사용", () => OpenItemPick(u, ItemMode.Use), default));
@@ -127,7 +127,7 @@ internal sealed partial class GameWindow
         _itemMode = mode;
         _stage = MenuStage.ItemPick;
         _menu.Clear();
-        _menuGlyphs.Clear();
+        _menuGlyphs.Clear(); _menuIcons.Clear();
         for (int i = 0; i < u.Bag.Count; i++)
         {
             int slot = i;
@@ -341,7 +341,7 @@ internal sealed partial class GameWindow
     private void BeginItemTarget(Unit u, int slot, MenuStage from)
     {
         if (_tables == null) return;
-        _menuGlyphs.Clear();
+        _menuGlyphs.Clear(); _menuIcons.Clear();
         var cells = ItemCenters(u, _tables.Items[u.Bag[slot].Item]);
         BeginTarget(u, cells, -1, from);
         _pendingItem = slot;

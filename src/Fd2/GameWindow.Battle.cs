@@ -304,7 +304,12 @@ internal sealed partial class GameWindow
     private bool CheckOver()
     {
         if (_bs == BattleState.Over || _victoryRunning) return true;
-        switch (_forcedOutcome != 0 ? _forcedOutcome : _battle.Judge())
+        int judge = _forcedOutcome != 0 ? _forcedOutcome : _battle.Judge();
+        // 대본 없이(GitHub 빌드 — 사건 대본은 저장소에 없다) 등장 차례로 적을 내보낼 때, 아직 나올 적 무리가 남았으면 이긴 것이 아니다
+        // (2장처럼 적이 1턴 뒤에 나오는 판이 시작하자마자 「승리」 했다, 사용자 제보)
+        // 바로 다음 턴에 나올 무리만 본다 — 255 는 나오지 않는 줄, 먼 차례(1장 10 · 11 처럼 원작에선 사건으로 나오는 무리)는 기다리지 않는다
+        if (judge == 2 && _forcedOutcome == 0 && !UseEvents && _scene.Roster.Any(e => e.Type == 0 && e.Phase > Turn && e.Phase <= Turn + 1 && e.Phase < 255)) judge = 0;
+        switch (judge)
         {
             case 1:
                 _bs = BattleState.Over;
@@ -655,7 +660,7 @@ internal sealed partial class GameWindow
                 OpenItemCross(picker);
                 break;
             case BattleState.Menu when _stage is MenuStage.Item or MenuStage.ItemCross:   // 가방 — 걸은 뒤 메뉴로
-                _menuGlyphs.Clear();
+                _menuGlyphs.Clear(); _menuIcons.Clear();
                 BackTo(_itemFrom);
                 break;
             case BattleState.Menu when _stage == MenuStage.Town:   // 마을 — 한 단계 앞 메뉴로
@@ -767,7 +772,7 @@ internal sealed partial class GameWindow
     {
         _stage = MenuStage.Ask;
         _menu.Clear();
-        _menuGlyphs.Clear();
+        _menuGlyphs.Clear(); _menuIcons.Clear();
         _menu.Add(("가방이 가득 — 바꿀 물건을 고르세요", () => { }, default));
         _menuGlyphs[0] = 181 + _scene.Chests[k].Value;
         for (int i = 0; i < u.Bag.Count; i++)
@@ -776,12 +781,12 @@ internal sealed partial class GameWindow
             _menuGlyphs[_menu.Count] = 181 + u.Bag[i].Item;
             _menu.Add((u.Bag[i].Equipped ? "(장비) " : "", () =>
             {
-                _menuGlyphs.Clear();
+                _menuGlyphs.Clear(); _menuIcons.Clear();
                 ClearSelection();
                 ShowNotices(_battle.SwapChest(u, k, slot), AfterPlayerAction);
             }, default));
         }
-        _menu.Add(("바꾸지 않는다", () => { _menuGlyphs.Clear(); ClearSelection(); AfterPlayerAction(); }, default));
+        _menu.Add(("바꾸지 않는다", () => { _menuGlyphs.Clear(); _menuIcons.Clear(); ClearSelection(); AfterPlayerAction(); }, default));
         _menuIndex = 1;
         _bs = BattleState.Menu;
     }
@@ -953,7 +958,7 @@ internal sealed partial class GameWindow
         PlaySfx(Sound.UiBank, Sound.Menu);   // 메뉴가 뜰 때 원작처럼 소리
         _stage = MenuStage.System;
         _menu.Clear();
-        _menuGlyphs.Clear();
+        _menuGlyphs.Clear(); _menuIcons.Clear();
         _sysAt = _cursor;   // 십자 단추는 연 자리에 고정
         _sysButtons = [7, 5, 6, 4];
         _menu.Add(("기록", OpenRecordMenu, default));
@@ -1001,7 +1006,7 @@ internal sealed partial class GameWindow
     {
         _stage = MenuStage.Ask;
         _menu.Clear();
-        _menuGlyphs.Clear();
+        _menuGlyphs.Clear(); _menuIcons.Clear();
         (_askLine, _askFace, _askText) = (line, face, "");
         _askOpen = true;
         _menu.Add(("예", () => { _askOpen = false; _menu.Clear(); yes(); }, default));
@@ -1977,7 +1982,7 @@ internal sealed partial class GameWindow
         if (CrossMenu) { DrawCrossMenu(fs); return; }
         if (_townButtons && InTownView && !_townTop) { DrawTownButtons(fs); return; }   // 건물 안 — 원작 네 단추
         var (sx, sy) = _actor is { } u ? TileScreen(u.X, u.Y) : TileScreen(_cursor.X, _cursor.Y);
-        if (InTownView) (sx, sy) = (_clientW, 8);   // 마을 그림 위 — 오른쪽 위에
+        if (InTownView) (sx, sy) = (_clientW, 8);   // 마을 그림 위 — 오른쪽 위에(건물 안 목록은 아래에서 가운데로)
         int cell = T * _zoom;
         if (TouchUi) fs = _stage == MenuStage.Mobile ? fs * 2 : fs * 4 / 3;   // 폰은 메뉴 글을 더 크게(모바일 메뉴는 두 배) — 넘치면 줄이지 않고 끌어 넘긴다(사용자 요청)
         var imgs = _menu.Select((m, i) => WithGlyphs(Text.Render(m.Label, fs, 0xFFFFFFFF), i, fs)).ToList();
@@ -2014,6 +2019,7 @@ internal sealed partial class GameWindow
         int shown = Math.Min(fit, _menu.Count);
         int x = Math.Min(sx + cell + 6, _clientW - w - 4), y = Math.Max(4, Math.Min(sy, _clientH - rowH * shown - 4));
         if (_stage == MenuStage.Mobile) { w = Math.Max(w, _clientW / 3); (x, y) = ((_clientW - w) / 2, Math.Max(4, (_clientH - rowH * shown) / 2)); }   // 모바일 메뉴는 화면 가운데에 넓게
+        else if (InTownView && !_townTop) { w = Math.Min(_clientW - 8, Math.Max(w, _clientW / 3)); (x, y) = ((_clientW - w) / 2, Math.Max(4, (_clientH - rowH * shown) / 2)); }   // 건물 안 목록(사기 · 팔기 …) — 화면 가운데에 크게
         _menuBox = (x, y, w, rowH * shown);
         for (int i = 0; i < _menu.Count; i++)
         {
@@ -2085,15 +2091,52 @@ internal sealed partial class GameWindow
         return true;
     }
 
-    /// <summary>메뉴 줄 i 에 원본 글꼴 이름이 붙어 있으면 글 뒤에 이어 붙인다.</summary>
+    /// <summary>메뉴 줄 i 에 원본 글꼴 이름이 붙어 있으면 글 뒤에 이어 붙인다. 물건 그림(<see cref="_menuIcons"/>)이 있으면 그림 · 이름 · 글 차례로.</summary>
     private Text.Image WithGlyphs(Text.Image text, int i, int fs)
     {
         if (_stage is not (MenuStage.Ask or MenuStage.Deploy or MenuStage.Town or MenuStage.Item) || !_menuGlyphs.TryGetValue(i, out int line) || NameImage(line, Math.Max(1, fs / Font16.Size), 0xFFFFE070) is not { } g) return text;
-        int w = text.W + g.W, h = Math.Max(text.H, g.H);
+        var parts = new List<Text.Image>();
+        if (_menuIcons.TryGetValue(i, out int icon) && IconImage(icon, Math.Max(text.H, g.H)) is { } ic) { parts.Add(ic); parts.Add(g); parts.Add(text); }
+        else { parts.Add(text); parts.Add(g); }
+        int w = parts.Sum(p => p.W), h = parts.Max(p => p.H), x = 0;
         var px = new uint[w * h];
-        for (int r = 0; r < text.H; r++) Array.Copy(text.Px, r * text.W, px, (r + (h - text.H) / 2) * w, text.W);
-        for (int r = 0; r < g.H; r++) Array.Copy(g.Px, r * g.W, px, (r + (h - g.H) / 2) * w + text.W, g.W);
+        foreach (var p in parts)
+        {
+            for (int r = 0; r < p.H; r++) Array.Copy(p.Px, r * p.W, px, (r + (h - p.H) / 2) * w + x, p.W);
+            x += p.W;
+        }
         return new Text.Image(px, w, h);
+    }
+
+    /// <summary>메뉴 줄 앞 물건 그림 — 원작 단추 묶음의 칼(0) · 갑옷(10) · 주머니(2), 아이템 창과 같다.</summary>
+    private readonly Dictionary<int, int> _menuIcons = new();
+
+    private int ItemIcon(int id)
+    {
+        if (_tables == null || id >= _tables.Items.Count) return 2;
+        var it = _tables.Items[id];
+        return id < 128 && it.Kind < 32 && it.Atk > 0 ? 0 : it.Kind < 32 && id >= 128 ? 10 : 2;
+    }
+
+    private readonly Dictionary<(int, int), Text.Image?> _iconImages = new();
+
+    /// <summary>단추 그림을 줄 높이 h 에 맞춰(정수 배) 글 그림 꼴로 — 오른쪽에 여백 조금.</summary>
+    private Text.Image? IconImage(int icon, int h)
+    {
+        if (_iconImages.TryGetValue((icon, h), out var got)) return got;
+        if (!_buttonsTried)
+        {
+            _buttonsTried = true;
+            try { _buttons = new Buttons(_dir, _pal); }
+            catch (Exception e) when (e is IOException or IndexOutOfRangeException or ArgumentOutOfRangeException) { _buttons = null; }
+        }
+        if (_buttons is not { Count: > 3 * 10 + 2 } bank) return _iconImages[(icon, h)] = null;
+        var (src, w, sh) = bank.Frame(icon, red: false, 0);
+        int s = Math.Max(1, h / Math.Max(1, sh)), gap = Math.Max(4, h / 4), W = w * s + gap;
+        var px = new uint[W * sh * s];
+        for (int y = 0; y < sh * s; y++)
+            for (int x = 0; x < w * s; x++) px[y * W + x] = src[(y / s) * w + x / s];
+        return _iconImages[(icon, h)] = new Text.Image(px, W, sh * s);
     }
 
     /// <summary>

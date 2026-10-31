@@ -35,9 +35,10 @@ internal sealed partial class GameWindow
         _stage = MenuStage.Town;
         _townTop = false;
         _menu.Clear();
-        _menuGlyphs.Clear();
+        _menuGlyphs.Clear(); _menuIcons.Clear();
         _townBack = back;
         _townButtons = false;
+        _menuIcons.Clear();
         if (_campaign is { } c) _battle.Gold = c.Gold;
     }
 
@@ -59,7 +60,7 @@ internal sealed partial class GameWindow
 
     private void TownBanner(string text, Action after, int name = -1)
     {
-        _menuGlyphs.Clear();
+        _menuGlyphs.Clear(); _menuIcons.Clear();
         ShowBanner(text, after, 1.0);
         _bannerName = name;
     }
@@ -88,7 +89,7 @@ internal sealed partial class GameWindow
 
     private void LeaveTown()
     {
-        _menuGlyphs.Clear();
+        _menuGlyphs.Clear(); _menuIcons.Clear();
         _townBack = null;
         _townTop = _townSecret = false;
         _shopAt = 1;
@@ -144,15 +145,16 @@ internal sealed partial class GameWindow
     {
         if (_town is not { } t) return;
         BeginTownMenu(() => OpenShopMenu(shop));
-        _menu.Add((GoldLine("살 물건"), () => { }, default));
+        // 물건 목록만(사용자 요청 — 폰에서 머리줄 · 말 창이 끼어 불편했다), 줄 앞에 무기 · 옷 · 도구 그림
         foreach (int item in goods)
         {
             int line = _menu.Count;
             _menuGlyphs[line] = 181 + item;
-            _menu.Add(($"{t.BuyPrice(item),6}원  ", () => OpenBuyWho(shop, goods, line, item, 0), default));
+            _menuIcons[line] = ItemIcon(item);
+            _menu.Add(($"  {t.BuyPrice(item)}원", () => OpenBuyWho(shop, goods, line, item, 0), default));
         }
         _menu.Add(("돌아가기", () => OpenShopMenu(shop), default));
-        EndTownMenu(row <= 0 ? 1 : row);
+        EndTownMenu(Math.Max(0, row));
     }
 
     /// <summary>받을 사람 고르기 — 장비면 장비할 수 있는 사람만(없으면 원작 「현재대원중, 장비가능자 없음」).</summary>
@@ -242,6 +244,7 @@ internal sealed partial class GameWindow
         for (int k = 0; k < bag.Count; k++)
         {
             int slot = k, item = bag[k].Item;
+            _menuIcons[_menu.Count] = ItemIcon(item);
             _menuGlyphs[_menu.Count] = 181 + item;
             _menu.Add(($"{t.SellPrice(item),6}원 {(bag[k].Equipped ? "(장비) " : "")} ", () =>
             {
@@ -308,6 +311,7 @@ internal sealed partial class GameWindow
         for (int k = 0; k < bag.Count; k++)
         {
             int slot = k;
+            _menuIcons[_menu.Count] = ItemIcon(bag[k].Item);
             _menuGlyphs[_menu.Count] = 181 + bag[k].Item;
             _menu.Add(($"{(bag[k].Equipped ? "(장비) " : "")} ", () => OpenGiveTo(page, member, slot, 0), default));
         }
@@ -367,7 +371,7 @@ internal sealed partial class GameWindow
                     new($"공격 {u.Atk}  방어 {u.Def}  명중 {u.Hit}  회피 {u.Evade}"),
                 };
                 foreach (var (item, on) in u.Bag) notes.Add(new Notice(on ? " (장비)" : "", 181 + item));
-                _menuGlyphs.Clear();
+                _menuGlyphs.Clear(); _menuIcons.Clear();
                 ShowNotices(notes, () => OpenTavernView(page));
             }, default));
         }
@@ -520,7 +524,7 @@ internal sealed partial class GameWindow
             if (move > 0) parts.Add($"이동력 +{move}");
             var notes = new List<Notice> { new(" 전직했습니다! Lv 1", name) };
             if (parts.Count > 0) notes.Add(new Notice(string.Join("  ", parts)));
-            _menuGlyphs.Clear();
+            _menuGlyphs.Clear(); _menuIcons.Clear();
             ShowNotices(notes, () => OpenClassChange(0));
         }, default));
         _menu.Add(("그만둔다", Back, default));

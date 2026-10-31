@@ -56,6 +56,12 @@ internal sealed partial class GameWindow
         foreach (var r in ready.Where(r => HeroRecord.Id(r) == 0 || required.Contains(HeroRecord.Id(r)))) _deploy.Add(HeroRecord.Id(r));
         foreach (var r in ready)
             if (_deploy.Count < slots) _deploy.Add(HeroRecord.Id(r));
+        // 원작(sub_2670E 출구)은 동료가 16명(28장부터 20명)을 넘을 때만 편성 화면(sub_2AF28)을 띄운다 — 그 밖은 위 차례로 저절로 출전(사용자 지적)
+        if (ready.Count <= (c.NextScene > 26 ? 20 : 16))
+        {
+            StartBattle(c.NextScene);
+            return;
+        }
         OpenDeployMenu(0);
     }
 
@@ -66,10 +72,10 @@ internal sealed partial class GameWindow
         var required = RequiredFor(c.NextScene, c);
         _stage = MenuStage.Deploy;
         _menu.Clear();
-        _menuGlyphs.Clear();
+        _menuGlyphs.Clear(); _menuIcons.Clear();
         _menu.Add(($"출전 — {_deploy.Count}/{slots}명으로 싸움 시작", () =>
         {
-            _menuGlyphs.Clear();
+            _menuGlyphs.Clear(); _menuIcons.Clear();
             StartBattle(c.NextScene);
         }, default));
         foreach (var r in c.Ready)

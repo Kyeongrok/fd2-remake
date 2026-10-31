@@ -224,6 +224,7 @@ internal sealed partial class GameWindow
     /// <summary>말 창(원작 sub_1956B · sub_168B6) — (5, 112) 에 304 × 80 창, 글은 (12, 119) 부터(sub_15F84). 네 단추도 이 창 오른쪽 아래에 앉는다.</summary>
     private void DrawKeeperTalk()
     {
+        if (!_townButtons) return;   // 목록(사기 · 팔기 …)이 떠 있으면 말 창은 숨긴다 — 목록만 보이게(사용자 요청)
         var (ix, iy, si) = _insideAt;
         int bx = ix + (int)(5 * si), by = iy + (int)(112 * si), bw = (int)(304 * si), bh = (int)(80 * si), line = Math.Max(1, (int)si);
         FillRect(bx, by, bw, bh, 0xE028458A);
