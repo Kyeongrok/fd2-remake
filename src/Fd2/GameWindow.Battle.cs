@@ -1974,7 +1974,10 @@ internal sealed partial class GameWindow
             }
         }
         int pad = TouchUi ? fs / 2 : 12;
-        int w = imgs.Max(i => i.W) + 32, rowH = imgs.Max(i => i.H) + pad;
+        // ▶ 자리는 글 크기만큼 — 폰은 글이 커서 예전 16점 자리로는 ▶ 가 첫 글자를 덮었다(사용자 요청)
+        var arrow = Text.Render("▶", fs, 0xFFFFE070);
+        int textX = arrow.W + 8;
+        int w = imgs.Max(i => i.W) + textX + 16, rowH = imgs.Max(i => i.H) + pad;
         // 보이는 줄 수 — 다 안 들어가면 넘긴다(고른 줄이 보이게 따라가고, 끌거나 휠로 넘기면 그 자리에)
         int fit = Math.Max(1, (_clientH - 8) / rowH);
         (_menuRowH, _menuFit) = (rowH, fit);
@@ -2002,8 +2005,8 @@ internal sealed partial class GameWindow
             if (_mouseX >= rect.x && _mouseY >= rect.Item2 && _mouseX < x + w && _mouseY < rect.Item2 + rowH && _mouseMoved && !_menuDragging) _menuIndex = i;
             FillRect(rect.x, rect.Item2, w, rowH - 2, i == _menuIndex ? 0xE0405090u : 0xD0202030u);
             int ty = rect.Item2 + (rowH - 2 - imgs[i].H) / 2;
-            if (i == _menuIndex) DrawText(Text.Render("▶", fs, 0xFFFFE070), x + 2, ty);
-            DrawText(imgs[i], x + 16, ty);
+            if (i == _menuIndex) DrawText(arrow, x + 4, ty);
+            DrawText(imgs[i], x + textX, ty);
             _menu[i] = (_menu[i].Label, _menu[i].Do, rect);
         }
         if (_menu.Count > shown)
@@ -2150,7 +2153,7 @@ internal sealed partial class GameWindow
             BlitFrame(back, Motion.ScreenWidth, back.Length / Motion.ScreenWidth, bx, by + 50 * s, s, false, 0, 0, clip);
         bool heal = _strikeFriendly;
         bool hit = _strikeDamage >= 0;
-        bool ranged = magic || Dist(a, d) >= 2;
+        bool ranged = magic;   // 무기 공격은 떨어져 쳐도(창 · 활) 두 사람을 한 화면에 — 거리 2 를 따로 나눴더니 맞는 쪽이 안 보였다(사용자 요청)
         bool showAttacker = !ranged || !hit || a == d;
         bool showDefender = (!ranged || hit) && a != d || a == d && hit;
 

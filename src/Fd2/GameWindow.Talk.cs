@@ -189,7 +189,9 @@ internal sealed partial class GameWindow
                 textLines = Wrap(page.Text, textSize, boxW - faceW - 24 * 3);
                 boxH = Math.Max(boxH, textLines.Count * textLineH + textSize * 2 + 50);
             }
-            if (boxH <= _clientH - 32 && boxW - faceW - 72 >= glyph * 7) break;
+            // PC 는 창이 화면 높이의 2/5 를 넘지 않게 — 큰 창에서 배율대로 키우면 지도를 반 넘게 가렸다(사용자 요청)
+            int maxH = TouchUi ? _clientH - 32 : Math.Max(160, _clientH * 2 / 5);
+            if (boxH <= maxH && boxW - faceW - 72 >= glyph * 7) break;
         }
         g = Math.Max(1, g);
 
