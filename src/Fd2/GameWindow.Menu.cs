@@ -5,7 +5,7 @@ using Fd2.Native;
 namespace Fd2;
 
 /// <summary>
-/// 창 위 메뉴 막대 — 장면 · 설정(해상도 · 배율 · 전체화면) · 도구(편집기).
+/// 메뉴 — 게임 · 설정(해상도 · 배율 · 전체화면) · 모드 · 도구(편집기). 제목 줄 햄버거가 내린다(GameWindow.TitleBar.cs).
 /// </summary>
 /// <remarks>
 /// 해상도는 <b>창 안쪽 크기</b>, 배율은 <b>확대 그대로</b>다. 보이는 판 = 창 ÷ 배율이라
@@ -26,12 +26,13 @@ internal sealed partial class GameWindow
     private static readonly int[] ZoomChoices = [0, 1, 2, 3, 4, 5, 6];
 
 
+    /// <summary>햄버거가 내리는 메뉴 — 창에 막대로 달지 않고 팝업으로 띄운다.</summary>
     private IntPtr _menuBar;
 
 
     private IntPtr CreateMenuBar()
     {
-        IntPtr bar = Win32.CreateMenu();
+        IntPtr bar = Win32.CreatePopupMenu();
 
         IntPtr game = Win32.CreatePopupMenu();
         Win32.AppendMenuW(game, Win32.MF_STRING, MenuScenePrev, "이전 장면(&P)\tPgUp");
@@ -163,47 +164,51 @@ internal sealed partial class GameWindow
             for (int i = 0; i < _sceneCount; i++) check(MenuSceneBase + i, i == _scene.Index);
     }
 
-    /// <summary>창 꼴을 설정대로 — 전체화면이면 테두리 · 메뉴 없이 모니터 크기, 아니면 해상도만큼의 안쪽을 가진 창.</summary>
+    /// <summary>
+    /// 창 꼴을 설정대로 — 전체화면이면 테두리 · 제목 줄 없이 모니터 크기, 아니면 제목 줄 밑에 해상도만큼의 판을 가진 창.
+    /// 창은 캡션 · 테두리를 그리지 않으므로(WM_NCCALCSIZE) 창 크기 = 안쪽 크기 = 제목 줄 + 판.
+    /// </summary>
     private void ApplyWindow()
     {
         if (_hwnd == IntPtr.Zero) return;
+        if (Win32.IsZoomed(_hwnd)) Win32.ShowWindow(_hwnd, Win32.SW_RESTORE);
+        UpdateBarMetrics();
         if (_settings.Fullscreen && !Offscreen)
         {
-            Win32.SetMenu(_hwnd, IntPtr.Zero);
             Win32.SetWindowLongPtrW(_hwnd, Win32.GWL_STYLE, Win32.WS_POPUP | Win32.WS_VISIBLE);
             Win32.SetWindowPos(_hwnd, IntPtr.Zero, 0, 0,
                                Win32.GetSystemMetrics(Win32.SM_CXSCREEN), Win32.GetSystemMetrics(Win32.SM_CYSCREEN),
                                Win32.SWP_NOZORDER | Win32.SWP_FRAMECHANGED);
-            return;
         }
-
-        // 모니터 작업 영역보다 크면 들어가는 데까지만 — 제목 표시줄 · 메뉴 · 테두리 몫을 남긴다.
-        int w = _settings.ViewW, h = _settings.ViewH;
-        var work = new Win32.Rect();
-        if (Win32.SystemParametersInfoW(Win32.SPI_GETWORKAREA, 0, ref work, 0))
+        else
         {
-            w = Math.Min(w, work.Width - 32);
-            h = Math.Min(h, work.Height - 100);
+            // 모니터 작업 영역보다 크면 들어가는 데까지만 — 제목 줄 몫을 남긴다.
+            int w = _settings.ViewW, h = _settings.ViewH;
+            var work = new Win32.Rect();
+            if (Win32.SystemParametersInfoW(Win32.SPI_GETWORKAREA, 0, ref work, 0) && !Offscreen)
+            {
+                w = Math.Min(w, work.Width);
+                h = Math.Min(h, work.Height - _barH);
+            }
+            h += _barH;
+            Win32.SetWindowLongPtrW(_hwnd, Win32.GWL_STYLE, Win32.WS_OWNTITLE | Win32.WS_VISIBLE);
+            Win32.SetWindowPos(_hwnd, IntPtr.Zero, Offscreen ? -8000 : Math.Max(work.Left, work.Left + (work.Width - w) / 2),
+                               Offscreen ? 0 : Math.Max(work.Top, work.Top + (work.Height - h) / 2),
+                               w, h, Win32.SWP_NOZORDER | Win32.SWP_FRAMECHANGED | (Offscreen ? Win32.SWP_NOACTIVATE : 0));
         }
-        var rect = new Win32.Rect { Left = 0, Top = 0, Right = w, Bottom = h };
-        Win32.AdjustWindowRect(ref rect, Win32.WS_OVERLAPPEDWINDOW, true);
-        Win32.SetMenu(_hwnd, _menuBar);
-        Win32.SetWindowLongPtrW(_hwnd, Win32.GWL_STYLE, Win32.WS_OVERLAPPEDWINDOW | Win32.WS_VISIBLE);
-        if (Offscreen) { w = _settings.ViewW; h = _settings.ViewH; rect = new Win32.Rect { Right = w, Bottom = h }; Win32.AdjustWindowRect(ref rect, Win32.WS_OVERLAPPEDWINDOW, true); }
-        Win32.SetWindowPos(_hwnd, IntPtr.Zero, Offscreen ? -8000 : Math.Max(work.Left, work.Left + (work.Width - rect.Width) / 2),
-                           Offscreen ? 0 : Math.Max(work.Top, work.Top + (work.Height - rect.Height) / 2),
-                           rect.Width, rect.Height, Win32.SWP_NOZORDER | Win32.SWP_FRAMECHANGED | (Offscreen ? Win32.SWP_NOACTIVATE : 0));
+        // 크기가 그대로여도 제목 줄이 생기거나 없어졌으면 판을 다시 잡는다
+        if (Win32.GetClientRect(_hwnd, out var client)) Resize(client.Width, client.Height);
     }
 
     private string _titleStatus = "";
 
-    /// <summary>고해상도를 만드는 동안 제목줄 끝에 지금 상태를 붙인다(바뀔 때만 고친다).</summary>
+    /// <summary>고해상도를 만드는 동안 제목 끝에 지금 상태를 붙인다(바뀔 때만 고친다).</summary>
     private void UpdateTitleStatus()
     {
         string st = _hires.Enabled ? _hires.Status : "";
-        if (st == _titleStatus || _scene == null) return;
+        if (st == _titleStatus) return;
         _titleStatus = st;
-        Win32.SetWindowTextW(_hwnd, $"용의기사2 — 장면 {_scene.Index + 1}/{_sceneCount}" + (st.Length > 0 ? $"  · {st}" : "  (F11 전체화면)"));
+        SetCaption(st.Length > 0 ? $"용의기사2  · {st}" : "용의기사2");
     }
 
     /// <summary>

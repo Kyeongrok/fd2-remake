@@ -9,6 +9,12 @@ internal static partial class Win32
     public const int WS_OVERLAPPEDWINDOW = 0x00CF0000;
     public const int WS_VISIBLE = 0x10000000;
     public const int WS_POPUP = unchecked((int)0x80000000);
+    public const int WS_THICKFRAME = 0x00040000, WS_MINIMIZEBOX = 0x00020000, WS_MAXIMIZEBOX = 0x00010000, WS_SYSMENU = 0x00080000;
+    /// <summary>제목 줄을 우리가 그리는 창 — 테두리(크기 바꾸기) · 작업 표시줄 내리기 · 최대화 · 시스템 메뉴는 남기고 캡션만 뺀다.</summary>
+    public const int WS_OWNTITLE = WS_POPUP | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU;
+    public const int SW_MAXIMIZE = 3, SW_MINIMIZE = 6, SW_RESTORE = 9;
+    public const int HTCLIENT = 1, HTCAPTION = 2, HTLEFT = 10, HTRIGHT = 11, HTTOP = 12, HTTOPLEFT = 13, HTTOPRIGHT = 14,
+                     HTBOTTOM = 15, HTBOTTOMLEFT = 16, HTBOTTOMRIGHT = 17;
     public const int GWL_STYLE = -16;
     public const uint SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010, SWP_FRAMECHANGED = 0x0020, SWP_NOMOVE = 0x0002;
     public const int SM_CXSCREEN = 0, SM_CYSCREEN = 1;
@@ -31,6 +37,8 @@ internal static partial class Win32
     public const uint WM_LBUTTONDOWN = 0x0201;
     public const uint WM_RBUTTONDOWN = 0x0204;
     public const uint WM_ERASEBKGND = 0x0014;
+    public const uint WM_ACTIVATE = 0x0006, WM_NCCALCSIZE = 0x0083, WM_NCHITTEST = 0x0084, WM_NCACTIVATE = 0x0086;
+    public const uint WM_LBUTTONUP = 0x0202, WM_DPICHANGED = 0x02E0;
 
     public const uint PM_REMOVE = 0x0001;
 
@@ -161,6 +169,47 @@ internal static partial class Win32
 
     [DllImport("user32.dll")]
     public static extern bool GetCursorPos(out Point p);
+
+    [DllImport("user32.dll")]
+    public static extern bool ScreenToClient(IntPtr hWnd, ref Point p);
+
+    [DllImport("user32.dll")]
+    public static extern bool ClientToScreen(IntPtr hWnd, ref Point p);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr WindowFromPoint(Point p);
+
+    [DllImport("user32.dll")]
+    public static extern bool GetWindowRect(IntPtr hWnd, out Rect rect);
+
+    [DllImport("user32.dll")]
+    public static extern bool IsZoomed(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr SetCapture(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    public static extern bool ReleaseCapture();
+
+    [DllImport("user32.dll")]
+    public static extern bool PostMessageW(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    public static extern uint GetDpiForWindow(IntPtr hWnd);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MonitorInfo
+    {
+        public int Size;
+        public Rect Monitor, Work;
+        public uint Flags;
+    }
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr MonitorFromWindow(IntPtr hWnd, uint flags);
+
+    [DllImport("user32.dll")]
+    public static extern bool GetMonitorInfoW(IntPtr monitor, ref MonitorInfo info);
 
     [DllImport("user32.dll")]
     public static extern IntPtr SetWindowLongPtrW(IntPtr hWnd, int index, IntPtr value);
