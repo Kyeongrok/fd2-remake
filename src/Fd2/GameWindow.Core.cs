@@ -144,6 +144,7 @@ internal sealed partial class GameWindow
         if ((x, y) == (_mouseX, _mouseY)) return;
         (_mouseX, _mouseY) = (x, y);
         _mouseMoved = true;
+        if (PartyMove(x, y) || VolumeMove(x, y)) return;
         if (DragMap(x, y)) return;
         if (_versionsOpen) VersionsHover(_mouseX, _mouseY);
         else if (_screen == Screen.Title && !_keysOpen) TitleHover(_mouseX, _mouseY);
@@ -185,16 +186,18 @@ internal sealed partial class GameWindow
     /// </summary>
     internal void PointerPress(int x, int y, bool defer = false)
     {
+        if (PartyPress(x, y) || VolumePress(x, y)) return;
         if (!defer && (!CanDragMap || InBattle && HudHit(x, y))) { PointerDown(x, y); return; }
         (_press, _pressCam, _dragging) = ((x, y), (_camX, _camY), false);
     }
 
     /// <summary>누르기를 버린다(안드로이드 길게 누르기로 물렸을 때).</summary>
-    internal void PointerAbort() => (_press, _dragging) = (null, false);
+    internal void PointerAbort() => (_press, _dragging, _partyDrag, _volumeDrag) = (null, false, null, -1);
 
     /// <summary>뗐다 — 끌지 않았으면 그 자리를 누른 것으로.</summary>
     internal void PointerRelease(int x, int y)
     {
+        if (PartyRelease() || VolumeRelease()) { _press = null; return; }
         if (_press == null) return;
         bool dragged = _dragging;
         (_press, _dragging) = (null, false);
@@ -216,6 +219,8 @@ internal sealed partial class GameWindow
     /// <summary>오른쪽 단추(안드로이드는 길게 누르기) — 전투에서 한 단계 물리기.</summary>
     internal void PointerCancel()
     {
+        if (_partyOpen) { CloseParty(); return; }
+        if (_volumeOpen) { CloseVolume(); return; }
         if (InBattle) BattleCancel();
     }
 
@@ -273,6 +278,7 @@ internal sealed partial class GameWindow
         if (vk == Win32.VK_F12) { RequestShot(); return; }
         if (vk == Win32.VK_F11) { ToggleFullscreen(); return; }
         if (KeysWindowKey(vk)) return;
+        if (PartyKey(vk) || VolumeKey(vk)) return;
         if (VersionsKey(vk)) return;
         if (EndingKey(vk)) return;
         if (_screen == Screen.Prologue)
@@ -301,6 +307,7 @@ internal sealed partial class GameWindow
             case KeyAction.Gauges: _showGauges = !_showGauges; return;
             case KeyAction.Minimap: _settings.ShowMinimap = !_settings.ShowMinimap; _settings.Save(); return;
             case KeyAction.Chests: _settings.ShowChests = !_settings.ShowChests; _settings.Save(); return;
+            case KeyAction.Party: OpenParty(); return;
         }
         if (!InBattle && vk is Win32.VK_UP or Win32.VK_DOWN or Win32.VK_LEFT or Win32.VK_RIGHT && _selected is { Moving: false } walker && walker.Path.Count == 0)
         {
@@ -397,7 +404,7 @@ internal sealed partial class GameWindow
         }
 
         if (InBattle) BattleTick(dt);
-        else if (_selected is { Moving: false } sel && sel.Path.Count == 0)
+        else if (!_partyOpen && !_volumeOpen && _selected is { Moving: false } sel && sel.Path.Count == 0)
         {
             bool Held(int arrow, KeyAction action) => _keys.Contains(arrow) || _keys.Contains(_keyMap[action]);
             if (Held(Win32.VK_UP, KeyAction.MoveUp)) TryStep(sel, 0, -1, Dir.Up);
@@ -502,6 +509,8 @@ internal sealed partial class GameWindow
     private void Compose()
     {
         ComposeScreen();
+        DrawParty();
+        DrawVolume();
         DrawVersionLabel();
     }
 

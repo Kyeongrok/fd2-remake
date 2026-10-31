@@ -15,7 +15,7 @@ internal sealed partial class GameWindow
 {
 
     private const int MenuScenePrev = 1001, MenuSceneNext = 1002, MenuSceneBase = 1100;
-    private const int MenuResBase = 1300, MenuZoomBase = 1400, MenuFullscreen = 1500, MenuResetView = 1501, MenuKeys = 1502;
+    private const int MenuResBase = 1300, MenuZoomBase = 1400, MenuFullscreen = 1500, MenuResetView = 1501, MenuKeys = 1502, MenuVolume = 1503;
     private const int MenuEditor = 1600, MenuExit = 1601, MenuHiRes = 1700, MenuShowRange = 1701, MenuMusic = 1702, MenuSound = 1703, MenuShowHelp = 1704, MenuShowGoals = 1705, MenuControlAllies = 1706;
     private const int MenuBattle = 1003, MenuBattleStop = 1004, MenuVersions = 1005;
 
@@ -68,6 +68,7 @@ internal sealed partial class GameWindow
         Win32.AppendMenuW(settings, Win32.MF_STRING, MenuResetView, "화면 처음 값으로(&D)");
         Win32.AppendMenuW(settings, Win32.MF_SEPARATOR, 0, null);
         Win32.AppendMenuW(settings, Win32.MF_STRING, MenuKeys, "단축키 · 패드 설정(&K)...");
+        Win32.AppendMenuW(settings, Win32.MF_STRING, MenuVolume, "소리 크기(&V)...");
         Win32.AppendMenuW(bar, Win32.MF_POPUP, (nuint)settings, "설정(&S)");
 
         IntPtr mode = Win32.CreatePopupMenu();
@@ -156,6 +157,7 @@ internal sealed partial class GameWindow
                 _keysRow = 0;
                 _keysCapture = -1;
                 break;
+            case MenuVolume: OpenVolume(); break;
             case MenuVersions: PickVersion(); break;
             case MenuEditor: OpenEditor(); break;
             case MenuExit: _running = false; break;

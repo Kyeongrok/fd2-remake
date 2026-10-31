@@ -67,7 +67,7 @@ internal sealed partial class GameWindow
         _hudIconBottom = y + h + 6;
     }
 
-    /// <summary>모바일 메뉴 — 칸 정보 · 상대 정보 · 보물상자 · 미니맵 · 승패 조건 · 조작법 켜고 끄기, 시스템 메뉴(턴 끝 · 기록 · 타이틀).</summary>
+    /// <summary>모바일 메뉴 — 칸 정보 · 상대 정보 · 보물상자 · 미니맵 · 승패 조건 · 조작법 켜고 끄기, 파티 정보 · 소리 크기, 시스템 메뉴(턴 끝 · 기록 · 타이틀).</summary>
     private void OpenTouchMenu(int index = 0)
     {
         if (!CanOpenTouchMenu && _bs != BattleState.Menu) return;
@@ -82,6 +82,8 @@ internal sealed partial class GameWindow
         Toggle("미니맵", _settings.ShowMinimap, () => _settings.ShowMinimap = !_settings.ShowMinimap);
         Toggle("승패 조건", _settings.TouchGoals, () => _settings.TouchGoals = !_settings.TouchGoals);
         Toggle("조작법", _settings.TouchHelp, () => _settings.TouchHelp = !_settings.TouchHelp);
+        _menu.Add(("파티 정보", () => { _menu.Clear(); _bs = BattleState.Select; OpenParty(); }, default));
+        _menu.Add(("소리 크기", () => { _menu.Clear(); _bs = BattleState.Select; OpenVolume(); }, default));
         _menu.Add(("시스템 메뉴 (턴 끝 · 기록 · 타이틀)", OpenSystemMenu, default));
         _menu.Add(("닫기", () => { _menu.Clear(); _bs = BattleState.Select; }, default));
         _menuIndex = Math.Clamp(index, 0, _menu.Count - 1);

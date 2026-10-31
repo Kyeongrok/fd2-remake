@@ -51,10 +51,18 @@ internal sealed partial class GameWindow
             _player.SetDataSource(file);
             _player.Looping = true;
             _player.Prepare();
+            ApplyVolume();
             _player.Start();
             _musicPlaying = index;
         }
         catch (Exception) { StopMusic(); }   // 소리가 안 나도 게임은 계속
+    }
+
+    /// <summary>설정 소리 크기의 배경음 — 트는 곡에 바로.</summary>
+    partial void ApplyVolume()
+    {
+        float v = _settings.MusicVolume / 100f;
+        try { _player?.SetVolume(v, v); } catch (Java.Lang.IllegalStateException) { }
     }
 
     /// <summary>앱이 뒤로 가면 배경음악을 멈추고, 돌아오면 이어서 — MainActivity.OnPause · OnResume.</summary>
@@ -86,7 +94,7 @@ internal sealed partial class GameWindow
 
     private void PlayWav(ref Android.Media.MediaPlayer? player, int entry, int index)
     {
-        if (!_settings.Sound) return;
+        if (!_settings.Sound || _settings.SoundVolume <= 0) return;
         try
         {
             string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fd2", "sfx");
@@ -102,6 +110,7 @@ internal sealed partial class GameWindow
             player = new Android.Media.MediaPlayer();
             player.SetDataSource(path);
             player.Prepare();
+            player.SetVolume(_settings.SoundVolume / 100f, _settings.SoundVolume / 100f);
             player.Start();
         }
         catch (Exception) { }   // 소리가 안 나도 게임은 계속

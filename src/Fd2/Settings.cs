@@ -26,6 +26,10 @@ internal sealed class Settings
     /// <summary>효과음(원작 FDOTHER 소리 묶음).</summary>
     public bool Sound { get; set; } = true;
 
+    /// <summary>설정 > 소리 크기 — 배경음 · 효과음 크기(0~100%).</summary>
+    public int MusicVolume { get; set; } = 100;
+    public int SoundVolume { get; set; } = 100;
+
     /// <summary>모드 > 이동 · 공격 범위 보기 — 전투 밖에서도 고른 사람의 이동(파랑) · 공격(빨강) 범위를 보인다.</summary>
     public bool ShowRange { get; set; } = true;
 

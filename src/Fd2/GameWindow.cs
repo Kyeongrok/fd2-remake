@@ -163,6 +163,9 @@ internal sealed unsafe partial class GameWindow : IDisposable
             case Win32.WM_MOUSEMOVE:
                 PointerMove(Win32.LowWord(lParam), Win32.HighWord(lParam) - _barH);
                 return IntPtr.Zero;
+            case 0x020A:   // WM_MOUSEWHEEL — 위로 굴리면 +1, 아래로 −1
+                PointerWheel(Math.Sign((short)((long)wParam >> 16)));
+                return IntPtr.Zero;
             case Win32.WM_RBUTTONDOWN:
                 PointerCancel();
                 return IntPtr.Zero;
