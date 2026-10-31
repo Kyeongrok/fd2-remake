@@ -513,7 +513,7 @@ internal sealed partial class GameWindow
         Lighten(_ef, _eLight);
         int s = Math.Max(1, Math.Min(_clientW / EW, _clientH / EH));
         BlitScaled(_ef, EW, EH, (_clientW - EW * s) / 2, (_clientH - EH * s) / 2, s, 0, 0, _clientW, _clientH);
-        int fs = Math.Max(14, 7 * _zoom);
+        int fs = Math.Max(14, 7 * HudZoom);
         if (_shot == _shots.Count - 1)
         {
             if (_shotT > 2)

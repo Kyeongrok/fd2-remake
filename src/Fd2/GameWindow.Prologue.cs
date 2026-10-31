@@ -386,7 +386,7 @@ internal sealed partial class GameWindow
             if (y0 > 0) FillRect(0, 0, _clientW, y0, 0xFF000000);
             if (y1 < _clientH) FillRect(0, y1, _clientW, _clientH - y1, 0xFF000000);
         }
-        int fs = Math.Max(14, 7 * _zoom);
+        int fs = Math.Max(14, 7 * HudZoom);
         var skip = Text.Render(TouchUi ? "누르면 다음 · 뒤로 건너뛰기" : "Enter 다음 · Esc 프롤로그 건너뛰기", Math.Max(12, fs * 3 / 4), 0xB0FFFFFF, bold: false);
         FillRect(_clientW - skip.W - 24, 6, skip.W + 16, skip.H + 8, 0x80000000);
         DrawText(skip, _clientW - skip.W - 16, 10);

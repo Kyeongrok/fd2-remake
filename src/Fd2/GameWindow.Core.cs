@@ -219,12 +219,36 @@ internal sealed partial class GameWindow
         if (InBattle) BattleCancel();
     }
 
+    /// <summary>글 · 창(HUD) 크기를 정하는 배율 — 지도 배율과 따로. 폰은 두 손가락으로 지도만 키우고 글은 그대로 둔다.</summary>
+    private int HudZoom => TouchUi ? 2 : _zoom;
+
+    private const int MinTouchZoom = 1, MaxTouchZoom = 4;
+
+    /// <summary>
+    /// 두 손가락 벌리기(step +1) · 오므리기(−1) — 지도 배율을 한 단계 바꾸고, 보던 곳 가운데를 그대로 둔다.
+    /// </summary>
+    internal void PinchZoom(int step)
+    {
+        int z = Math.Clamp(_zoom + step, MinTouchZoom, MaxTouchZoom);
+        if (!TouchUi || z == _zoom) return;
+        PointerAbort();
+        int cx = _camX + _boardW / 2, cy = _camY + _boardH / 2;
+        _settings.TouchZoom = z;
+        _settings.Save();
+        Layout();
+        if (_scene == null) return;
+        int mw = _scene.Width * T, mh = _scene.Height * T;
+        _camX = mw <= _boardW ? (mw - _boardW) / 2 : Math.Clamp(cx - _boardW / 2, 0, mw - _boardW);
+        _camY = mh <= _boardH ? (mh - _boardH) / 2 : Math.Clamp(cy - _boardH / 2, 0, mh - _boardH);
+    }
+
     /// <summary>배율과 보이는 판 크기를 창 크기에서 셈한다. 판이 바뀌면 화면 버퍼와 텍스처를 다시 만든다.</summary>
     private void Layout()
     {
         int auto = Math.Max(1, Math.Min(_clientW / BaseW, _clientH / BaseH));
-        if (TouchUi) auto = Math.Max(auto, 2);   // 폰은 화면이 낮아 1배면 지도가 작다 — 2배로 키워 사람 둘레를 보이고 카메라가 따라간다
         _zoom = _settings.Zoom > 0 ? _settings.Zoom : auto;
+        // 폰은 화면이 낮아 1배면 지도가 작다 — 기본 2배로 키워 사람 둘레를 보이고 카메라가 따라간다. 두 손가락으로 1~4배(PinchZoom)
+        if (TouchUi) _zoom = Math.Clamp(_settings.TouchZoom, MinTouchZoom, MaxTouchZoom);
         int bw = Math.Max(1, _clientW / _zoom), bh = Math.Max(1, _clientH / _zoom);
         _offX = (_clientW - bw * _zoom) / 2;
         _offY = (_clientH - bh * _zoom) / 2;

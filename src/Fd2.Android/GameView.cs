@@ -154,6 +154,13 @@ public sealed class GameView : SurfaceView, ISurfaceHolderCallback
     private (int X, int Y) ToFrame(float x, float y) =>
         ((int)((x - _dst.Left) * _fbW / Math.Max(1, _dst.Width())), (int)((y - _dst.Top) * _fbH / Math.Max(1, _dst.Height())));
 
+    private bool _pinched;
+    private float _pinchFrom;
+
+    /// <summary>두 손가락 사이 거리(화면 점).</summary>
+    private static float Spread(MotionEvent e) =>
+        e.PointerCount < 2 ? 0 : MathF.Sqrt(MathF.Pow(e.GetX(0) - e.GetX(1), 2) + MathF.Pow(e.GetY(0) - e.GetY(1), 2));
+
     public override bool OnTouchEvent(MotionEvent? e)
     {
         if (e == null) return false;
@@ -164,14 +171,35 @@ public sealed class GameView : SurfaceView, ISurfaceHolderCallback
                 _downAt = Clock.ElapsedMilliseconds;
                 (_downX, _downY) = (e.GetX(), e.GetY());
                 _longDone = false;
+                _pinched = false;
                 _input.Enqueue(g => { g.PointerMove(x, y); g.PointerPress(x, y, defer: true); });   // 끌면 지도가 움직인다
+                return true;
+            case MotionEventActions.PointerDown when e.PointerCount == 2:
+                // 두 손가락 — 벌리면 지도를 키우고 오므리면 줄인다(누르기 · 끌기 · 길게 누르기는 버린다)
+                _pinchFrom = Spread(e);
+                _pinched = true;
+                _downAt = -1;
+                _input.Enqueue(g => g.PointerAbort());
+                return true;
+            case MotionEventActions.Move when e.PointerCount >= 2 && _pinched:
+            {
+                float d = Spread(e);
+                if (_pinchFrom > 0 && (d > _pinchFrom * 1.25f || d < _pinchFrom * 0.8f))
+                {
+                    int step = d > _pinchFrom ? 1 : -1;
+                    _input.Enqueue(g => g.PinchZoom(step));
+                    _pinchFrom = d;
+                }
+                return true;
+            }
+            case MotionEventActions.Move when _pinched:
                 return true;
             case MotionEventActions.Move:
                 if (Math.Abs(e.GetX() - _downX) > 24 || Math.Abs(e.GetY() - _downY) > 24) _downAt = -1;   // 움직이면 길게 누르기가 아니다
                 _input.Enqueue(g => g.PointerMove(x, y));
                 return true;
             case MotionEventActions.Up:
-                bool tap = !_longDone;
+                bool tap = !_longDone && !_pinched;
                 _downAt = -1;
                 if (tap) _input.Enqueue(g => g.PointerRelease(x, y));
                 else _input.Enqueue(g => g.PointerAbort());

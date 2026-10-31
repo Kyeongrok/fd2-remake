@@ -145,7 +145,7 @@ internal sealed partial class GameWindow
         // 글자 · 얼굴 배율 — 큰 것부터 줄여 창이 화면 안에 들어가는 첫 배율(폰처럼 낮은 화면에서 글이 창 밖으로 넘치지 않게)
         int g = 0, glyph = 0, lineH = 0, faceS = 0, faceW = 0, faceH = 0, boxW = 0, boxH = 0, textSize = 0, textLineH = 0;
         List<string>? textLines = null;
-        for (g = Math.Max(2, _zoom); g >= 1; g--)
+        for (g = Math.Max(2, HudZoom); g >= 1; g--)
         {
             glyph = Font16.Size * g;
             lineH = glyph + g * 4;

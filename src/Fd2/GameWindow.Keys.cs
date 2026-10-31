@@ -78,7 +78,7 @@ internal sealed partial class GameWindow
     private void DrawKeysWindow()
     {
         if (!_keysOpen && !_helpOpen) return;
-        int fs = Math.Max(14, 7 * _zoom);
+        int fs = Math.Max(14, 7 * HudZoom);
         var rows = new List<(string Label, string Key, bool Header)>();
         rows.Add(("키보드", "", true));
         foreach (var (a, label, _) in KeyBindings.All) rows.Add((label, KeyBindings.KeyName(_keyMap[a]), false));

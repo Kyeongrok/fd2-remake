@@ -105,7 +105,7 @@ internal sealed partial class GameWindow
     private void DrawVersions()
     {
         if (!_versionsOpen) return;
-        int fs = Math.Max(14, 7 * _zoom);
+        int fs = Math.Max(14, 7 * HudZoom);
         var rows = _versions.Select(v => (Label: v.Name, Sub: v.Dir, Now: SameDir(v.Dir, _dir))).ToList();
         if (CanAddVersion()) rows.Add(("+ 버전 더하기 (게임 폴더 하나 더 가져오기)", "", false));
         if (rows.Count == 0) rows.Add(("찾은 버전이 없습니다", "", false));

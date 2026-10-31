@@ -29,6 +29,16 @@ internal sealed class Settings
     /// <summary>모드 > 이동 · 공격 범위 보기 — 전투 밖에서도 고른 사람의 이동(파랑) · 공격(빨강) 범위를 보인다.</summary>
     public bool ShowRange { get; set; } = true;
 
+    /// <summary>폰 지도 배율(1~4, 두 손가락으로 바꾼다) — 기본 2.</summary>
+    public int TouchZoom { get; set; } = 2;
+
+    /// <summary>폰에서 보일 것 — 기본은 모두 숨김, 화면의 ESC 단추 → 모바일 메뉴에서 켠다(사용자 요청). 윈도우판은 늘 보인다.</summary>
+    public bool TouchTileInfo { get; set; }
+    public bool TouchUnitInfo { get; set; }
+    public bool TouchChests { get; set; }
+    public bool TouchGoals { get; set; }
+    public bool TouchHelp { get; set; }
+
     /// <summary>전투 미니맵(오른쪽 위, M 키 · 아이콘) — 기본은 접음(사용자 요청).</summary>
     public bool ShowMinimap { get; set; }
 

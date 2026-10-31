@@ -1217,29 +1217,30 @@ internal sealed partial class GameWindow
                      u.Ai ? 0xFFE0C040 : u.Side == Side.Player ? 0xFF40D060 : 0xFFE04040);
         }
 
-        int fs = Math.Max(14, 7 * _zoom);
+        int fs = Math.Max(14, 7 * HudZoom);
         // 위 가운데 — 몇 턴 · 누구 차례
         string top = _bs switch
         {
             BattleState.Talk => TouchUi ? $"{ChapterName(_scene.Index)}  (누르면 다음 · 뒤로 대사 건너뛰기)" : $"{ChapterName(_scene.Index)}  (Enter · 클릭 다음 · Esc 대사 건너뛰기)",
             _ when _enemyPhase && _bs != BattleState.Over => $"{ChapterName(_scene.Index)} 전투 · {Turn}턴 · {(_alliesPhase ? "컴퓨터 아군" : "적군")} 차례",
             BattleState.Over => $"{ChapterName(_scene.Index)} 전투 · {Turn}턴",
-            _ when TouchUi => $"{ChapterName(_scene.Index)} 전투 · {Turn}턴 · 아군 차례 · 돈 {_battle.Gold}   (누르기 고르기 · 길게 누르기/뒤로 물리기 · 빈 칸 누르면 턴 끝)",
+            _ when TouchUi => $"{ChapterName(_scene.Index)} 전투 · {Turn}턴 · 아군 차례 · 돈 {_battle.Gold}" + (_settings.TouchHelp ? "   (누르기 고르기 · 길게 누르기/뒤로 물리기 · 빈 칸 누르면 턴 끝)" : ""),
             _ => $"{ChapterName(_scene.Index)} 전투 · {Turn}턴 · 아군 차례 · 돈 {_battle.Gold}   (방향키 커서 · Enter 결정 · Esc 물리기 · {KeyBindings.KeyName(_keyMap[KeyAction.Attack])} 공격 · " +
                  $"{KeyBindings.KeyName(_keyMap[KeyAction.Wait])} 대기 · {KeyBindings.KeyName(_keyMap[KeyAction.System])} 턴 끝 · {KeyBindings.KeyName(_keyMap[KeyAction.KeyHelp])} 단축키)",
         };
         var title = Text.Render(top, fs, 0xFFFFFFFF);
         FillRect(_clientW / 2 - title.W / 2 - 12, 8, title.W + 24, title.H + 8, 0xA0000000);
         DrawText(title, _clientW / 2 - title.W / 2, 12);
-        DrawGoals(fs, 12 + title.H + 12);
+        // 폰은 승패 조건 · 보물상자 · 칸 정보 · 사람 정보를 기본으로 숨기고 ESC 단추의 모바일 메뉴에서 켠다
+        if (!TouchUi || _settings.TouchGoals) DrawGoals(fs, 12 + title.H + 12);
 
         // 왼쪽 아래 — 마우스 밑 사람(없으면 고른 사람)
         DrawHudToggles(fs);
-        DrawChestList(fs);
+        if (!TouchUi || _settings.TouchChests) DrawChestList(fs);
         DrawMinimap();
-        int tileH = DrawTileInfo(fs);
+        int tileH = !TouchUi || _settings.TouchTileInfo ? DrawTileInfo(fs) : 0;
         var hover = HoverUnit() ?? _actor;
-        if (hover is { MaxHp: > 0 }) DrawInfo(hover, fs, tileH);
+        if (hover is { MaxHp: > 0 } && (!TouchUi || _settings.TouchUnitInfo)) DrawInfo(hover, fs, tileH);
 
         if (_bs is BattleState.Select or BattleState.Target or BattleState.Moving && !_mouseMoved) DrawCursor();   // 마우스를 쓰는 동안에는 커서를 숨긴다
         if (_bs == BattleState.Menu) DrawMenu(fs);
@@ -1414,7 +1415,7 @@ internal sealed partial class GameWindow
     private int DrawTileInfo(int fs)
     {
         if (!_scene.Inside(_cursor.X, _cursor.Y) || _bs is BattleState.CutIn or BattleState.Talk) return 0;
-        int g = Math.Max(2, _zoom), pad = 4 * g, img = T * g;
+        int g = Math.Max(2, HudZoom), pad = 4 * g, img = T * g;
         var (ta, td) = _battle.TerrainPercent(_cursor.X, _cursor.Y);
         var la = Text.Render($"A {(ta < 0 ? "-" : "+")}{Math.Abs(ta):00}", fs * 3 / 2, 0xFFD8E4FF);
         var ld = Text.Render($"D {(td < 0 ? "-" : "+")}{Math.Abs(td):00}", fs * 3 / 2, 0xFFD8E4FF);

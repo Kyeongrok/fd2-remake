@@ -313,7 +313,7 @@ internal sealed partial class GameWindow
 
     private void DrawTitle()
     {
-        int fs = Math.Max(14, 7 * _zoom);
+        int fs = Math.Max(14, 7 * HudZoom);
         if (_screen == Screen.Opening)
         {
             if (_oCuts != null && _oCut >= 0 && _oCut < _oCuts.Count)
