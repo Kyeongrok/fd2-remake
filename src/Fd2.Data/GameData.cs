@@ -229,6 +229,9 @@ public sealed class Unit
     public double Step = 1;
     public readonly Queue<(int X, int Y)> Path = new();
 
+    /// <summary>이번 이동에서 지나온 칸(원작 sub_13A44 를 한 칸 걸을 때마다 부르는 자리) — 땅 칸 사건이 멈춘 뒤 본다.</summary>
+    public readonly List<(int X, int Y)> Walked = new();
+
     public bool Moving => Step < 1;
     public double DrawX => FromX + (X - FromX) * Step;
     public double DrawY => FromY + (Y - FromY) * Step;
@@ -485,7 +488,7 @@ public sealed class Scene
     public readonly List<EventLine> EventLines = new();
 
     /// <summary>땅 칸 사건 k(칸 표시 k+1): 사건 번호 · 밟는 편(0 적 · 1 컴퓨터 아군).</summary>
-    public readonly List<(int Event, int Team)> GroundEvents = new();
+    public readonly List<(int Event, int On)> GroundEvents = new();
 
     /// <summary>타일이 바뀐 칸(연 상자) — 지도 텍스처는 처음 것 그대로라 이 칸들은 위에 덧그린다.</summary>
     public readonly HashSet<int> Patched = new();

@@ -20,9 +20,6 @@ internal sealed partial class GameWindow
     /// <summary>사건이 정한 판정(win · lose) — 0 이면 판정 함수대로.</summary>
     private int _forcedOutcome;
 
-    /// <summary>한 번 건 땅 칸 사건(표시 번호) — 같은 줄을 여럿이 밟아도 한 번만.</summary>
-    private readonly HashSet<int> _groundFired = new();
-
     // ── 걸기 ────────────────────────────────────────────────────────────────
 
     /// <summary>사건 하나를 돌리고 after.</summary>
@@ -53,17 +50,28 @@ internal sealed partial class GameWindow
     }
 
     /// <summary>
-    /// 땅 칸 사건(sub_13A44) — 멈춘 칸의 표시 k(1 이상)가 상자 칸이 아니고, 그 사람의 편이 사건 k 의 편이면 건다.
+    /// 땅 칸 사건(sub_13A44) — 칸의 표시 k 둘째 바이트는 편이 아니라 언제 보는가다: 0 = 지나간 모든 칸(sub_1300D 들이 한 칸마다), 1 = 멈춘 칸.
+    /// 누가 걸었는지는 보지 않고(사건이 arg0 으로 가른다), 마지막으로 걸린 사건 하나를 이동이 끝난 뒤 건다(0x1A8F). 사건은 멈출 때마다 다시 걸린다 — 한 번만 도는 것은 사건의 깃발이 맡는다.
     /// </summary>
     private void GroundCheck(Unit u, Action after)
     {
+        var walked = u.Walked.ToList();
+        u.Walked.Clear();
         if (!UseEvents) { after(); return; }
-        int k = _scene.Mark(u.X, u.Y);
-        if (k < 1 || (_scene.TileFlags(u.X, u.Y) & 0x60) != 0 || k > _scene.GroundEvents.Count || _groundFired.Contains(k)) { after(); return; }
-        var (ev, team) = _scene.GroundEvents[k - 1];
-        if (u.Team == 0 != (team == 0)) { after(); return; }   // 편 0 = 적이 밟을 때, 1 = 우리 쪽(우리 · 컴퓨터 아군 — 사건 안에서 arg0 으로 다시 가른다)
-        _groundFired.Add(k);
-        RunEvent(ev, after, u.Slot);
+        int ev = 255;
+        foreach (var (x, y) in walked) ev = GroundEventAt(x, y, 0) ?? ev;
+        ev = GroundEventAt(u.X, u.Y, 1) ?? ev;
+        if (ev == 255) after();
+        else RunEvent(ev, after, u.Slot);
+    }
+
+    /// <summary>그 칸의 땅 칸 사건 — 표시가 없거나 상자 칸이거나 보는 때(on)가 다르면 null.</summary>
+    private int? GroundEventAt(int x, int y, int on)
+    {
+        int k = _scene.Mark(x, y);
+        if (k < 1 || k > _scene.GroundEvents.Count || (_scene.TileFlags(x, y) & 0x60) != 0) return null;
+        var (ev, when) = _scene.GroundEvents[k - 1];
+        return ev != 255 && when == on ? ev : null;
     }
 
     /// <summary>장면 시작 연출 — 대본에 시작 함수가 있으면 그것, 없으면 대사 묶음 0.</summary>

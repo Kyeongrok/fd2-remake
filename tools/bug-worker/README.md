@@ -20,6 +20,8 @@
 ./bugs.ps1 -Mark 3 -Status fixed -Note "v0.14.7 에서 고침"
 ```
 
+웹으로는 창세기전3 대시보드(`https://war-of-genesis-stats.oceanfog1.workers.dev/dashboard`)의 「버그 리포트」 탭에서 함께 본다 — 그쪽 worker 가 이 D1 을 `FD2_DB` 로 읽고, 열쇠는 그쪽 것(`~\.dueldx-bug-admin-key`)을 쓴다.
+
 관리자 열쇠는 `~\.fd2-bug-admin-key` 의 첫 줄(worker 비밀 `BUG_ADMIN_KEY` 와 같은 값). 저장소에는 넣지 않는다.
 
 ## 올리기(처음 한 번 — 이미 했음)

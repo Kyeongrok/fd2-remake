@@ -286,7 +286,6 @@ internal sealed partial class GameWindow
         _battle.OpenedChests.UnionWith(b.Chests);
         _scene.ShowOpenedChests(_battle.OpenedChests);
         _forcedOutcome = 0;
-        _groundFired.Clear();
         _enemyPhase = false;
         _outcome = 0;
         SetMusic(PlayerMusic);

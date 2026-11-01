@@ -483,8 +483,10 @@ internal sealed partial class GameWindow
                     (u.FromX, u.FromY) = (u.X, u.Y);
                     (u.X, u.Y) = next;
                     u.Step = 0;
+                    if (InBattle) u.Walked.Add(next);
                 }
                 else if (!TryStep(u, dx, dy, DirOf(dx, dy))) u.Path.Clear();
+                else if (InBattle) u.Walked.Add(next);
             }
         }
     }

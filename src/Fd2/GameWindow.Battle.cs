@@ -135,7 +135,6 @@ internal sealed partial class GameWindow
         _bs = BattleState.Talk;
         if (Controlled.OrderBy(u => u.Slot).FirstOrDefault() is { } lead) { _cursor = (lead.X, lead.Y); _centerCursor = true; }
         _forcedOutcome = 0;
-        _groundFired.Clear();
         RunStart(NextTurn);   // 장면 시작 함수(대본이 없으면 대사 묶음 0)
     }
 
@@ -735,6 +734,7 @@ internal sealed partial class GameWindow
         (u.X, u.Y) = _origin;
         (u.FromX, u.FromY) = _origin;
         u.Path.Clear();
+        u.Walked.Clear();
         u.Step = 1;
         _cursor = (u.X, u.Y);
         BeginMove(u);
@@ -1440,6 +1440,8 @@ internal sealed partial class GameWindow
     {
         if (_bs != BattleState.Enemy || _enemyNow is not { } u || !(u.Moving || u.Path.Count > 0)) return false;
         var dest = u.Path.Reverse().Cast<(int X, int Y)?>().FirstOrDefault(c => _scene.Free(c!.Value.X, c.Value.Y)) ?? (u.X, u.Y);   // 끝 칸이 막혔으면 그 앞 빈 칸
+        var left = u.Path.ToList();
+        u.Walked.AddRange(left.Take(left.IndexOf(dest) + 1));   // 건너뛴 칸도 지나간 칸이다 — 땅 칸 사건이 본다
         u.Path.Clear();
         (u.X, u.Y, u.FromX, u.FromY) = (dest.X, dest.Y, dest.X, dest.Y);
         u.Step = 1;

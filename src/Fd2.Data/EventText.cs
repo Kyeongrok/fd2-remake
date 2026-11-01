@@ -52,12 +52,12 @@ public static class EventText
         if (Enumerable.Range(0, scene.GroundEvents.Count).Any(k => marks.ContainsKey(k + 1)))
         {
             lines.Add("");
-            lines.Add("■ 땅 칸 사건 (밟으면)");
+            lines.Add("■ 땅 칸 사건 (누가 걷든, 조건은 사건 안에서)");
             for (int k = 0; k < scene.GroundEvents.Count; k++)
             {
-                var (e, side) = scene.GroundEvents[k];
-                if (!marks.TryGetValue(k + 1, out var cells)) continue;
-                lines.Add($"  표지 {k + 1} {string.Join(" ", cells.Take(10))}{(cells.Count > 10 ? " …" : "")} — {(side == 0 ? "적" : "우리 쪽")}이 밟으면 사건 {e}");
+                var (e, on) = scene.GroundEvents[k];
+                if (e == 255 || !marks.TryGetValue(k + 1, out var cells)) continue;
+                lines.Add($"  표지 {k + 1} {string.Join(" ", cells.Take(10))}{(cells.Count > 10 ? " …" : "")} — {(on == 0 ? "지나가면" : "멈추면")} 사건 {e}");
                 Ops(ev.Event(e), 2);
             }
         }
