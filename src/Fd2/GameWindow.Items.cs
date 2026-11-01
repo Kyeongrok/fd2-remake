@@ -256,7 +256,8 @@ internal sealed partial class GameWindow
             faceH = faces[0].H * faceW / Math.Max(1, faces[0].W);
         }
         int rows = u.Bag.Count + (_itemMode is ItemMode.Use or ItemMode.Equip ? _sharedRows.Count : 0);
-        int topH = Math.Max(faceH + 16, lineH * 5 + 16), listH = lineH * Math.Max(4, rows) + 24 + (rows >= 4 ? lineH * 2 / 3 : 0);   // 줄이 차면 아래 「사용」 글 자리를 더
+        bool card = TouchUi && _clientW < _clientH;   // 폰 세로 — 사람 칸을 카드로(사용자 요청)
+        int topH = card ? (int)(184 * _clientW / 390.0) : Math.Max(faceH + 16, lineH * 5 + 16), listH = lineH * Math.Max(4, rows) + 24 + (rows >= 4 ? lineH * 2 / 3 : 0);   // 줄이 차면 아래 「사용」 글 자리를 더
         if (topH + listH + 16 > _clientH) listH = Math.Max(lineH * 4 + 24, _clientH - topH - 16);   // 공통 가방 줄이 많으면 넘치는 줄은 잘린다
         int y0 = Math.Max(8, (_clientH - topH - listH - 8) / 2);
 
@@ -266,6 +267,10 @@ internal sealed partial class GameWindow
             FillRect(x, y, w, 2, 0xFF8090C0); FillRect(x, y + h - 2, w, 2, 0xFF8090C0);
             FillRect(x, y, 2, h, 0xFF8090C0); FillRect(x + w - 2, y, 2, h, 0xFF8090C0);
         }
+        Text.Image T(string s, uint c = 0xFFFFFFFF) => Text.Render(s, fs, c);
+        if (card) DrawItemCard(u, x0, y0, W, topH);
+        else
+        {
         int faceBoxW = faceW > 0 ? faceW + 16 : 0;
         if (faceBoxW > 0)
         {
@@ -275,7 +280,6 @@ internal sealed partial class GameWindow
         }
         int sx = x0 + faceBoxW + (faceBoxW > 0 ? 6 : 0), sw = W - (sx - x0);
         Panel(sx, y0, sw, topH);
-        Text.Image T(string s, uint c = 0xFFFFFFFF) => Text.Render(s, fs, c);
         var name = NameImage(Battle.NameLine(u), g, 0xFFB8C8FF) ?? T(CharacterNames.Of(u.Icon).Split('-')[0], 0xFFB8C8FF);
         DrawText(name, sx + 14, y0 + 8);
         var cls = T(GameNames.Class(u.Class), 0xFFB8C8FF);
@@ -303,6 +307,7 @@ internal sealed partial class GameWindow
         }
         Bar("HP·", u.Hp, u.MaxHp, 0xFFF0D040, cy);
         Bar("MP·", u.Mp, u.MaxMp, 0xFFA01818, cy + lineH * 2);
+        }
 
         // 아래 — 가방 목록
         int ly = y0 + topH + 8;
@@ -356,6 +361,14 @@ internal sealed partial class GameWindow
             var tag = T("공통", on ? 0xFFFFE070 : 0xFF807040);
             DrawText(tag, x0 + 16, ry + (lineH - 4 - tag.H) / 2);
             int ix = x0 + 16 + tag.W + 12;
+            if (_buttons is { Count: > 3 * 10 + 2 } shared)
+            {
+                int icon = id < 128 && it.Kind < 32 && it.Atk > 0 ? 0 : it.Kind < 32 && id >= 128 ? 10 : 2;   // 제 가방 줄과 같은 게임 그림
+                var (px, w, h) = shared.Frame(icon, red: false, 0);
+                int s = Math.Max(1, (lineH - 4) / h);
+                BlitScaled(px, w, h, ix, ry + (lineH - 4 - h * s) / 2, s, 0, 0, _fbW, _fbH);
+                ix += w * s + 12;
+            }
             var nm = NameImage(181 + id, g, on ? 0xFFB8C8FF : 0xFF6878A0) ?? T(GameNames.Item(id), on ? 0xFFB8C8FF : 0xFF6878A0);
             DrawText(nm, ix, ry + (lineH - 4 - nm.H) / 2);
             string eff = id < 128 && it.Kind < 32 && it.Atk > 0 ? $"+AP {it.Atk:000}" : id >= 128 && it.Kind < 32 && it.Def > 0 ? $"+DP {it.Def:000}"
@@ -367,6 +380,53 @@ internal sealed partial class GameWindow
         }
         var mode = T(_itemMode switch { ItemMode.Use => "사용", ItemMode.Give => "건네주기", ItemMode.Equip => "장비", _ => "버리기" }, 0xFFFFE070);
         DrawText(mode, x0 + W - mode.W - 16, ly + listH - mode.H - 8);
+    }
+
+    /// <summary>폰 세로 아이템 창의 사람 카드 — 얼굴 · 이름 · 직업 · 레벨 · 경험, HP · MP 막대, 능력 여섯 칸(한글 이름, 시안).</summary>
+    private void DrawItemCard(Unit u, int x, int y, int w, int h)
+    {
+        double ui = _clientW / 390.0;
+        int U(double v) => (int)Math.Round(v * ui);
+        FillRect(x, y, w, h, 0xFF1C2850);
+        FillRect(x, y, w, Math.Max(2, U(2)), 0xFFC8A040);
+        int m = U(12), boxS = U(76), inner = x + m;
+        FillRect(inner, y + m, boxS, boxS, 0xFF141A33);
+        if (Face(u.Icon) is { Count: > 0 } faces)
+        {
+            var f = faces[0];
+            double s = Math.Min((boxS - 4.0) / f.W, (boxS - 4.0) / f.H);
+            int fw = (int)(f.W * s), fh = (int)(f.H * s);
+            BlitFit(f.Px, f.W, f.H, inner + (boxS - fw) / 2, y + m + (boxS - fh) / 2, fw, fh);
+        }
+        int rx = inner + boxS + m, rw = x + w - m - rx;
+        var name = NameImage(Battle.NameLine(u), Math.Max(1, U(18) / Font16.Size), 0xFFE8C870) ?? Text.Render(CharacterNames.Of(u.Icon).Split('-')[0], U(18), 0xFFE8C870);
+        DrawText(name, rx, y + m);
+        var cls = Text.Render($"{GameNames.Class(u.Class)}  Lv {u.Level}  경험 {u.Exp}/100", U(12), 0xFFC4CAE6, bold: false);
+        DrawText(cls, rx, y + m + name.H + U(2));
+        void Bar(string label, int now, int max, uint color, int by)
+        {
+            var l = Text.Render(label, U(12), 0xFFEEF0FF);
+            var n = Text.Render($"{now}/{max}", U(12), 0xFFEEF0FF, bold: false);
+            int bx = rx + l.W + U(6), bw = Math.Max(10, rw - l.W - n.W - U(12)), bh = U(8);
+            DrawText(l, rx, by);
+            FillRect(bx, by + (l.H - bh) / 2, bw, bh, 0xFF141A33);
+            if (max > 0) FillRect(bx, by + (l.H - bh) / 2, bw * Math.Clamp(now, 0, max) / max, bh, color);
+            DrawText(n, x + w - m - n.W, by);
+        }
+        int barY = y + m + boxS - 2 * U(18);
+        Bar("HP", u.Hp, u.MaxHp, 0xFFF0D040, barY);
+        Bar("MP", u.Mp, u.MaxMp, 0xFF5088E0, barY + U(18));
+        var cells = new (string Label, int Value)[] { ("공격", u.Atk), ("방어", u.Def), ("이동", u.Move), ("명중", u.Hit), ("회피", u.Evade), ("속도", u.Speed) };
+        int gridY = y + m + boxS + U(8), gap = U(4), cw = (w - 2 * m - 2 * gap) / 3, ch = U(36);
+        for (int k = 0; k < cells.Length; k++)
+        {
+            int cx = inner + k % 3 * (cw + gap), cy = gridY + k / 3 * (ch + gap);
+            FillRect(cx, cy, cw, ch, 0xFF141A33);
+            var l = Text.Render(cells[k].Label, U(12), 0xFFC4CAE6, bold: false);
+            var v = Text.Render(cells[k].Value.ToString(), U(16), 0xFFEEF0FF);
+            DrawText(l, cx + U(8), cy + (ch - l.H) / 2);
+            DrawText(v, cx + cw - v.W - U(8), cy + (ch - v.H) / 2);
+        }
     }
 
     private bool CanEquip(Unit u, ItemInfo it) => _battle.ClassOf(u) is not { } c || c.EquipKinds.Contains(it.Kind);

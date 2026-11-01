@@ -50,6 +50,9 @@ internal sealed partial class GameWindow
     /// <summary>모드 창 · 모바일 설정에서 고르는 마법 속도(%).</summary>
     private static readonly int[] SpellSpeeds = [25, 50, 75, 100, 150, 200];
 
+    /// <summary>적 이동 속도에서 고르는 배율(%).</summary>
+    private static readonly int[] EnemySpeeds = [100, 150, 200, 300, 400];
+
     private static string SpellSpeedName(int pct) => pct == 100 ? "1배(원작)" : $"{pct / 100.0:0.##}배{(pct < 100 ? " — 느리게" : " — 빠르게")}";
 
     private readonly Dictionary<int, Motion?> _fxMotions = new();

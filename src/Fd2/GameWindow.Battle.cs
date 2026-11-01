@@ -367,7 +367,7 @@ internal sealed partial class GameWindow
                 FxTick(dt);
                 break;
             case BattleState.Enemy:
-                EnemyTick(dt);
+                EnemyTick(dt * EnemyRate);
                 break;
             case BattleState.March:
                 MarchTick();
@@ -430,7 +430,7 @@ internal sealed partial class GameWindow
                 OpenOverMenu();
                 return;
             case BattleState.Menu:
-                if (TownTap(mx, my)) return;
+                if (TownTap(mx, my) || ShopTabTap(mx, my)) return;
                 foreach (var item in _menu)
                     if (mx >= item.Rect.X && my >= item.Rect.Y && mx < item.Rect.X + item.Rect.W && my < item.Rect.Y + item.Rect.H)
                     {
@@ -681,6 +681,12 @@ internal sealed partial class GameWindow
                 _menu[^1].Do();
                 break;
             case BattleState.Menu when _stage == MenuStage.Deploy: // 편성 — 물릴 곳이 없다
+                break;
+            case BattleState.Menu when _stage == MenuStage.ItemPick && _partyEquip:   // 파티 창에서 온 장비 — 파티 창으로
+                _partyEquip = false;
+                ClearSelection();
+                _bs = BattleState.Select;
+                OpenParty();
                 break;
             case BattleState.Menu when _stage == MenuStage.ItemPick && _actor is { } picker:   // 아이템 창 — 물건 십자 메뉴로
                 OpenItemCross(picker);
@@ -1371,6 +1377,33 @@ internal sealed partial class GameWindow
         if (m.Frames[_strikeFrame].Sound is var s and > 0) PlaySfx(m.SoundEntry, s);
     }
 
+    /// <summary>
+    /// 이 장면에 나오는 사람(지금 선 사람 · 명단 전체 — 사건으로 나오는 무리도 SpawnPhase 가 이 명단에서 꺼낸다)의 모션만 장면을 열 때 읽는다(사용자 요청 — 큰 버전은 싸움 중 처음 칠 때마다 끊겼다).
+    /// 장면을 열 때 조금 기다리는 대신 싸움 중에는 안 읽는다. 명단에 없는 사람은 <see cref="MotionOf"/> 가 쓸 때 읽는다.
+    /// </summary>
+    private void PreloadMotions()
+    {
+        int figures = Dat.Count(Path.Combine(_dir, "FIGANI.DAT"));
+        var icons = _scene.Units.Select(u => u.Icon)
+            .Concat(_scene.Roster.Select(e => CharacterNames.SpriteOf(e.Icon, _icons.RoyalsMoved))).Distinct()
+            .Where(i => i >= 0 && 3 * i + 2 < figures).ToList();   // 명단에는 그림 번호 없는 줄도 있다
+        if (icons.Count == 0) return;
+        MotionOf(icons[0], 0);   // 첫 하나는 혼자 — 모션 폴더 · 고르기 표를 채운 뒤 나머지를 나눠서
+        var read = new System.Collections.Concurrent.ConcurrentDictionary<int, Motion?>();
+        var dir = _dir;
+        var pal = _pal;
+        Parallel.ForEach(icons.SelectMany(i => new[] { i * 4, i * 4 + 1, i * 4 + 2 }), key =>
+        {
+            try { read[key] = Motion.Load(dir, key / 4, key % 4, pal); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or IndexOutOfRangeException or ArgumentOutOfRangeException) { }   // 못 읽은 것은 쓸 때 다시
+        });
+        foreach (var (key, m) in read)
+        {
+            _motions[key] = m;
+            if (key % 4 == 0) _stands[key / 4] = m;   // 맞는 쪽 서기 모션은 따로 찾는다
+        }
+    }
+
     private Motion? MotionOf(int icon, int kind)
     {
         if (_motions.TryGetValue(icon * 4 + kind, out var m)) return m;
@@ -1440,7 +1473,7 @@ internal sealed partial class GameWindow
     private bool SkipEnemyWalk()
     {
         if (_bs != BattleState.Enemy || _enemyNow is not { } u || !(u.Moving || u.Path.Count > 0)) return false;
-        var dest = u.Path.Reverse().Cast<(int X, int Y)?>().FirstOrDefault(c => _scene.Free(c!.Value.X, c.Value.Y)) ?? (u.X, u.Y);   // 끝 칸이 막혔으면 그 앞 빈 칸
+        var dest = u.Path.Reverse().Cast<(int X, int Y)?>().FirstOrDefault(c => CanTread(u, c!.Value.X, c.Value.Y) && _scene.UnitAt(c.Value.X, c.Value.Y) == null) ?? (u.X, u.Y);   // 끝 칸이 막혔으면 그 앞 빈 칸
         var left = u.Path.ToList();
         u.Walked.AddRange(left.Take(left.IndexOf(dest) + 1));   // 건너뛴 칸도 지나간 칸이다 — 땅 칸 사건이 본다
         u.Path.Clear();
@@ -1450,6 +1483,9 @@ internal sealed partial class GameWindow
         _enemyWait = 0;
         return true;
     }
+
+    /// <summary>컴퓨터 차례 빠르기 — 걷기와 사람 사이 기다림에 곱한다(1 이 원작).</summary>
+    private double EnemyRate => Math.Clamp(_settings.EnemySpeed, 100, 400) / 100.0;
 
     private void EnemyTick(double dt)
     {
@@ -1569,6 +1605,39 @@ internal sealed partial class GameWindow
         if (_bs != BattleState.Target) return;
         uint target = _pendingSpell >= 0 && _battle.SpellOf(_pendingSpell) is { Side: not 0 } ? 0x8040E060u : TargetColor;
         foreach (var t in _attackTiles) FillTile(t, target);
+        foreach (var t in AimArea()) FillTile(t, AimColor);
+    }
+
+    /// <summary>겨눈 칸에 걸면 실제로 맞는 칸 — 진하게 칠한다(제보: 어디까지 맞는지 알 수 없었다).</summary>
+    private const uint AimColor = 0xB0FFC030;
+
+    /// <summary>
+    /// 커서 칸을 가운데로 한 마법 · 물건의 범위(<see cref="Battle.InArea"/>, 판정과 같은 꼴). 걸 수 없는 칸이면 비어 있다.
+    /// 마법 30 은 쓰는 사람에게서 뻗는 한 줄(<see cref="Battle.SpellTargets"/>).
+    /// </summary>
+    private List<(int X, int Y)> AimArea()
+    {
+        var cells = new List<(int X, int Y)>();
+        if (!_attackTiles.Contains(_cursor) || _actor is not { } a) return cells;
+        int area;
+        if (_pendingItem >= 0 && _tables != null && _pendingItem < a.Bag.Count) area = _tables.Items[a.Bag[_pendingItem].Item].UseArea;
+        else if (_battle.SpellOf(_pendingSpell) is { } s)
+        {
+            if (_pendingSpell == 30)
+            {
+                int sx = Math.Sign(_cursor.X - a.X), sy = Math.Sign(_cursor.Y - a.Y);
+                if (sx != 0 && sy != 0 || sx == 0 && sy == 0) return cells;
+                for (int k = 1; k <= s.Range - 16; k++) if (_scene.Inside(a.X + sx * k, a.Y + sy * k)) cells.Add((a.X + sx * k, a.Y + sy * k));
+                return cells;
+            }
+            area = s.Area;
+        }
+        else return cells;
+        int r = area < 16 ? area : area - 16;
+        for (int dy = -r; dy <= r; dy++)
+            for (int dx = -r; dx <= r; dx++)
+                if (Battle.InArea(dx, dy, area, 0) && _scene.Inside(_cursor.X + dx, _cursor.Y + dy)) cells.Add((_cursor.X + dx, _cursor.Y + dy));
+        return cells;
     }
 
     private (Unit?, int, int) _freeReachFor;
@@ -2104,6 +2173,7 @@ internal sealed partial class GameWindow
             DrawText(gold, 16, 12);
             return;
         }
+        if (_stage == MenuStage.Mobile && TouchUi && _clientW < _clientH && _menu.Count > 1) { DrawMobileSheet(); return; }
         var (sx, sy) = _actor is { } u ? TileScreen(u.X, u.Y) : TileScreen(_cursor.X, _cursor.Y);
         if (InTownView) (sx, sy) = (_clientW, 8);   // 마을 그림 위 — 오른쪽 위에(건물 안 목록은 아래에서 가운데로)
         int cell = T * _zoom;
@@ -2119,12 +2189,51 @@ internal sealed partial class GameWindow
             }
         }
         int pad = TouchUi ? fs / 2 : 12;
+        // 폰 세로 건물 안 목록 — 그림을 어둡게 덮고, 위에 돈, 아래 ESC 자리를 비운 사이에 꽉 차게(사용자 요청 — 그림 · 돈 상자 · 단추가 목록과 겹쳤다)
+        bool roomy = TouchUi && _clientW < _clientH && InTownView && !_townTop;
+        int top = 4, bottom = 4;
+        if (roomy)
+        {
+            // 시안 — 위 띠(건물 이름 · 돈), 사기 · 팔기면 그 밑에 네 칸 탭. 돈은 위 ESC 단추와 겹치지 않게 이름 옆에
+            double ui = _clientW / 390.0;
+            int barY = VersionLabelBottom, barH = (int)(60 * ui), tabH = (int)(48 * ui);
+            FillRect(0, 0, _clientW, _clientH, 0xFF141A33);
+            FillRect(0, barY, _clientW, barH, 0xFF1C2850);
+            FillRect(0, barY + barH, _clientW, Math.Max(2, (int)(2 * ui)), 0xFFC8A040);
+            var place = Text.Render(_townSpot switch { 0 => "주점", 1 => "무기점", 3 => "도구점", 4 => "교회", 5 => "비밀상점", _ => "마을" }, (int)(18 * ui), 0xFFEEF0FF);
+            var money = Text.Render($"{_campaign?.Gold ?? 0:N0}원", (int)(18 * ui), 0xFFE8C870);
+            int textY = barY + (barH - place.H) / 2;
+            DrawText(place, (int)(16 * ui), textY);
+            DrawText(money, (int)(32 * ui) + place.W, textY);
+            top = barY + barH + Math.Max(2, (int)(2 * ui));
+            _shopTabRects.Clear();
+            if (_shopTab >= 0)
+            {
+                FillRect(0, top, _clientW, tabH, 0xFF1C2850);
+                for (int k = 0; k < ShopTabs.Length; k++)
+                {
+                    var tab = (X: _clientW * k / ShopTabs.Length, Y: top, W: _clientW / ShopTabs.Length, H: tabH);
+                    _shopTabRects.Add(tab);
+                    bool on = k == _shopTab;
+                    var word = Text.Render(ShopTabs[k], (int)(15 * ui), on ? 0xFFE8C870 : 0xFFC4CAE6, bold: on);
+                    DrawText(word, tab.X + (tab.W - word.W) / 2, tab.Y + (tab.H - word.H) / 2);
+                    if (on) FillRect(tab.X, tab.Y + tab.H - 3, tab.W, 3, 0xFFE8C870);
+                }
+                top += tabH;
+            }
+            bottom = _clientW / 6 + 8;
+            if (_menuFace >= 0 && _stage == MenuStage.Town && Face(_menuFace) is { Count: > 0 } mf0)
+            {
+                var (_, fw0, fh0) = mf0[0];
+                top += fh0 * Math.Max(1, Math.Min(_clientW / 4 / Math.Max(1, fw0), Math.Max(_clientH / 5, 1) / Math.Max(1, fh0))) + 16;
+            }
+        }
         // ▶ 자리는 글 크기만큼 — 폰은 글이 커서 예전 16점 자리로는 ▶ 가 첫 글자를 덮었다(사용자 요청)
         var arrow = Text.Render("▶", fs, 0xFFFFE070);
         int textX = arrow.W + 8;
         int w = imgs.Max(i => i.W) + textX + 16, rowH = imgs.Max(i => i.H) + pad;
         // 보이는 줄 수 — 다 안 들어가면 넘긴다(고른 줄이 보이게 따라가고, 끌거나 휠로 넘기면 그 자리에)
-        int fit = Math.Max(1, (_clientH - 8) / rowH);
+        int fit = Math.Max(1, (_clientH - top - bottom) / rowH);
         (_menuRowH, _menuFit) = (rowH, fit);
         var sig = (_stage, _menu.Count, _menu[0].Label);
         if (sig != _menuSig) (_menuSig, _menuScroll, _menuScrolledByDrag) = (sig, 0, false);   // 새 메뉴 — 처음부터
@@ -2141,7 +2250,7 @@ internal sealed partial class GameWindow
         int shown = Math.Min(fit, _menu.Count);
         int x = Math.Min(sx + cell + 6, _clientW - w - 4), y = Math.Max(4, Math.Min(sy, _clientH - rowH * shown - 4));
         if (_stage == MenuStage.Mobile) { w = Math.Min(_clientW - 8, Math.Max(w, _clientW / 3)); (x, y) = ((_clientW - w) / 2, Math.Max(4, (_clientH - rowH * shown) / 2)); }   // 모바일 메뉴는 화면 가운데에 넓게
-        else if (InTownView && !_townTop) { w = Math.Min(_clientW - 8, Math.Max(w, _clientW / 3)); (x, y) = ((_clientW - w) / 2, Math.Max(4, (_clientH - rowH * shown) / 2)); }   // 건물 안 목록(사기 · 팔기 …) — 화면 가운데에 크게
+        else if (InTownView && !_townTop) { w = Math.Min(_clientW - 8, Math.Max(w, _clientW / 3)); (x, y) = ((_clientW - w) / 2, roomy ? top : Math.Max(4, (_clientH - rowH * shown) / 2)); }   // 건물 안 목록(사기 · 팔기 …) — 화면 가운데에 크게
         _menuBox = (x, y, w, rowH * shown);
         if (_menuFace >= 0 && _stage == MenuStage.Town && Face(_menuFace) is { Count: > 0 } mf)
         {
@@ -2159,7 +2268,7 @@ internal sealed partial class GameWindow
             if (row < 0 || row >= shown) { _menu[i] = (_menu[i].Label, _menu[i].Do, default); continue; }   // 가려진 줄은 누를 수 없다
             var rect = (x, y + row * rowH, w, rowH);
             if (_mouseX >= rect.x && _mouseY >= rect.Item2 && _mouseX < x + w && _mouseY < rect.Item2 + rowH && _mouseMoved && !_menuDragging) _menuIndex = i;
-            FillRect(rect.x, rect.Item2, w, rowH - 2, i == _menuIndex ? 0xE0405090u : 0xD0202030u);
+            FillRect(rect.x, rect.Item2, w, rowH - 2, roomy ? (i == _menuIndex ? 0xFF34447Eu : 0xFF1A2140u) : i == _menuIndex ? 0xE0405090u : 0xD0202030u);
             int ty = rect.Item2 + (rowH - 2 - imgs[i].H) / 2;
             if (i == _menuIndex) DrawText(arrow, x + 4, ty);
             DrawText(imgs[i], x + textX, ty);
@@ -2252,18 +2361,25 @@ internal sealed partial class GameWindow
         // 세로 화면에서 옆이 잘리면 효과는 아랫줄로(사용자 요청) — 줄이 길어져도 메뉴는 끌어 넘긴다
         int avail = MenuAvail(fs);
         bool below = _clientW < _clientH && rows.Any(r => r.Effect is { } e && iconW + nameW + 2 * gap + priceW + e.W > avail);
+        // 아랫줄 효과는 작은 글로 한 줄에 — 줄 수가 달라지면 모든 줄이 높아져 목록이 성겼다(사용자 요청)
+        int small = fs;
+        if (below)
+        {
+            string longest = rows.MaxBy(r => r.Said.Length).Said;
+            while (small > fs * 2 / 3 && Text.Render(longest, small, 0xFFFFFFFF).W > avail - iconW) small -= 2;
+        }
         return rows.Select(r =>
         {
             if (r.Plain is { } plain) return plain;
             var parts = new List<(Text.Image, int)>();
             if (r.Icon is { } ic) parts.Add((ic, 0));
             if (r.Name is { } nm) parts.Add((nm, iconW));
-            int priceX = iconW + nameW + gap;
+            int priceX = below ? Math.Max(iconW + nameW + gap, avail - priceW) : iconW + nameW + gap;   // 아랫줄이면 값은 줄 오른쪽 끝에
             parts.Add((r.Price!, priceX + priceW - r.Price!.W));   // 값은 오른쪽 끝을 맞춘다
             int w = priceX + priceW;
             if (below && r.Effect != null)
             {
-                var lines = Wrap(r.Said, fs, Math.Max(fs, avail - iconW)).Select(l => Text.Render(l, fs, 0xFFFFFFFF)).ToList();
+                var lines = Wrap(r.Said, small, Math.Max(small, avail - iconW)).Select(l => Text.Render(l, small, 0xFFC8D0E0)).ToList();
                 return StackRows(ComposeRow(parts, w), lines, iconW);
             }
             if (r.Effect is { } e) { parts.Add((e, w + gap)); w += gap + e.W; }

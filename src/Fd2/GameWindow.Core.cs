@@ -411,6 +411,7 @@ internal sealed partial class GameWindow
             HeroRecord.Apply(u.Record, u);
             _battle.Recompute(u);
         }
+        PreloadMotions();
         _freeReachFor = default;
         _selected = _scene.Units.Find(u => u.Side == Side.Player);
         _keys.Clear();
@@ -465,7 +466,7 @@ internal sealed partial class GameWindow
             if (u.Moving)
             {
                 int before = (int)(u.Step * 6);
-                u.Step = Math.Min(1, u.Step + dt * StepsPerSecond);
+                u.Step = Math.Min(1, u.Step + dt * StepsPerSecond * (_bs == BattleState.Enemy ? EnemyRate : 1));
                 if ((lead ??= u) == u)
                     for (int k = before; k < (int)(u.Step * 6); k++) StepSound(u);
                 if (u.Moving) continue;
@@ -477,7 +478,7 @@ internal sealed partial class GameWindow
             {
                 int dx = next.X - u.X, dy = next.Y - u.Y;
                 // 같은 편 칸은 지나가기만 한다(이동 범위가 그렇게 셈) — 멈출 칸이 아니면 사람이 있어도 걷는다
-                if (u.Path.Count > 0 && _scene.Walkable(next.X, next.Y) && _scene.Units.Any(o => o != u && o.Alive && (o.X, o.Y) == next && (o.Team == 0) == (u.Team == 0)))
+                if (u.Path.Count > 0 && CanTread(u, next.X, next.Y) && _scene.Units.Any(o => o != u && o.Alive && (o.X, o.Y) == next && (o.Team == 0) == (u.Team == 0)))
                 {
                     u.Facing = DirOf(dx, dy);
                     (u.FromX, u.FromY) = (u.X, u.Y);
@@ -511,10 +512,17 @@ internal sealed partial class GameWindow
     private static Dir DirOf(int dx, int dy) =>
         dx < 0 ? Dir.Left : dx > 0 ? Dir.Right : dy < 0 ? Dir.Up : Dir.Down;
 
+    /// <summary>
+    /// 이 사람이 밟을 수 있는 칸 — 걸을 수 있는 칸이거나, 전투에서 그 직업 이동비로 갈 수 있는 칸.
+    /// 이동 범위는 이동비 표로 셈하는데 걷기만 땅을 봐서, 용기사 · 용검사가 날아서만 가는 칸(장벽 · 물) 앞에서 멈췄다(제보).
+    /// </summary>
+    private bool CanTread(Unit u, int x, int y) =>
+        _scene.Walkable(x, y) || InBattle && _scene.MoveCost(x, y, _battle.MoveCosts(u)) is >= 0 and < 20;
+
     private bool TryStep(Unit u, int dx, int dy, Dir facing)
     {
         u.Facing = facing;
-        if (!_scene.Free(u.X + dx, u.Y + dy)) return false;
+        if (!CanTread(u, u.X + dx, u.Y + dy) || _scene.UnitAt(u.X + dx, u.Y + dy) != null) return false;
         (u.FromX, u.FromY) = (u.X, u.Y);
         u.X += dx;
         u.Y += dy;

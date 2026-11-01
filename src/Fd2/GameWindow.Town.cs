@@ -40,6 +40,8 @@ internal sealed partial class GameWindow
         _townBack = back;
         _townButtons = false;
         _menuIcons.Clear();
+        _shopTab = -1;
+        _shopTabRects.Clear();
         if (_campaign is { } c) _battle.Gold = c.Gold;
     }
 
@@ -141,6 +143,28 @@ internal sealed partial class GameWindow
 
     private void OpenShopMenu(ShopInfo shop) => OpenShopMenu(shop, _shopAt, back: true);
 
+    private static readonly string[] ShopTabs = ["사기", "팔기", "정보", "장비"];
+
+    /// <summary>폰 세로 상점 목록 위 탭 — 지금 쪽(0 사기 · 1 팔기), 상점 목록이 아니면 -1. 칸은 그릴 때 채운다.</summary>
+    private int _shopTab = -1;
+    private ShopInfo? _tabShop;
+    private readonly List<(int X, int Y, int W, int H)> _shopTabRects = new();
+
+    /// <summary>상점 탭을 눌렀다 — 네 단추와 같은 곳으로 간다.</summary>
+    private bool ShopTabTap(int x, int y)
+    {
+        if (_shopTab < 0 || _tabShop is not { } shop || _clientW >= _clientH) return false;
+        int k = _shopTabRects.FindIndex(r => x >= r.X && y >= r.Y && x < r.X + r.W && y < r.Y + r.H);
+        if (k < 0) return false;
+        if (k == _shopTab) return true;
+        var goods = ShopGoods(shop, _shopAt).Goods;
+        if (k == 0 && goods.Length > 0) OpenBuy(shop, goods, 0);
+        else if (k == 1) OpenSellWho(shop, 0);
+        else if (k == 2) OpenParty();
+        else if (k == 3) OpenGiveFrom(0);
+        return true;
+    }
+
     /// <summary>상점(sub_279BC) — 원작 네 단추: 사기 · 팔기 · 정보 · 장비. Esc 로 마을.</summary>
     private void OpenShopMenu(ShopInfo shop, int at, bool back = false)
     {
@@ -160,6 +184,7 @@ internal sealed partial class GameWindow
     {
         if (_town is not { } t) return;
         BeginTownMenu(() => OpenShopMenu(shop));
+        (_shopTab, _tabShop) = (0, shop);
         // 물건 목록만(사용자 요청 — 폰에서 머리줄 · 말 창이 끼어 불편했다), 줄 앞에 무기 · 옷 · 도구 그림
         foreach (int item in goods)
         {
@@ -243,6 +268,7 @@ internal sealed partial class GameWindow
         if (_campaign is not { } c) return;
         void Back() => OpenShopMenu(shop);
         BeginTownMenu(Back);
+        (_shopTab, _tabShop) = (1, shop);
         _menu.Add((GoldLine("누구 물건을 파나"), () => { }, default));
         foreach (int i in Enumerable.Range(0, c.Party.Count).Skip(page * TownPage).Take(TownPage))
         {
@@ -300,7 +326,7 @@ internal sealed partial class GameWindow
     }
 
     /// <summary>동료 보기 · 건네주기에서 물릴 곳 — 지금 건물의 네 단추(주점 · 교회 · 상점).</summary>
-    private Action ViewBack => _townSpot switch
+    private Action ViewBack => _partyFromTop ? () => { _partyFromTop = false; OpenTownMenu(_townSpot); } : _townSpot switch
     {
         4 => OpenChurchMenu,
         0 => OpenTavern,

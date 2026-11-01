@@ -19,7 +19,7 @@ namespace Fd2;
 /// </remarks>
 /// <remarks>원작 자료는 앱에 들어 있지 않다 — 갖고 계신 용의기사2 폴더(FDFIELD.DAT 가 있는 곳)를 폰에 넣고 고르면 된다.</remarks>
 [Activity(Label = "용의기사2", MainLauncher = true, Icon = "@mipmap/appicon", Theme = "@android:style/Theme.Black.NoTitleBar.Fullscreen",
-          ScreenOrientation = ScreenOrientation.FullSensor,   // 가로 · 세로 모두(폰을 돌리면 화면도 — 지도가 넓어 세로로도 볼 만하다, 사용자 요청)
+          ScreenOrientation = ScreenOrientation.FullUser,   // 가로 · 세로 모두, 폰의 자동 회전 잠금을 따른다(FullSensor 는 잠금을 무시해 누워서 하면 돌아갔다, 제보)
           ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.KeyboardHidden | ConfigChanges.Keyboard | ConfigChanges.Navigation,
           LaunchMode = LaunchMode.SingleTask)]
 // 파일 앱 · 브라우저에서 받은 .zip 을 「용의기사2로 열기」 — 버전 묶음이면 풀어서 그 버전으로(MainActivity.Zips.cs)
@@ -43,6 +43,14 @@ public partial class MainActivity : Activity
     /// </summary>
     private string? ExternalGameDir => GetExternalFilesDir(null) is { } d ? System.IO.Path.Combine(d.AbsolutePath, "game") : null;
 
+    /// <summary>화면 방향 — 0 폰 설정 따름 · 1 세로 고정 · 2 가로 고정.</summary>
+    private void LockScreen(int kind) => RequestedOrientation = kind switch
+    {
+        1 => ScreenOrientation.UserPortrait,
+        2 => ScreenOrientation.UserLandscape,
+        _ => ScreenOrientation.FullUser,
+    };
+
     protected override void OnCreate(Bundle? state)
     {
         base.OnCreate(state);
@@ -50,6 +58,8 @@ public partial class MainActivity : Activity
         HideBars();
         GameWindow.VersionsProvider = Versions;
         GameWindow.VersionSwitcher = dir => RunOnUiThread(() => StartGame(dir));
+        GameWindow.ScreenLocker = kind => RunOnUiThread(() => LockScreen(kind));
+        LockScreen(Settings.Load().ScreenLock);
         GameWindow.VersionAdder = () => RunOnUiThread(ShowAddVersion);
         GameWindow.BugAsker = (summary, send) => RunOnUiThread(() => AskBug(summary, send));
         GameWindow.ChoiceAsker = (title, items, pick) => RunOnUiThread(() =>

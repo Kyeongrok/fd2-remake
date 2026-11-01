@@ -77,6 +77,12 @@ internal sealed class Settings
     /// <summary>전투 모션(무기 치기) 속도 % — 100 이 원작(한 틱 0.055초), 사용자 요청.</summary>
     public int StrikeSpeed { get; set; } = 100;
 
+    /// <summary>적 · 컴퓨터 아군 차례의 이동 속도 % — 100 이 원작(제보 — 뒤쪽 장은 적이 많아 기다림이 길다).</summary>
+    public int EnemySpeed { get; set; } = 100;
+
+    /// <summary>폰 화면 방향 — 0 폰 설정 따름, 1 세로 고정, 2 가로 고정(제보).</summary>
+    public int ScreenLock { get; set; }
+
     /// <summary>미니맵에 안 연 보물상자 · 비밀상자 표시(모드, 사용자 요청) — 기본 켬.</summary>
     public bool MiniChests { get; set; } = true;
 

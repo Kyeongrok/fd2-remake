@@ -11,6 +11,11 @@ internal sealed partial class GameWindow
 {
     private (int X, int Y, int W, int H) _miniFold, _chestFold, _escIcon, _menuIcon, _mapIcon, _partyIcon, _readyIcon, _escIcon2, _townPrev, _townNext, _townEnter;
 
+    private static readonly string[] ScreenLockNames = ["끔(폰 설정 따름)", "세로 고정", "가로 고정"];
+
+    /// <summary>화면 방향 설정을 폰에 적용 — 안드로이드만.</summary>
+    partial void ApplyScreenLock();
+
     private static string EscSpotName(int spot) => spot switch { 0 => "오른쪽 위", 1 => "오른쪽 아래", 3 => "왼쪽 아래", _ => "위 · 오른쪽 아래" };
 
     /// <summary>오른쪽 위 줄의 아래 끝 — 미니맵 패널을 그 밑에 놓는다(폰은 ESC 단추 밑).</summary>
@@ -199,6 +204,116 @@ internal sealed partial class GameWindow
         return (x, y, w, h);
     }
 
+    /// <summary>맨 위 줄의 이름 · 설명 — 시안(메뉴).</summary>
+    private static readonly Dictionary<string, (string Name, string Sub)> MobileRows = new()
+    {
+        ["화면 표시"] = ("화면 표시", "칸 정보 · 상대 정보 · 보물상자 · 승패 조건"),
+        ["설정"] = ("설정", "속도 · 회전 고정 · 소리 · 조작"),
+        ["시스템 메뉴"] = ("시스템 메뉴", "턴 끝 · 행군 · 전황 기록"),
+        ["에디트 — 돈 · 경험치"] = ("에디트", "돈 · 경험치"),
+        ["세이브 연동(구글)"] = ("세이브 연동", "구글 계정에 기록 올리고 받기"),
+        ["버그 리포트"] = ("버그 리포트", "문제를 적어 보내기"),
+    };
+
+    /// <summary>
+    /// 폰 세로 모바일 메뉴 — 엄지가 닿는 아래 시트(사용자 요청, 시안). 위에 제목 · 지금 상황, 줄마다 이름과 값(켬 · 끔은 스위치), 맨 아래 금색 닫기.
+    /// 맨 끝 줄이 늘 닫기다(<see cref="OpenTouchMenu"/>). 줄이 넘치면 끌어 넘기고, 닫기는 시트 아래에 고정.
+    /// </summary>
+    private void DrawMobileSheet()
+    {
+        double ui = _clientW / 390.0;
+        int U(double v) => (int)Math.Round(v * ui);
+        int large = U(20), body = U(16), small = U(12), m = U(20);
+        FillRect(0, 0, _clientW, _clientH, 0xA0060916);
+        int headH = U(68), rowH = U(60), footH = U(84), last = _menu.Count - 1;
+        int fit = Math.Max(1, (_clientH - U(48) - headH - footH) / rowH), shown = Math.Min(fit, last);
+        (_menuRowH, _menuFit) = (rowH, last > fit ? fit + 1 : _menu.Count);   // 끌기는 닫기 줄을 뺀 줄 수로 재므로 닫기 몫 하나를 더한다
+        var sig = (_stage, _menu.Count, _menu[0].Label);
+        if (sig != _menuSig) (_menuSig, _menuScroll, _menuScrolledByDrag) = (sig, 0, false);
+        if (last <= fit) _menuScroll = 0;
+        else
+        {
+            if (!_menuScrolledByDrag && _menuIndex >= 0 && _menuIndex < last)
+            {
+                if (_menuIndex < _menuScroll) _menuScroll = _menuIndex;
+                else if (_menuIndex >= _menuScroll + fit) _menuScroll = _menuIndex - fit + 1;
+            }
+            _menuScroll = Math.Clamp(_menuScroll, 0, last - fit);
+        }
+        int h = headH + shown * rowH + footH, y = _clientH - h;
+        _menuBox = (0, y + headH, _clientW, shown * rowH);
+        FillRect(0, y, _clientW, h, 0xFF1C2850);
+        FillRect(0, y, _clientW, Math.Max(2, U(2)), 0xFFC8A040);
+
+        string title = _mobilePage switch { 0 => "메뉴", 1 => "화면 표시", 2 => "설정", _ => "에디트" };
+        string now = _touchFromTown ? "마을" : $"{ChapterName(_scene.Index)} · {Turn}턴 · 아군 차례";
+        var head = Text.Render(title, large, 0xFFEEF0FF);
+        var state = Text.Render(now, small, 0xFFC4CAE6, bold: false);
+        var gold = Text.Render($"{_battle.Gold:N0}원", body, 0xFFE8C870);
+        DrawText(head, m, y + U(12));
+        DrawText(state, m, y + U(12) + head.H);
+        DrawText(gold, _clientW - m - gold.W, y + (headH - gold.H) / 2);
+        FillRect(0, y + headH - 1, _clientW, 1, 0xFF3A4678);
+
+        for (int i = 0; i < last; i++)
+        {
+            int row = i - _menuScroll;
+            if (row < 0 || row >= shown) { _menu[i] = (_menu[i].Label, _menu[i].Do, default); continue; }
+            var rect = (X: 0, Y: y + headH + row * rowH, W: _clientW, H: rowH);
+            if (_mouseX >= 0 && _mouseY >= rect.Y && _mouseY < rect.Y + rowH && _mouseMoved && !_menuDragging) _menuIndex = i;
+            if (i == _menuIndex) FillRect(0, rect.Y, _clientW, rowH - 1, 0xFF34447E);
+            FillRect(0, rect.Y + rowH - 1, _clientW, 1, 0xFF2C3768);
+            string label = _menu[i].Label;
+            if (_menuGlyphs.ContainsKey(i))
+            {
+                var img = MenuRow(label, i, body);
+                DrawText(img, m, rect.Y + (rowH - img.H) / 2);
+            }
+            else if (MobileRows.TryGetValue(label, out var r) && _mobilePage == 0)
+            {
+                var name = Text.Render(r.Name, body, 0xFFEEF0FF);
+                var note = Text.Render(r.Sub, small, 0xFFC4CAE6, bold: false);
+                DrawText(name, m, rect.Y + (rowH - name.H - note.H) / 2);
+                DrawText(note, m, rect.Y + (rowH - name.H - note.H) / 2 + name.H);
+            }
+            else
+            {
+                int at = label.LastIndexOf("  [", StringComparison.Ordinal);
+                var name = Text.Render(at >= 0 ? label[..at] : label, body, 0xFFEEF0FF);
+                DrawText(name, m, rect.Y + (rowH - name.H) / 2);
+                if (at >= 0)
+                {
+                    string value = label[(at + 3)..].TrimEnd(']');
+                    int dash = value.IndexOf(" — ", StringComparison.Ordinal);
+                    if (dash > 0) value = value[..dash];
+                    if (value is "켬" or "보임" or "끔" or "숨김")
+                    {
+                        bool on = value is "켬" or "보임";
+                        int tw = U(52), th = U(30), tx = _clientW - m - tw, ty = rect.Y + (rowH - th) / 2, k = U(22);
+                        FillRect(tx, ty, tw, th, on ? 0xFFC8A040 : 0xFF3A4678);
+                        FillRect(on ? tx + tw - k - U(4) : tx + U(4), ty + U(4), k, k, 0xFFEEF0FF);
+                    }
+                    else
+                    {
+                        var v = Text.Render(value, U(14), 0xFFE8C870);
+                        DrawText(v, _clientW - m - v.W, rect.Y + (rowH - v.H) / 2);
+                    }
+                }
+            }
+            _menu[i] = (label, _menu[i].Do, rect);
+        }
+        if (last > shown)
+        {
+            int barH = rowH * shown, thumb = Math.Max(U(24), barH * shown / last), bar = (barH - thumb) * _menuScroll / Math.Max(1, last - shown);
+            FillRect(_clientW - U(4), y + headH + bar, U(4), thumb, 0xE0C8A040);
+        }
+        var close = (X: U(16), Y: _clientH - footH + U(12), W: _clientW - 2 * U(16), H: U(52));
+        FillRect(close.X, close.Y, close.W, close.H, 0xFFC8A040);
+        var word = Text.Render(_menu[last].Label, body, 0xFF141A33);
+        DrawText(word, close.X + (close.W - word.W) / 2, close.Y + (close.H - word.H) / 2);
+        _menu[last] = (_menu[last].Label, _menu[last].Do, close);
+    }
+
     /// <summary>모바일 메뉴의 쪽 — 0 맨 위(최대 넷), 1 화면 표시(켜고 끄기), 2 설정(소리 · 단축키), 3 에디트(돈 · 사람 고르기), 4 에디트 — 고른 사람 경험치.</summary>
     private int _mobilePage;
 
@@ -287,6 +402,21 @@ internal sealed partial class GameWindow
                     _settings.Save();
                     OpenTouchMenu(_menuIndex, 2);
                 }, default));
+                _menu.Add(($"적 이동 속도  [{SpellSpeedName(_settings.EnemySpeed)}]", () =>
+                {
+                    int at = Array.IndexOf(EnemySpeeds, _settings.EnemySpeed);
+                    _settings.EnemySpeed = EnemySpeeds[(at + 1) % EnemySpeeds.Length];
+                    _settings.Save();
+                    OpenTouchMenu(_menuIndex, 2);
+                }, default));
+                if (OperatingSystem.IsAndroid())
+                    _menu.Add(($"화면 회전 고정  [{ScreenLockNames[Math.Clamp(_settings.ScreenLock, 0, 2)]}]", () =>
+                    {
+                        _settings.ScreenLock = (_settings.ScreenLock + 1) % ScreenLockNames.Length;
+                        _settings.Save();
+                        ApplyScreenLock();
+                        OpenTouchMenu(_menuIndex, 2);
+                    }, default));
                 _menu.Add(("소리 크기", () => { Close(); OpenVolume(); }, default));
                 _menu.Add(("단축키 · 패드 설정", () => { Close(); _keysOpen = true; _keysRow = 0; _keysCapture = -1; }, default));
                 break;

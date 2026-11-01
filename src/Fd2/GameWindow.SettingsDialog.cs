@@ -171,6 +171,8 @@ internal sealed partial class GameWindow
                 i => { _settings.StrikeSpeed = SpellSpeeds[i]; _settings.Save(); }));
             f.Controls.Add(Choice("마법 속도", SpellSpeeds.Select(SpellSpeedName).ToArray(), Array.IndexOf(SpellSpeeds, _settings.SpellSpeed),
                 i => { _settings.SpellSpeed = SpellSpeeds[i]; _settings.Save(); }));
+            f.Controls.Add(Choice("적 이동 속도", EnemySpeeds.Select(SpellSpeedName).ToArray(), Math.Max(0, Array.IndexOf(EnemySpeeds, _settings.EnemySpeed)),
+                i => { _settings.EnemySpeed = EnemySpeeds[i]; _settings.Save(); }));
             f.Controls.Add(Heading("소리"));
             f.Controls.Add(Toggle("배경음악", _settings.Music, MenuMusic));
             f.Controls.Add(Toggle("효과음", _settings.Sound, MenuSound));

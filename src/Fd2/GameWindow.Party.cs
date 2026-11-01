@@ -30,8 +30,17 @@ internal sealed partial class GameWindow
 
     private void CloseParty() => (_partyOpen, _partyDrag) = (false, null);
 
-    /// <summary>건물 안의 파티 창인가 — 동료를 누르면 그 사람의 장비 · 물건으로 간다(사용자 요청).</summary>
-    private bool PartyGearOn => _town != null && !_townTop && _campaign != null;
+    /// <summary>파티 창에서 동료를 눌러 장비로 가나 — 건물 안, 폰이면 마을 첫 화면과 우리 차례 전투에서도(사용자 요청).</summary>
+    private bool PartyGearOn => _town != null && _campaign != null && (!_townTop || TouchUi) || PartyBattleGear;
+
+    /// <summary>폰 전투 — 우리 차례에 고르는 중이면 파티 창에서 장비를 바꾼다.</summary>
+    private bool PartyBattleGear => TouchUi && InBattle && _town == null && !_enemyPhase && _bs == BattleState.Select;
+
+    /// <summary>파티 창에서 온 전투 장비 창 — 물리면 파티 창으로.</summary>
+    private bool _partyEquip;
+
+    /// <summary>마을 첫 화면 파티 창에서 온 장비 목록 — 물리면 첫 화면으로.</summary>
+    private bool _partyFromTop;
 
     /// <summary>누른 줄(끌면 취소) — 뗄 때 장비로 간다.</summary>
     private int _partyTap = -1;
@@ -40,6 +49,19 @@ internal sealed partial class GameWindow
     private void PartyGear(int i)
     {
         if (!PartyGearOn || i < 0 || i >= _party.Count) return;
+        if (PartyBattleGear)
+        {
+            var u = _party[i];
+            if (u.Team != 2 || u.Hp <= 0) { Toast("우리 편만 장비를 바꿀 수 있습니다"); return; }
+            if (u.Bag.Count == 0 && SharedItems(u, ItemMode.Equip).Count == 0) { Toast("가방이 비었습니다"); return; }
+            CloseParty();
+            ClearSelection();
+            _actor = u;
+            _partyEquip = true;
+            OpenItemPick(u, ItemMode.Equip);
+            return;
+        }
+        _partyFromTop = _townTop;
         int id = _party[i].NameId, member = _campaign!.Party.FindIndex(r => HeroRecord.Id(r) == id);
         CloseParty();
         if (member >= 0) OpenGiveItem(0, member);
