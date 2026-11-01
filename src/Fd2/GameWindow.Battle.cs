@@ -305,7 +305,7 @@ internal sealed partial class GameWindow
     {
         if (_bs == BattleState.Over || _victoryRunning) return true;
         int judge = _forcedOutcome != 0 ? _forcedOutcome : _battle.Judge();
-        // 대본 없이(GitHub 빌드 — 사건 대본은 저장소에 없다) 등장 차례로 적을 내보낼 때, 아직 나올 적 무리가 남았으면 이긴 것이 아니다
+        // 대본 없이(SceneEvents.json 이 빠진 빌드) 등장 차례로 적을 내보낼 때, 아직 나올 적 무리가 남았으면 이긴 것이 아니다
         // (2장처럼 적이 1턴 뒤에 나오는 판이 시작하자마자 「승리」 했다, 사용자 제보)
         // 바로 다음 턴에 나올 무리만 본다 — 255 는 나오지 않는 줄, 먼 차례(1장 10 · 11 처럼 원작에선 사건으로 나오는 무리)는 기다리지 않는다
         if (judge == 2 && _forcedOutcome == 0 && !UseEvents && _scene.Roster.Any(e => e.Type == 0 && e.Phase > Turn && e.Phase <= Turn + 1 && e.Phase < 255)) judge = 0;
