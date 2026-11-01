@@ -45,6 +45,8 @@ internal sealed partial class GameWindow
         if (UsableItem(it) && ItemCenters(u, it).Count > 0) _menu.Add(("쓰기", () => BeginItemTarget(u, slot, from), default));
         if (it.Kind < 32 && !equipped && CanEquip(u, it))
             _menu.Add(("장비", () => { Equip(u, slot); OpenItemMenu(u, from); }, default));
+        if (it.Kind < 32 && equipped)
+            _menu.Add(("벗기", () => { u.Bag[slot] = (id, false); _battle.Recompute(u); OpenItemMenu(u, from); }, default));
         if (!equipped) _menu.Add(("버리기", () => { u.Bag.RemoveAt(slot); _battle.Recompute(u); OpenItemMenu(u, from); }, default));
         _menu.Add(("돌아가기", () => OpenItemMenu(u, from), default));
         _menuIndex = Math.Min(1, _menu.Count - 1);
@@ -90,7 +92,7 @@ internal sealed partial class GameWindow
         return mode switch
         {
             ItemMode.Use => UsableItem(it) && ItemCenters(u, it).Count > 0,
-            ItemMode.Equip => it.Kind < 32 && (!equipped && CanEquip(u, it) || equipped && _settings.SharedBag),   // 공통 가방이면 입은 것을 벗는다
+            ItemMode.Equip => it.Kind < 32 && (equipped || CanEquip(u, it)),   // 입은 것은 눌러서 벗는다(공통 가방과 상관없이, 사용자 요청)
             _ => !equipped || _settings.SharedBag,   // 공통 가방이면 입은 것도 건네고 버린다(벗기고)
         };
     }

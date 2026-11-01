@@ -108,6 +108,23 @@ public sealed class Town(Campaign campaign, Battle battle)
         return TownResult.Ok;
     }
 
+    /// <summary>
+    /// 장비 입고 벗기 — 가방의 장비를 입으면 같은 쪽(무기 / 옷)의 것을 풀고, 입은 것이면 벗는다(전투의 sub_1C142 와 같음). 원작 상점 「장비」 단추는 건네주기뿐이라 리메이크가 더한 것(사용자 제보).
+    /// </summary>
+    public TownResult Equip(int member, int slot)
+    {
+        var u = ToUnit(campaign.Party[member]);
+        if (slot < 0 || slot >= u.Bag.Count) return TownResult.Empty;
+        var (item, on) = u.Bag[slot];
+        if (T.Items[item].Kind >= 32 || !on && !CanTake(campaign.Party[member], item)) return TownResult.CantEquip;
+        if (!on)
+            for (int k = 0; k < u.Bag.Count; k++)
+                if (u.Bag[k].Equipped && u.Bag[k].Item < 128 == item < 128) u.Bag[k] = (u.Bag[k].Item, false);
+        u.Bag[slot] = (item, !on);
+        Store(member, u);
+        return TownResult.Ok;
+    }
+
     // ── 교회 ───────────────────────────────────────────────────────────────
 
     /// <summary>부활(sub_2A43E) — 부활 값을 내고 +5 를 0, HP 를 최대로(MP 는 장이 끝날 때 이미 가득).</summary>

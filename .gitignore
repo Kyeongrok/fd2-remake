@@ -16,6 +16,9 @@ obj/
 # 게임 클라이언트에서 뽑은 자료 (저작물이라 저장소에 두지 않는다)
 data/extracted/
 
+# 구글 OAuth 데스크톱 클라이언트 ID · 보안 비밀 — 있으면 빌드가 실행 파일에 넣는다(CI 는 비밀값 FD2_GOOGLE_CLIENT 로 만든다)
+src/Fd2/google-client.txt
+
 # Python
 __pycache__/
 

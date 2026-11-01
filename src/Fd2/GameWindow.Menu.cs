@@ -16,7 +16,7 @@ internal sealed partial class GameWindow
 
     private const int MenuScenePrev = 1001, MenuSceneNext = 1002, MenuSceneBase = 1100;
     private const int MenuResBase = 1300, MenuZoomBase = 1400, MenuFullscreen = 1500, MenuResetView = 1501, MenuKeys = 1502, MenuVolume = 1503;
-    private const int MenuEditor = 1600, MenuExit = 1601, MenuHiRes = 1700, MenuShowRange = 1701, MenuMusic = 1702, MenuSound = 1703, MenuShowHelp = 1704, MenuShowGoals = 1705, MenuControlAllies = 1706, MenuMobileView = 1707, MenuBugReport = 1708, MenuSettingsDialog = 1709, MenuModeDialog = 1710, MenuShowUnitInfo = 1711, MenuSharedBag = 1712, MenuSkipEnemyFights = 1713, MenuMiniChests = 1714;
+    private const int MenuEditor = 1600, MenuExit = 1601, MenuHiRes = 1700, MenuShowRange = 1701, MenuMusic = 1702, MenuSound = 1703, MenuShowHelp = 1704, MenuShowGoals = 1705, MenuControlAllies = 1706, MenuMobileView = 1707, MenuBugReport = 1708, MenuSettingsDialog = 1709, MenuModeDialog = 1710, MenuShowUnitInfo = 1711, MenuSharedBag = 1712, MenuSkipEnemyFights = 1713, MenuMiniChests = 1714, MenuCloud = 1715;
     private const int MenuBattle = 1003, MenuBattleStop = 1004, MenuVersions = 1005;
 
     private static readonly (int W, int H)[] ResChoices =
@@ -46,6 +46,7 @@ internal sealed partial class GameWindow
         Win32.AppendMenuW(tools, Win32.MF_STRING, MenuEditor, "편집기 열기(&E)...");
         Win32.AppendMenuW(bar, Win32.MF_POPUP, (nuint)tools, "도구(&T)");
         Win32.AppendMenuW(bar, Win32.MF_SEPARATOR, 0, null);
+        Win32.AppendMenuW(bar, Win32.MF_STRING, MenuCloud, "세이브 연동(&C)...");
         Win32.AppendMenuW(bar, Win32.MF_STRING, MenuBugReport, "버그 리포트(&B)...");
         Win32.AppendMenuW(bar, Win32.MF_STRING, MenuExit, "끝내기(&X)");
         return bar;
@@ -148,6 +149,7 @@ internal sealed partial class GameWindow
                 break;
             case MenuVolume: OpenVolume(); break;
             case MenuBugReport: OpenBugReport(); break;
+            case MenuCloud: OpenCloudDialog(); break;
             case MenuSettingsDialog: OpenSettingsDialog(); break;
             case MenuModeDialog: OpenModeDialog(); break;
             case MenuVersions: PickVersion(); break;

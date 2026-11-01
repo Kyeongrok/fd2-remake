@@ -52,6 +52,8 @@ public partial class MainActivity : Activity
         GameWindow.VersionSwitcher = dir => RunOnUiThread(() => StartGame(dir));
         GameWindow.VersionAdder = () => RunOnUiThread(ShowAddVersion);
         GameWindow.BugAsker = (summary, send) => RunOnUiThread(() => AskBug(summary, send));
+        GameWindow.ChoiceAsker = (title, items, pick) => RunOnUiThread(() =>
+            new AlertDialog.Builder(this).SetTitle(title)!.SetItems(items, (_, e) => pick(e.Which))!.SetNegativeButton("닫기", (_, _) => { })!.Show());
         if (OpenedZip(Intent)) return;
         string chosen = Settings.Load().GameDir;
         var versions = Versions();

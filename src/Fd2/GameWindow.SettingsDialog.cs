@@ -117,6 +117,19 @@ internal sealed partial class GameWindow
     }
 
     /// <summary>햄버거 「설정」 — 화면 · 게임 · 소리와 조작.</summary>
+    private partial void OpenBrowser(string url) => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+
+    /// <summary>세이브 연동 창 — 구글 로그인, 올리기 · 받기(지금 버전의 기록), 연결 끊기.</summary>
+    private partial void OpenCloudDialog() => ShowSettingsForm("세이브 연동", ("구글 드라이브", f =>
+    {
+        if (!CloudSave.Configured) { f.Controls.Add(_dlg!.MakeLabel("아직 구글 연결 설정이 들어 있지 않은 빌드입니다.", wrap: _dlg.Px(380))); return; }
+        f.Controls.Add(_dlg!.MakeLabel($"자기 구글 계정의 앱 전용 칸에 「{VersionName}」 기록을 올리고 받습니다. 드라이브 목록에는 보이지 않습니다.", wrap: _dlg.Px(380)));
+        if (!Cloud.LoggedIn) { f.Controls.Add(ActionButton("구글 계정으로 로그인", CloudLogin)); return; }
+        f.Controls.Add(ActionButton("클라우드에 올리기", CloudUpload));
+        f.Controls.Add(ActionButton("클라우드에서 받기(이 PC 기록은 백업)", CloudDownload));
+        f.Controls.Add(ActionButton("구글 연결 끊기", CloudLogout));
+    }));
+
     private void OpenSettingsDialog() => ShowSettingsForm("설정",
         ("화면", f =>
         {

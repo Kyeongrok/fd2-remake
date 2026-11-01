@@ -1603,9 +1603,16 @@ internal sealed partial class GameWindow
             int sx = _offX + (int)Math.Round((u.DrawX * T - _camX) * _zoom);
             int sy = _offY + (int)Math.Round((u.DrawY * T - _camY) * _zoom);
             int bh = Math.Max(3, _zoom);
-            FillRect(sx + 2, sy + cell - bh - 1, cell - 4, bh, 0xC0000000);
-            FillRect(sx + 2, sy + cell - bh - 1, (cell - 4) * u.Hp / u.MaxHp, bh,
+            // 우리 편은 체력 막대 아래에 경험치 막대(0~100, 사용자 요청) — 그만큼 체력 막대를 올린다
+            int eh = u.Team == 2 ? Math.Max(2, bh * 2 / 3) : 0, hy = sy + cell - bh - eh - 1;
+            FillRect(sx + 2, hy, cell - 4, bh, 0xC0000000);
+            FillRect(sx + 2, hy, (cell - 4) * u.Hp / u.MaxHp, bh,
                      u.Ai ? 0xFFE0C040 : u.Side == Side.Player ? 0xFF40D060 : 0xFFE04040);
+            if (eh > 0)
+            {
+                FillRect(sx + 2, hy + bh, cell - 4, eh, 0xC0000000);
+                FillRect(sx + 2, hy + bh, (cell - 4) * Math.Clamp(u.Exp, 0, 100) / 100, eh, 0xFF50A8FF);
+            }
         }
 
         if (_bs == BattleState.Phase) { DrawPhaseFx(); return; }   // 차례 넘김 효과 동안은 다른 창을 그리지 않는다

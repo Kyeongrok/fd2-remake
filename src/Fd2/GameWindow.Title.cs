@@ -42,7 +42,7 @@ internal sealed partial class GameWindow
     private readonly List<(int X, int Y, int W, int H)> _titleRects = new();
 
     private (string Label, Action Do)[] TitleItems => _continueOpen
-        ? [.. _continueList.Select(s => (s.Label, (Action)(() => ContinueFrom(s.Campaign)))), ("돌아가기", () => { _continueOpen = false; _titleIndex = 0; })]
+        ? [.. _continueList.Select(s => (s.Label, (Action)(() => ContinueFrom(s.Campaign)))), ("세이브 연동(구글)", OpenCloudDialog), ("돌아가기", () => { _continueOpen = false; _titleIndex = 0; })]
         : [
         ("Start", StartGame),
         ("Load", () => { OpenContinue(); _titleIndex = 0; }),

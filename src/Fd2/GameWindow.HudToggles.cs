@@ -277,6 +277,7 @@ internal sealed partial class GameWindow
                 _menu.Add(("설정", () => OpenTouchMenu(0, 2), default));
                 if (!_touchFromTown) _menu.Add(("시스템 메뉴", OpenSystemMenu, default));   // 턴 끝 · 전황 기록은 싸움 것
                 _menu.Add(("에디트 — 돈 · 경험치", () => OpenTouchMenu(0, 3), default));
+                _menu.Add(("세이브 연동(구글)", () => { Close(); OpenCloudDialog(); }, default));
                 _menu.Add(("버그 리포트", () => { Close(); OpenBugReport(); }, default));
                 break;
         }

@@ -35,6 +35,14 @@ jobs:
           $version = $parts -join '.'
           echo "version=$version" >> $env:GITHUB_OUTPUT
 
+      # 세이브 연동 — 구글 OAuth 클라이언트(저장소 비밀값 FD2_GOOGLE_CLIENT, 두 줄)를 빌드에 넣는다. 없으면 그 기능만 꺼진다
+      - name: Write Google client
+        shell: pwsh
+        env:
+          GOOGLE_CLIENT: ${{ secrets.FD2_GOOGLE_CLIENT }}
+        run: |
+          if ($env:GOOGLE_CLIENT) { [IO.File]::WriteAllText("src/Fd2/google-client.txt", $env:GOOGLE_CLIENT) }
+
       # 게임(Fd2.exe)과 편집기(Fd2.Editor.exe)를 각각 설치 없이 도는 단일 exe 로 낸다.
       # 원본 게임 자료는 넣지 않는다 — 둘 다 게임 폴더를 그 자리에서 읽는다.
       # IncludeNativeLibrariesForSelfExtract — Vortice · WPF 가 싣는 네이티브 dll 까지 exe 안에 묶는다.
@@ -149,6 +157,14 @@ jobs:
           if ($code -lt 1) { $code = 1 }
           echo "version=$version" >> $env:GITHUB_OUTPUT
           echo "code=$code" >> $env:GITHUB_OUTPUT
+
+      # 세이브 연동 — 구글 OAuth 클라이언트(저장소 비밀값 FD2_GOOGLE_CLIENT, 두 줄)를 빌드에 넣는다. 없으면 그 기능만 꺼진다
+      - name: Write Google client
+        shell: pwsh
+        env:
+          GOOGLE_CLIENT: ${{ secrets.FD2_GOOGLE_CLIENT }}
+        run: |
+          if ($env:GOOGLE_CLIENT) { [IO.File]::WriteAllText("src/Fd2/google-client.txt", $env:GOOGLE_CLIENT) }
 
       # 서명 — 저장소 비밀값 ANDROID_KEYSTORE_B64(키 파일 base64) · ANDROID_KEYSTORE_PASS 가 있으면 늘 같은 키로 서명한다
       # (그래야 폰에서 지우지 않고 업데이트된다). 없으면 그때그때 만든 디버그 키 — 판마다 키가 달라 업데이트가 안 된다.

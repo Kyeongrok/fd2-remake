@@ -176,6 +176,13 @@ internal sealed partial class GameWindow
                 {
                     string raw = op.GetArrayLength() > 1 ? op[1].GetString() ?? "" : "";
                     if (EndingOp(raw, ops, next)) return;
+                    // 물건 주기 — 받았다는 알림까지(2장 주민을 다 구한 역량약수처럼, 사용자 제보)
+                    var gm = Regex.Match(raw, @"^giveitem\((\d+)\)");
+                    if (gm.Success)
+                    {
+                        ShowNotices(Reward(0, int.Parse(gm.Groups[1].Value)), Go);
+                        return;
+                    }
                     var cm = Regex.Match(raw, @"^(spawn|talk)\((.+)\)$");
                     if (cm.Success && Eval(cm.Groups[2].Value) is { } cv)
                     {
@@ -377,13 +384,6 @@ internal sealed partial class GameWindow
             foreach (var u in _scene.Units.Where(u => u.Slot >= a2 && u.Slot <= b2)) u.AiByte &= v2;
             return;
         }
-        m = Regex.Match(text, @"^giveitem\((\d+)\)");
-        if (m.Success)
-        {
-            var lead = BySlot(0) ?? Controlled.FirstOrDefault();
-            if (lead != null && lead.Bag.Count < 8) lead.Bag.Add((int.Parse(m.Groups[1].Value), false));
-            return;
-        }
         m = Regex.Match(text, @"^killfrom\((\d+)\)");
         if (m.Success)
         {
@@ -434,8 +434,11 @@ internal sealed partial class GameWindow
         var lead = BySlot(0) ?? Controlled.FirstOrDefault();
         switch (kind)
         {
-            case 0 when lead != null && lead.Bag.Count < 8:
-                lead.Bag.Add((value, false));
+            case 0:
+                // 앞사람 가방이 차면 자리가 있는 다음 사람에게 — 조용히 사라지지 않게
+                var taker = lead is { Bag.Count: < 8 } ? lead : Controlled.OrderBy(u => u.Slot).FirstOrDefault(u => u.Bag.Count < 8);
+                if (taker == null) { notes.Add(new Notice(" — 가방이 가득해 받지 못함", 181 + value)); break; }
+                taker.Bag.Add((value, false));
                 notes.Add(new Notice(" 획득", 181 + value));
                 break;
             case 1:

@@ -34,6 +34,20 @@ internal sealed partial class GameWindow
 
     private partial void OpenEditor() { }
 
+    /// <summary>글 줄 고르기 창 — MainActivity 가 채운다.</summary>
+    internal static Action<string, string[], Action<int>>? ChoiceAsker;
+
+    private partial void OpenCloudDialog()
+    {
+        if (!CloudSave.Configured) { Toast("세이브 연동이 아직 설정되지 않았습니다"); return; }
+        if (!Cloud.LoggedIn) ChoiceAsker?.Invoke("세이브 연동", ["구글 계정으로 로그인"], _ => CloudLogin());
+        else ChoiceAsker?.Invoke("세이브 연동", ["클라우드에 올리기", "클라우드에서 받기(이 기기 기록은 백업)", "구글 연결 끊기"],
+                                 i => { if (i == 0) CloudUpload(); else if (i == 1) CloudDownload(); else CloudLogout(); });
+    }
+
+    private partial void OpenBrowser(string url) =>
+        Android.App.Application.Context.StartActivity(new Android.Content.Intent(Android.Content.Intent.ActionView, Android.Net.Uri.Parse(url)).AddFlags(Android.Content.ActivityFlags.NewTask));
+
     private partial List<(string Name, string Dir)> FindVersions() => VersionsProvider?.Invoke() ?? [(VersionName, _dir)];
 
     private partial void SwitchVersion(string dir)

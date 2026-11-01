@@ -39,4 +39,7 @@
         </ItemGroup>
     </Target>
 
+    <ItemGroup>
+        <EmbeddedResource Include="google-client.txt" LogicalName="Fd2.google-client.txt" Condition="Exists('google-client.txt')" />
+    </ItemGroup>
 </Project>

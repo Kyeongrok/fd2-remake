@@ -79,7 +79,7 @@ internal sealed partial class GameWindow
             lost.Party.AddRange(_partyAtStart.Select(r => (byte[])r.Clone()));
         }
         if (outcome != 2 || _campaign is not { } c) return;
-        c.AfterVictory(_scene.Units);
+        c.AfterVictory(_scene.Units, addNew: !UseEvents);
         c.Gold = _battle.Gold;
         c.NextScene = _scene.Index == Campaign.FinalScene ? Campaign.FinalScene + 1 : Campaign.NextOf(_scene.Index);
     }

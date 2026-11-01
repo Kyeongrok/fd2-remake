@@ -40,6 +40,7 @@ internal sealed partial class GameWindow
     private void PlayOrDeploy()
     {
         if (_campaign is not { } c) return;
+        c.DropEarlyJoiners();
         foreach (int id in MovedFor(c.NextScene)) c.MoveToSecond(id);
         _screen = Screen.Game;
         LoadScene(c.NextScene, new List<byte[]>());   // 지도만(편성 화면 바탕)

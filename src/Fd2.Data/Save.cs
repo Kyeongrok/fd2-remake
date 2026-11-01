@@ -212,13 +212,14 @@ public sealed class Campaign
     /// <summary>
     /// 이긴 뒤 동료 표를 지도의 사람들로 고친다 — 나갔던 사람은 그 상태(레벨 · 경험 · 가방 · 마법)로, 이번에 합류한 우리 편(유닛 표 편 2)은 끝에 붙인다(sub_112A5).
     /// 원작처럼 산 사람은 HP 가득, 모두 MP 가득, 쓰러진 사람은 쓰러진 채(분석-캐릭터). 상태 이상은 지운다.
+    /// 대본으로 돌면 합류는 대본의 join(sub_112A5)뿐이라 addNew 는 끈다 — 1장 하와터처럼 싸움에만 함께하는 편 2 가 동료 표에 들어가면 안 된다.
     /// </summary>
-    public void AfterVictory(IEnumerable<Unit> units)
+    public void AfterVictory(IEnumerable<Unit> units, bool addNew = true)
     {
         foreach (var u in units.Where(u => u.Side == Side.Player && !u.Ai))
         {
             int i = Party.FindIndex(r => HeroRecord.Id(r) == u.NameId);
-            if (i < 0 && Party.Count >= MaxParty) continue;
+            if (i < 0 && (!addNew || Party.Count >= MaxParty)) continue;
             var r = HeroRecord.From(u);
             if (i >= 0) Party[i] = r; else Party.Add(r);
         }
@@ -227,6 +228,14 @@ public sealed class Campaign
             bool down = HeroRecord.Hp(r) == 0;
             HeroRecord.Rest(r, down);
         }
+    }
+
+    /// <summary>
+    /// 예전 빌드가 1장 뒤 동료 표에 잘못 넣은 하와터(3)를 뺀다 — 원작은 13장 뒤에 합류한다(그 앞에 있으면 출전 자리를 차지해 시리아가 못 나왔다).
+    /// </summary>
+    public void DropEarlyJoiners()
+    {
+        if (NextScene <= 12) Party.RemoveAll(r => HeroRecord.Id(r) == 3);
     }
 
     /// <summary>캐릭터 id 를 동료 표 둘째 자리(사울 다음)로 옮긴다(sub_2B843) — 나머지는 차례대로 밀린다.</summary>

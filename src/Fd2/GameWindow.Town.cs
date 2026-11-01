@@ -73,6 +73,7 @@ internal sealed partial class GameWindow
     private void OpenTownMenu(int building)
     {
         if (_campaign is not { } c || _tables?.ShopFor(c.NextScene) is not { } shop) { OpenOverMenu(); return; }
+        c.DropEarlyJoiners();
         _town = new Town(c, _battle);
         _townGreeting = -1;   // 건물에 새로 들어가면 들어오는 말부터
         SetMusic(MusicTown);
@@ -298,7 +299,7 @@ internal sealed partial class GameWindow
     {
         if (_campaign is not { } c) return;
         BeginTownMenu(ViewBack);
-        _menu.Add((GoldLine("누구의 물건을 건네주나"), () => { }, default));
+        _menu.Add((GoldLine("누구의 장비 · 물건을 보나"), () => { }, default));
         foreach (int i in Enumerable.Range(0, c.Party.Count).Skip(page * TownPage).Take(TownPage))
         {
             var r = c.Party[i];
@@ -318,15 +319,38 @@ internal sealed partial class GameWindow
         if (bag.Count == 0) { PlaySfx(Sound.UiBank, 7); TownBanner(" 건넬 물건이 없습니다", () => OpenGiveFrom(page), HeroRecord.Id(r) + 1); return; }
         BeginTownMenu(() => OpenGiveFrom(page));
         _menuGlyphs[0] = HeroRecord.Id(r) + 1;
-        _menu.Add((GoldLine("건넬 물건 — "), () => { }, default));
+        _menu.Add((GoldLine("물건 — "), () => { }, default));
         for (int k = 0; k < bag.Count; k++)
         {
             int slot = k;
             _menuIcons[_menu.Count] = ItemIcon(bag[k].Item);
             _menuGlyphs[_menu.Count] = 181 + bag[k].Item;
-            _menu.Add(($"{(bag[k].Equipped ? "(장비) " : "")} ", () => OpenGiveTo(page, member, slot, 0), default));
+            bool gear = _tables!.Items[bag[k].Item].Kind < 32;
+            _menu.Add(($"{(bag[k].Equipped ? "(장비) " : "")} ", () => { if (gear) OpenGearChoice(page, member, slot); else OpenGiveTo(page, member, slot, 0); }, default));
         }
         _menu.Add(("돌아가기", () => OpenGiveFrom(page), default));
+        EndTownMenu(1);
+    }
+
+    /// <summary>장비를 골랐다 — 입기(벗기) · 건네주기. 얻은 장비를 마을에서 입을 길(사용자 제보).</summary>
+    private void OpenGearChoice(int page, int member, int slot)
+    {
+        if (_town is not { } t || _campaign is not { } c) return;
+        var (item, on) = Town.Bag(c.Party[member])[slot];
+        int name = HeroRecord.Id(c.Party[member]) + 1;
+        void Back() => OpenGiveItem(page, member);
+        BeginTownMenu(Back);
+        _menuGlyphs[0] = 181 + item;
+        _menu.Add(("어떻게 할까요 — ", () => { }, default));
+        _menu.Add((on ? "벗는다" : "장비한다", () =>
+        {
+            var result = t.Equip(member, slot);
+            PlaySfx(Sound.UiBank, result == TownResult.Ok ? 5 : 7);
+            if (result == TownResult.Ok) Back();
+            else TownBanner(" 은(는) 장비할 수 없습니다", Back, name);
+        }, default));
+        _menu.Add(("건네준다", () => OpenGiveTo(page, member, slot, 0), default));
+        _menu.Add(("돌아가기", Back, default));
         EndTownMenu(1);
     }
 
@@ -396,6 +420,18 @@ internal sealed partial class GameWindow
                 TownBanner($"기록 {slot + 1} 을 불러왔습니다", () => OpenTownMenu(0));
             }, default));
         }
+        // 싸움 중 기록 · 자동저장(사용자 요청) — 그 싸움으로 바로 간다
+        foreach (var (label, rec) in BattleSaves())
+            _menu.Add((label, () =>
+            {
+                _menuGlyphs.Clear(); _menuIcons.Clear();
+                _menu.Clear();
+                _townBack = null;
+                _townTop = _townButtons = false;
+                _shopAt = 1;
+                PlaySfx(Sound.UiBank, 5);
+                LoadBattleRecord(rec);
+            }, default));
         _menu.Add(("돌아가기", OpenTavern, default));
         EndTownMenu(1);
     }
