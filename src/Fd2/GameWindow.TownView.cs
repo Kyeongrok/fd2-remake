@@ -100,6 +100,9 @@ internal sealed partial class GameWindow
     /// <summary>건물 안 그림 자리(화면 점) · 배율 — 단추 · 말 창을 그 위에 맞춘다.</summary>
     private (int X, int Y, double S) _insideAt;
 
+    /// <summary>건물 안 말 창 · 단추 · 돈 상자의 자리와 배율 — 가로는 그림과 같고, 세로는 그림 아래에 화면 폭 크기로.</summary>
+    private (int X, int Y, double S) _insideUi;
+
     /// <summary>건물 안 첫 메뉴가 원작 네 단추(오른쪽 아래)로 떠 있나 — 상점 사기 · 팔기 · 정보 · 장비, 주점 동료 · 기록 · 불러오기 · 이탈, 교회 동료 · 장비 · 부활 · 전직.</summary>
     private bool _townButtons;
 
@@ -146,15 +149,28 @@ internal sealed partial class GameWindow
             FillRect(0, 0, _clientW, _clientH, 0xFF000000);
             double si = Math.Min(_clientW / (double)AfmPlayer.Width, _clientH / (double)AfmPlayer.Height);
             int iw = (int)(AfmPlayer.Width * si), ih = (int)(AfmPlayer.Height * si), ix = (_clientW - iw) / 2, iy = (_clientH - ih) / 2;
+            double fit = si;
+            int uy = iy;
+            if (_clientW < _clientH)
+            {
+                // 세로 화면 — 좌우를 조금 잘라 그림을 키우고(가운데 72%), 말 창 · 단추는 그림 아래에 화면 폭 크기로(사용자 요청)
+                int boxH = (int)(84 * fit);
+                si = Math.Min(fit / 0.72, (_clientH - boxH - 96) / (double)AfmPlayer.Height);
+                (iw, ih) = ((int)(AfmPlayer.Width * si), (int)(AfmPlayer.Height * si));
+                (ix, iy) = ((_clientW - iw) / 2, Math.Max(8, (_clientH - ih - boxH - 8) / 2));
+                uy = iy + ih + 8 - (int)(112 * fit);
+            }
             _insideAt = (ix, iy, si);
+            _insideUi = ((_clientW - (int)(AfmPlayer.Width * fit)) / 2, uy, fit);
             BlitFit(inside.Back, AfmPlayer.Width, AfmPlayer.Height, ix, iy, iw, ih);
             DrawKeeperFace(inside);
             if (inside.Gold is { } gold)
             {
-                int gx = ix + (int)(5 * si), gy = iy + (int)(95 * si);
-                BlitFit(gold.Px, gold.W, gold.H, gx, gy, (int)(gold.W * si), (int)(gold.H * si));
-                var money = Text.Render($"{c.Gold}", Math.Max(12, (int)(9 * si)), 0xFFFFE070);
-                DrawText(money, gx + (int)(gold.W * si) - money.W - (int)(4 * si), gy + ((int)(gold.H * si) - money.H) / 2);
+                var (ux, uiy, us) = _insideUi;
+                int gx = ux + (int)(5 * us), gy = uiy + (int)(95 * us);
+                BlitFit(gold.Px, gold.W, gold.H, gx, gy, (int)(gold.W * us), (int)(gold.H * us));
+                var money = Text.Render($"{c.Gold}", Math.Max(12, (int)(9 * us)), 0xFFFFE070);
+                DrawText(money, gx + (int)(gold.W * us) - money.W - (int)(4 * us), gy + ((int)(gold.H * us) - money.H) / 2);
             }
             DrawKeeperTalk();
             return;
@@ -249,7 +265,7 @@ internal sealed partial class GameWindow
     private void DrawKeeperTalk()
     {
         if (!_townButtons) return;   // 목록(사기 · 팔기 …)이 떠 있으면 말 창은 숨긴다 — 목록만 보이게(사용자 요청)
-        var (ix, iy, si) = _insideAt;
+        var (ix, iy, si) = _insideUi;
         int bx = ix + (int)(5 * si), by = iy + (int)(112 * si), bw = (int)(304 * si), bh = (int)(80 * si), line = Math.Max(1, (int)si);
         FillRect(bx, by, bw, bh, 0xE028458A);
         FillRect(bx, by, bw, line * 2, 0xFF8090C0); FillRect(bx, by + bh - line * 2, bw, line * 2, 0xFF8090C0);
@@ -271,7 +287,7 @@ internal sealed partial class GameWindow
     private void DrawTownButtons(int fs)
     {
         if (InsidePicture(_townSpot) is not { } inside) return;
-        var (ix, iy, si) = _insideAt;
+        var (ix, iy, si) = _insideUi;
         for (int i = 0; i < _menu.Count && i < 4; i++)
         {
             bool lit = i == _menuIndex && (int)(_time / (2 * TownTick)) % 2 == 0;   // 고른 단추는 두 그림을 번갈아(원작 sub_27079)

@@ -381,13 +381,14 @@ internal sealed partial class GameWindow
         for (int k = 0; k < menuRows.Count; k++)
         {
             int i = menuRows[k], ry = y + k * rowH;
+            int tx = _continueOpen ? x + arrow.W + 24 : x + (w - imgs[i].W) / 2;   // 불러오기 목록은 글 시작을 왼쪽으로 맞춘다(사용자 요청)
             _titleRects[i] = (x, ry, w, rowH);
             if (i == _titleIndex)
             {
                 FillRect(x + 6, ry, w - 12, rowH - 4, 0xC0405090);
-                DrawText(arrow, Math.Max(x + 8, x + (w - imgs[i].W) / 2 - arrow.W - 8), ry + 5);   // 글 바로 왼쪽에
+                DrawText(arrow, Math.Max(x + 8, tx - arrow.W - 8), ry + 5);   // 글 바로 왼쪽에
             }
-            DrawText(imgs[i], x + (w - imgs[i].W) / 2, ry + 5);
+            DrawText(imgs[i], tx, ry + 5);
         }
         if (vrow >= 0)
         {
