@@ -25,6 +25,9 @@ public sealed record ItemInfo(int Kind, int Atk, int Hit, int Def, int Evade, in
                               int Use, int UseValue, int UseRange, int UseSide, int UseArea, int Price)
 {
     public bool IsWeapon(int id) => id < 128;
+
+    /// <summary>물건 그림 단추(<see cref="Buttons"/>) — 무기 칼(0) · 옷 갑옷(10) · 그 밖 주머니(2). 게임 메뉴 · 편집기 아이템 표가 같이 쓴다.</summary>
+    public static int IconOf(int id, int kind, int atk) => id < 128 && kind < 32 && atk > 0 ? 0 : kind < 32 && id >= 128 ? 10 : 2;
 }
 
 /// <summary>

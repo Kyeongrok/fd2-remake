@@ -23,7 +23,7 @@ public sealed record StrikeResult(bool Hit, bool Critical, int Damage, bool Pois
 /// <summary>
 /// 알림 한 줄 — Name 은 이름 표(FDTXT 0) 줄 번호(-1 없음)로, 원본 글꼴로 Text 앞에 그린다. Talk 는 보일 대사 묶음(-1 없음).
 /// </summary>
-public sealed record Notice(string Text, int Name = -1, int Talk = -1, int Event = -1);
+public sealed record Notice(string Text, int Name = -1, int Talk = -1, int Event = -1, IReadOnlyList<string>? Say = null, int Face = -1);
 
 /// <summary>
 /// 전투 규칙 — 분석-전투(FD2.EXE sub_1A30B · sub_1ECC7 · sub_2F7B6 · sub_1E292 · sub_1A866 · sub_205BE …)를 옮긴 것.
@@ -313,13 +313,14 @@ public sealed partial class Battle
         if (Tables == null || u.FormId >= GameTables.Forms) return notes;
         var g = Tables.Growths[u.FormId];
         var (a, d, s, hp, mp) = Grow(u);
+        // 원작처럼 얼굴 있는 대화 창에 한 줄씩(글 490~494 「역량 n 점 상승」) — 0 인 것은 뺀다
         var parts = new List<string>();
-        if (a > 0) parts.Add($"역량 +{a}");
-        if (d > 0) parts.Add($"내력 +{d}");
-        if (s > 0) parts.Add($"속도 +{s}");
-        if (hp > 0) parts.Add($"MHP +{hp}");
-        if (mp > 0) parts.Add($"MMP +{mp}");
-        if (parts.Count > 0) notes.Add(new Notice(string.Join("  ", parts)));
+        if (a > 0) parts.Add($"역량 {a}점 상승");
+        if (d > 0) parts.Add($"내력 {d}점 상승");
+        if (s > 0) parts.Add($"속도 {s}점 상승");
+        if (hp > 0) parts.Add($"MHP {hp}점 상승");
+        if (mp > 0) parts.Add($"MMP {mp}점 상승");
+        if (parts.Count > 0) notes.Add(new Notice("", Say: parts, Face: u.Icon));
         if (g.SpellList < Tables.SpellLearn.Count)
             foreach (var (level, spell) in Tables.SpellLearn[g.SpellList])
                 if (level == u.Level && spell < 40)

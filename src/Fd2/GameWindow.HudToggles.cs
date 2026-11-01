@@ -20,6 +20,7 @@ internal sealed partial class GameWindow
     {
         _miniFold = _chestFold = _escIcon = _menuIcon = _mapIcon = _partyIcon = _readyIcon = _escIcon2 = default;
         _hudIconBottom = 12;
+        _chestRows.Clear();
         if (_bs is BattleState.CutIn or BattleState.Talk) return;
         if (TouchUi) DrawTouchButtons(fs);
     }
@@ -38,7 +39,7 @@ internal sealed partial class GameWindow
 
     /// <summary>그 자리가 접기 단추 · ESC 단추인가 — 단추 누르기는 지도 끌기로 받지 않는다.</summary>
     private bool HudHit(int mx, int my) =>
-        new[] { _miniFold, _chestFold, _escIcon, _escIcon2, _menuIcon, _mapIcon, _partyIcon, _readyIcon, _touchMini }.Any(r => r.W > 0 && mx >= r.X - 4 && my >= r.Y - 4 && mx < r.X + r.W + 4 && my < r.Y + r.H + 4);
+        _chestRows.Select(c => c.Rect).Concat([_miniFold, _chestFold, _escIcon, _escIcon2, _menuIcon, _mapIcon, _partyIcon, _readyIcon, _touchMini]).Any(r => r.W > 0 && mx >= r.X - 4 && my >= r.Y - 4 && mx < r.X + r.W + 4 && my < r.Y + r.H + 4);
 
     /// <summary>단추를 눌렀으면 그 패널을 접고 펴고(ESC 는 원작 Esc, 메뉴는 모바일 메뉴) true.</summary>
     private bool HudToggleClick(int mx, int my)
@@ -50,6 +51,15 @@ internal sealed partial class GameWindow
         if (In(_partyIcon, mx, my)) { PlaySfx(Sound.UiBank, Sound.Menu); OpenParty(); return true; }
         if (In(_mapIcon, mx, my)) { _touchMiniOpen = !_touchMiniOpen; PlaySfx(Sound.UiBank, Sound.Cursor); return true; }
         if (TouchMinimapClick(mx, my)) return true;
+        if (_bs is BattleState.Select or BattleState.Target && _chestRows.FindIndex(c => In(c.Rect, mx, my)) is var row and >= 0)
+        {
+            // 보물상자 줄 — 커서만 그 칸으로(지도가 따라간다). 마우스 자리가 커서를 도로 가져가지 않게
+            _mouseMoved = false;
+            _cursor = (_chestRows[row].X, _chestRows[row].Y);
+            _centerCursor = true;
+            PlaySfx(Sound.UiBank, Sound.Cursor);
+            return true;
+        }
         if (In(_miniFold, mx, my)) _settings.ShowMinimap = !_settings.ShowMinimap;
         else if (In(_chestFold, mx, my)) _settings.ShowChests = !_settings.ShowChests;
         else return false;
@@ -60,7 +70,36 @@ internal sealed partial class GameWindow
     // ── 폰: 오른쪽 위 ESC 단추(원작 Esc 키와 같다) · 메뉴 단추(→ 모바일 메뉴: 보일 것 켜고 끄기 · 시스템 메뉴) ─────────────
 
     /// <summary>모바일 메뉴를 열 수 있는 때 — 우리 차례에 고르는 중.</summary>
-    private bool CanOpenTouchMenu => InBattle && !_enemyPhase && _bs == BattleState.Select;
+    private bool CanOpenTouchMenu => InBattle && !_enemyPhase && (_bs == BattleState.Select || TownTop);
+
+    /// <summary>마을 첫 화면(건물 고르기)인가.</summary>
+    private bool TownTop => _townTop && _stage == MenuStage.Town && _bs == BattleState.Menu && InTownView;
+
+    /// <summary>모바일 메뉴를 마을에서 열었나 — 닫으면 마을로, 에디트는 동료 표 · 기록의 돈을 고친다.</summary>
+    private bool _touchFromTown;
+
+    /// <summary>모바일 메뉴를 닫는다 — 싸움이면 고르기로, 마을이면 마을 첫 화면으로.</summary>
+    private void CloseTouchMenu()
+    {
+        _menu.Clear();
+        if (_touchFromTown) { _touchFromTown = false; OpenTownMenu(_townSpot); }
+        else _bs = BattleState.Select;
+    }
+
+    /// <summary>에디트 돈 — 마을에서는 기록의 돈까지(상점 · 저장이 그것을 본다).</summary>
+    private void EditGold(int add)
+    {
+        _battle.Gold += add;
+        if (_touchFromTown && _campaign is { } c) c.Gold = _battle.Gold;
+    }
+
+    /// <summary>에디트로 고친 사람을 동료 표에 — 마을의 사람은 동료 표로 세운 사본이다.</summary>
+    private void EditCommit(Unit u)
+    {
+        if (!_touchFromTown || _campaign is not { } c) return;
+        int i = c.Party.FindIndex(r => HeroRecord.Id(r) == u.NameId);
+        if (i >= 0) c.Party[i] = HeroRecord.From(u);
+    }
 
     /// <summary>ESC 단추를 보이는 때 — 우리 차례에 고르기 · 겨누기 · 메뉴(원작 Esc 가 듣는 때).</summary>
     private bool CanTouchEsc => InBattle && !_enemyPhase && _bs is BattleState.Select or BattleState.Target or BattleState.Menu;
@@ -88,8 +127,8 @@ internal sealed partial class GameWindow
             _menuIcon = DrawHudButton("메뉴", fs, right, y);
             bottom = Math.Max(bottom, _menuIcon.Y + _menuIcon.H);
             // 지도 — 누르면 미니맵이 뜨고 한 번 더 누르면 닫힌다(사용자 요청)
-            _mapIcon = DrawHudButton("지도", fs, _menuIcon.X - 10, y);
-            _partyIcon = DrawHudButton("파티", fs, _mapIcon.X - 10, y);   // 파티 정보 — 메뉴에서 빼 단추로(사용자 요청)
+            if (!TownTop) _mapIcon = DrawHudButton("지도", fs, _menuIcon.X - 10, y);
+            _partyIcon = DrawHudButton("파티", fs, (TownTop ? _menuIcon.X : _mapIcon.X) - 10, y);   // 파티 정보 — 메뉴에서 빼 단추로(사용자 요청)
         }
         if (bottom > 0) _hudIconBottom = bottom + 6;
         DrawReadyCount(fs);
@@ -139,11 +178,12 @@ internal sealed partial class GameWindow
     {
         if (!CanOpenTouchMenu && _bs != BattleState.Menu) return;
         if (!(_bs == BattleState.Menu && _stage == MenuStage.Mobile)) PlaySfx(Sound.UiBank, Sound.Menu);   // 처음 뜰 때만(켜고 끄며 다시 그릴 때는 말고)
+        if (TownTop) _touchFromTown = true;
         _stage = MenuStage.Mobile;
         _mobilePage = page;
         _menu.Clear();
         _menuGlyphs.Clear(); _menuIcons.Clear();
-        void Close() { _menu.Clear(); _bs = BattleState.Select; }
+        void Close() => CloseTouchMenu();
         void Toggle(string label, bool on, Action flip) =>
             _menu.Add(($"{label}  [{(on ? "보임" : "숨김")}]", () => { flip(); _settings.Save(); OpenTouchMenu(_menuIndex, 1); }, default));
         switch (page)
@@ -168,6 +208,12 @@ internal sealed partial class GameWindow
                     _settings.Save();
                     OpenTouchMenu(_menuIndex, 2);
                 }, default));
+                _menu.Add(($"미니맵 보물상자  [{(_settings.MiniChests ? "켬" : "끔")}]", () =>
+                {
+                    _settings.MiniChests = !_settings.MiniChests;
+                    _settings.Save();
+                    OpenTouchMenu(_menuIndex, 2);
+                }, default));
                 _menu.Add(($"적 공격 장면  [{(_settings.SkipEnemyFights ? "건너뛰기" : "보기")}]", () =>
                 {
                     _settings.SkipEnemyFights = !_settings.SkipEnemyFights;
@@ -177,6 +223,13 @@ internal sealed partial class GameWindow
                 _menu.Add(($"ESC 단추 자리  [{EscSpotName(_settings.EscSpot)}]", () =>
                 {
                     _settings.EscSpot = (_settings.EscSpot + 1) % 4;   // 누를 때마다 다음 자리
+                    _settings.Save();
+                    OpenTouchMenu(_menuIndex, 2);
+                }, default));
+                _menu.Add(($"전투 모션 속도  [{SpellSpeedName(_settings.StrikeSpeed)}]", () =>
+                {
+                    int at = Array.IndexOf(SpellSpeeds, _settings.StrikeSpeed);
+                    _settings.StrikeSpeed = SpellSpeeds[(at + 1) % SpellSpeeds.Length];
                     _settings.Save();
                     OpenTouchMenu(_menuIndex, 2);
                 }, default));
@@ -192,9 +245,9 @@ internal sealed partial class GameWindow
                 break;
             case 3:
                 // 에디트(사용자 요청) — 돈 올리기, 우리 편마다 경험치. 경험치는 원작 경험 함수(GainExp)로 넣어 100 이 넘으면 바로 레벨이 오른다
-                _menu.Add(($"돈 +1,000  (지금 {_battle.Gold:N0})", () => { _battle.Gold += 1000; OpenTouchMenu(_menuIndex, 3); }, default));
-                _menu.Add(("돈 +10,000", () => { _battle.Gold += 10000; OpenTouchMenu(_menuIndex, 3); }, default));
-                foreach (var u in _scene.Units.Where(u => u.Team == 2 && u.Hp > 0).OrderBy(u => u.Slot))
+                _menu.Add(($"돈 +1,000  (지금 {_battle.Gold:N0})", () => { EditGold(1000); OpenTouchMenu(_menuIndex, 3); }, default));
+                _menu.Add(("돈 +10,000", () => { EditGold(10000); OpenTouchMenu(_menuIndex, 3); }, default));
+                foreach (var u in _touchFromTown ? PartyMembers().Where(u => u.Hp > 0) : _scene.Units.Where(u => u.Team == 2 && u.Hp > 0).OrderBy(u => u.Slot))
                 {
                     var who = u;
                     _menuGlyphs[_menu.Count] = Battle.NameLine(u);
@@ -210,10 +263,11 @@ internal sealed partial class GameWindow
                     _menu.Add(($"경험치 +{e}{(e == 100 ? "  (레벨 업)" : "")}", () =>
                     {
                         var notes = _battle.GainExp(eu, e);
+                        EditCommit(eu);
                         if (notes.Count == 0) { OpenTouchMenu(_menuIndex, 4); return; }   // 최대 레벨 등 — 오르지 않음
                         int row = _menuIndex;
                         _menu.Clear();
-                        ShowNotices(notes, () => OpenTouchMenu(row, 4));
+                        ShowNotices(notes, () => { _bs = BattleState.Menu; OpenTouchMenu(row, 4); });
                     }, default));
                 }
                 _menu.Add(("돌아가기", () => OpenTouchMenu(0, 3), default));
@@ -221,7 +275,7 @@ internal sealed partial class GameWindow
             default:
                 _menu.Add(("화면 표시", () => OpenTouchMenu(0, 1), default));
                 _menu.Add(("설정", () => OpenTouchMenu(0, 2), default));
-                _menu.Add(("시스템 메뉴", OpenSystemMenu, default));
+                if (!_touchFromTown) _menu.Add(("시스템 메뉴", OpenSystemMenu, default));   // 턴 끝 · 전황 기록은 싸움 것
                 _menu.Add(("에디트 — 돈 · 경험치", () => OpenTouchMenu(0, 3), default));
                 _menu.Add(("버그 리포트", () => { Close(); OpenBugReport(); }, default));
                 break;

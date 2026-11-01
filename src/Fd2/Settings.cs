@@ -56,7 +56,7 @@ internal sealed class Settings
     public bool TouchTileInfo { get; set; }
     public bool TouchUnitInfo { get; set; }
 
-    /// <summary>PC 전투 왼쪽 아래 사람 정보 창(이름 · 레벨 · HP · 능력치) — 모드에서 켜고 끈다, 기본 끔(사용자 요청).</summary>
+    /// <summary>PC 전투 왼쪽 아래 캐릭터 정보 창(이름 · 레벨 · HP · 능력치) — 모드에서 켜고 끈다, 기본 끔(사용자 요청).</summary>
     public bool ShowUnitInfo { get; set; }
 
     /// <summary>
@@ -73,6 +73,12 @@ internal sealed class Settings
 
     /// <summary>마법 속도(%) — 100 이 원작. 모드에서 고른다(사용자 요청).</summary>
     public int SpellSpeed { get; set; } = 100;
+
+    /// <summary>전투 모션(무기 치기) 속도 % — 100 이 원작(한 틱 0.055초), 사용자 요청.</summary>
+    public int StrikeSpeed { get; set; } = 100;
+
+    /// <summary>미니맵에 안 연 보물상자 · 비밀상자 표시(모드, 사용자 요청) — 기본 켬.</summary>
+    public bool MiniChests { get; set; } = true;
     public bool TouchChests { get; set; }
     public bool TouchGoals { get; set; }
     public bool TouchHelp { get; set; }

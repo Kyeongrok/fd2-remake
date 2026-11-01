@@ -1,0 +1,30 @@
+// Zed 작업 — 명령 팔레트의 「task: spawn」(Alt+Shift+T)으로 고른다
+[
+  {
+    "label": "게임 실행",
+    "command": "dotnet",
+    "args": ["run", "--project", "src/Fd2/Fd2.csproj", "-c", "Release"],
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always"
+  },
+  {
+    "label": "편집기 실행",
+    "command": "dotnet",
+    "args": ["run", "--project", "src/Fd2.Editor/Fd2.Editor.csproj", "-c", "Release"],
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always"
+  },
+  {
+    "label": "규칙 점검 (Fd2.Check)",
+    "command": "dotnet",
+    "args": ["run", "--project", "src/Fd2.Check/Fd2.Check.csproj"],
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always"
+  }
+]

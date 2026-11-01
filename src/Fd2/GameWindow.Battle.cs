@@ -122,6 +122,7 @@ internal sealed partial class GameWindow
     private void StartBattle(int scene)
     {
         LoadScene(scene, BattleParty);
+        if (!UseEvents || _tables == null) _scene.SpreadPlayers();   // 원작은 겹쳐 세우고 시작 대본으로 편다 — 대본을 못 돌리면 여기서 벌린다
         _partyAtStart = _campaign?.Party.Select(r => (byte[])r.Clone()).ToList();   // 지면 되돌릴 동료 표(싸움 중 합류가 겹치지 않게)
         Array.Clear(_flags);
         _battle.Turn = 0;
@@ -291,6 +292,12 @@ internal sealed partial class GameWindow
             StartTalk(_scene.Index, [n.Talk], () => ShowNotices(rest, after));
             return;
         }
+        if (n.Say != null)
+        {
+            _bs = BattleState.Talk;
+            StartSay(n.Say, n.Face, () => ShowNotices(rest, after));
+            return;
+        }
         if (n.Event >= 0)
         {
             RunEvent(n.Event, () => ShowNotices(rest, after));
@@ -424,6 +431,7 @@ internal sealed partial class GameWindow
                 OpenOverMenu();
                 return;
             case BattleState.Menu:
+                if (TownTap(mx, my)) return;
                 foreach (var item in _menu)
                     if (mx >= item.Rect.X && my >= item.Rect.Y && mx < item.Rect.X + item.Rect.W && my < item.Rect.Y + item.Rect.H)
                     {
@@ -431,7 +439,7 @@ internal sealed partial class GameWindow
                         return;
                     }
                 if (_stage == MenuStage.System) BattleCancel();   // 십자 시스템 메뉴 밖을 누르면 닫는다
-                else if (_stage == MenuStage.Mobile) { _menu.Clear(); _bs = BattleState.Select; }   // 모바일 메뉴 밖을 누르면 닫는다
+                else if (_stage == MenuStage.Mobile) CloseTouchMenu();   // 모바일 메뉴 밖을 누르면 닫는다
                 return;
             case BattleState.Target:
             {
@@ -583,10 +591,15 @@ internal sealed partial class GameWindow
         }
         if (_bs == BattleState.Menu)
         {
-            if ((AskBoxOpen || _townButtons) && vk is Win32.VK_LEFT or Win32.VK_RIGHT) vk = vk == Win32.VK_LEFT ? Win32.VK_UP : Win32.VK_DOWN;   // YES · NO · 건물 네 단추는 좌우로
+            bool townRow = _townTop && _stage == MenuStage.Town;   // 마을 첫 화면 — 건물 사이를 옮긴다
+            if ((AskBoxOpen || _townButtons || townRow) && vk is Win32.VK_LEFT or Win32.VK_RIGHT) vk = vk == Win32.VK_LEFT ? Win32.VK_UP : Win32.VK_DOWN;   // YES · NO · 건물 네 단추 · 마을 건물은 좌우로
             if (vk is Win32.VK_UP or Win32.VK_DOWN) _menuScrolledByDrag = false;   // 키로 고르면 고른 줄이 보이게 다시 따라간다
-            if (vk == Win32.VK_UP) _menuIndex = (_menuIndex + _menu.Count - 1) % _menu.Count;
-            else if (vk == Win32.VK_DOWN) _menuIndex = (_menuIndex + 1) % _menu.Count;
+            if (vk is Win32.VK_UP or Win32.VK_DOWN)
+            {
+                int step = vk == Win32.VK_UP ? _menu.Count - 1 : 1;
+                _menuIndex = (_menuIndex + step) % _menu.Count;
+                if (townRow && _menuIndex == 0) _menuIndex = (_menuIndex + step) % _menu.Count;   // 0 번은 돈 줄 — 건물이 아니다
+            }
             else if (confirm && _menuIndex < _menu.Count) _menu[_menuIndex].Do();
             else if (cancel) BattleCancel();
             else return false;
@@ -672,7 +685,10 @@ internal sealed partial class GameWindow
             case BattleState.Menu when _stage == MenuStage.Mobile && _mobilePage > 0:   // 모바일 메뉴의 아래 쪽 — 맨 위로(에디트의 사람 쪽은 에디트로)
                 OpenTouchMenu(0, _mobilePage == 4 ? 3 : 0);
                 break;
-            case BattleState.Menu when _actor == null || _stage is MenuStage.System or MenuStage.Mobile:
+            case BattleState.Menu when _stage == MenuStage.Mobile:
+                CloseTouchMenu();
+                break;
+            case BattleState.Menu when _actor == null || _stage is MenuStage.System:
                 _menu.Clear();
                 _bs = BattleState.Select;
                 break;
@@ -1230,11 +1246,14 @@ internal sealed partial class GameWindow
         if (_tables == null || slot < 0 || slot >= u.Bag.Count) { after(); return; }
         var it = _tables.Items[u.Bag[slot].Item];
         if (it.Use is 20 or 21 or 24) { CastSpell(u, it.UseValue, center, after, fromItem: true); return; }
-        var targets = _ai.ItemTargets(u, it, center);
+        var targets = _ai.ItemTargets(u, it, center).ToList();
         if (it.Use == 5) u.Bag.RemoveAt(slot);
         BeginStrikes(after);
         foreach (var t in targets) _strikes.Enqueue(new Hit(u, t, Heal: it.UseValue));
-        NextStrike();
+        // 원작 sub_211A4 — 전투 화면 없이 지도에서 마법 13 그림(sub_1C4CC)을 보이고 대상마다 회복 · 알림
+        _strikeOnMap = targets.Count > 0;
+        if (_strikeOnMap) PlaySpellFx(13, targets.Select(t => (t.X, t.Y)), NextStrike);
+        else NextStrike();
     }
 
     private static Dir FaceTo(Unit a, Unit b)
@@ -1382,7 +1401,7 @@ internal sealed partial class GameWindow
             // 맞은 뒤 — 모션 끝까지 돌리고 조금 쉬었다 넘어간다
             _strikeTail += dt;
         }
-        _strikeClock += _strike.Magic ? dt * SpellRate : dt;   // 마법이면 쓰는 사람 몸짓도 마법 속도 배율로
+        _strikeClock += dt * (_strike.Magic ? SpellRate : StrikeRate);   // 마법이면 쓰는 사람 몸짓도 마법 속도 배율로
         int frames = _strikeMotion?.Frames.Count ?? 8;
         while (_strikeClock >= FigTick)
         {
@@ -1400,6 +1419,21 @@ internal sealed partial class GameWindow
     }
 
     // ── 컴퓨터 차례 ───────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 걷고 있는 컴퓨터 쪽 사람을 곧장 갈 칸에 세운다(클릭 · 탭 · 키, 사용자 요청) — 한 사람의 걸음만 건너뛰고 공격 등은 그대로 이어진다. 건너뛰었으면 참.
+    /// </summary>
+    private bool SkipEnemyWalk()
+    {
+        if (_bs != BattleState.Enemy || _enemyNow is not { } u || !(u.Moving || u.Path.Count > 0)) return false;
+        var dest = u.Path.Reverse().Cast<(int X, int Y)?>().FirstOrDefault(c => _scene.Free(c!.Value.X, c.Value.Y)) ?? (u.X, u.Y);   // 끝 칸이 막혔으면 그 앞 빈 칸
+        u.Path.Clear();
+        (u.X, u.Y, u.FromX, u.FromY) = (dest.X, dest.Y, dest.X, dest.Y);
+        u.Step = 1;
+        u.Facing = Dir.Down;
+        _enemyWait = 0;
+        return true;
+    }
 
     private void EnemyTick(double dt)
     {
@@ -1613,7 +1647,7 @@ internal sealed partial class GameWindow
         if (!TouchUi) DrawMinimap();
         int tileH = !TouchUi || _settings.TouchTileInfo ? DrawTileInfo(fs) : 0;
         var hover = HoverUnit() ?? _actor;
-        if (hover is { MaxHp: > 0 } && (TouchUi ? _settings.TouchUnitInfo : _settings.ShowUnitInfo)) DrawInfo(hover, fs, tileH);   // PC 는 모드 「사람 정보 창」(기본 끔)
+        if (hover is { MaxHp: > 0 } && (TouchUi ? _settings.TouchUnitInfo : _settings.ShowUnitInfo)) DrawInfo(hover, fs, tileH);   // PC 는 모드 「캐릭터 정보 창」(기본 끔)
 
         if (_bs is BattleState.Select or BattleState.Target or BattleState.Moving && !_mouseMoved) DrawCursor();   // 마우스를 쓰는 동안에는 커서를 숨긴다
         if (_bs == BattleState.Menu) DrawMenu(fs);
@@ -1701,19 +1735,40 @@ internal sealed partial class GameWindow
     /// 왼쪽 위 보물 목록(창세기전3 처럼) — 이 장의 안 연 보석상자(칸 속성 0x20)마다 든 것: 물건은 원본 글꼴 이름, 돈은 액수, 사건 상자는 「?」.
     /// 숨은 보물(0x40, 땅에 묻힌 비밀상자)도 보랏빛 「비밀」을 붙여 아래에(사용자 요청). 커서가 그 상자 칸이면 노랗게.
     /// </summary>
+    /// <summary>보물상자 목록 줄 자리와 그 칸 — 줄을 누르면 커서가 그리로(사용자 요청).</summary>
+    private readonly List<((int X, int Y, int W, int H) Rect, int X, int Y)> _chestRows = new();
+
+    /// <summary>이 장면의 상자 칸 — 장면이 바뀌면 다시.</summary>
+    private void BuildChestCells()
+    {
+        if (_chestCellsFor == _scene) return;
+        _chestCellsFor = _scene;
+        _chestCells.Clear();
+        foreach (int flag in new[] { 0x20, 0x40 })   // 보석상자 먼저, 비밀상자는 뒤에
+            for (int y = 0; y < _scene.Height; y++)
+                for (int x = 0; x < _scene.Width; x++)
+                    if ((_scene.TileFlags(x, y) & 0x60) == flag && _scene.Mark(x, y) is var k && k < _scene.Chests.Count) _chestCells.Add((x, y, k));
+    }
+
+    /// <summary>미니맵의 안 연 상자 — 보석상자 금색 · 비밀상자 보라(모드, 사용자 요청). 사람이 위에 그려진다.</summary>
+    private void DrawMiniChests(int mx, int my, int m)
+    {
+        if (!_settings.MiniChests || _scene.Index >= 30) return;
+        BuildChestCells();
+        foreach (var (x, y, k) in _chestCells)
+        {
+            if (_battle.OpenedChests.Contains(k)) continue;
+            FillRect(mx + x * m, my + y * m, m, m, 0xFF000000);
+            FillRect(mx + x * m + 1, my + y * m + 1, Math.Max(1, m - 2), Math.Max(1, m - 2), (_scene.TileFlags(x, y) & 0x60) == 0x40 ? 0xFFD070FFu : 0xFFFFD040u);
+        }
+    }
+
     private void DrawChestList(int fs)
     {
         if (_scene.Index >= 30 || _bs is BattleState.CutIn or BattleState.Talk) return;
-        if (_chestCellsFor != _scene)
-        {
-            _chestCellsFor = _scene;
-            _chestCells.Clear();
-            foreach (int flag in new[] { 0x20, 0x40 })   // 보석상자 먼저, 비밀상자는 뒤에
-                for (int y = 0; y < _scene.Height; y++)
-                    for (int x = 0; x < _scene.Width; x++)
-                        if ((_scene.TileFlags(x, y) & 0x60) == flag && _scene.Mark(x, y) is var k && k < _scene.Chests.Count) _chestCells.Add((x, y, k));
-        }
+        BuildChestCells();
         var rows = new List<Text.Image>();
+        var cells = new List<(int X, int Y)>();
         int g = Math.Max(1, fs / Font16.Size);
         foreach (var (x, y, k) in _chestCells)
         {
@@ -1726,6 +1781,7 @@ internal sealed partial class GameWindow
                      : kind == 1 ? Text.Render(value == 0 ? "빈 상자" : $"{value} 골드", fs, c)
                      : Text.Render("?", fs, c);
             rows.Add(Join(head, what));
+            cells.Add((x, y));
         }
         if (rows.Count == 0) return;
         var title = Text.Render("보물상자", fs, 0xFFA8C8FF);
@@ -1738,7 +1794,13 @@ internal sealed partial class GameWindow
         _chestFold = FoldButton(bx + w - btn - 6, by + 6, btn, open);
         if (!open) return;
         int cy = by + 8 + title.H;
-        foreach (var r in rows) { DrawText(r, bx + 10, cy); cy += r.H + 2; }
+        for (int i = 0; i < rows.Count; i++)
+        {
+            var r = rows[i];
+            _chestRows.Add(((bx, cy, w, r.H + 2), cells[i].X, cells[i].Y));
+            DrawText(r, bx + 10, cy);
+            cy += r.H + 2;
+        }
 
         static Text.Image Join(Text.Image a, Text.Image b)
         {
@@ -1789,6 +1851,7 @@ internal sealed partial class GameWindow
         int fb = Math.Max(14, fsM * 3 / 4);
         for (int y = 0; y < _scene.Height; y++)
             for (int x = 0; x < _scene.Width; x++) FillRect(mx + x * m, my + y * m, m, m, _mini![y * _scene.Width + x]);
+        DrawMiniChests(mx, my, m);
         foreach (var u in _scene.Units.Where(u => u.Alive && u.Hp > 0))
         {
             uint c = u.Ai ? 0xFFF0D040 : u.Side == Side.Player ? 0xFF40F070 : 0xFFFF4040;
@@ -1842,6 +1905,7 @@ internal sealed partial class GameWindow
         FillRect(mx - 3, my - 3, mw + 6, mh + 6, 0x80101020);
         for (int y = 0; y < _scene.Height; y++)
             for (int x = 0; x < _scene.Width; x++) FillRect(mx + x * m, my + y * m, m, m, 0xB0000000 | _mini![y * _scene.Width + x] & 0xFFFFFF);
+        DrawMiniChests(mx, my, m);
         foreach (var u in _scene.Units.Where(u => u.Alive && u.Hp > 0))
         {
             uint c = u.Ai ? 0xFFF0D040 : u.Side == Side.Player ? 0xFF40F070 : 0xFFFF4040;
@@ -1870,7 +1934,7 @@ internal sealed partial class GameWindow
 
     /// <summary>
     /// 왼쪽 아래 칸 정보 창(원작) — 커서 칸 그림(사람이 있으면 그 사람, 아래에 HP 세 자리)과 그 칸 지형의 공격 · 방어 보정(A ±% · D ±%).
-    /// 창 높이(위 여백 포함)를 돌려준다 — 사람 정보 창은 그 위에.
+    /// 창 높이(위 여백 포함)를 돌려준다 — 캐릭터 정보 창은 그 위에.
     /// </summary>
     private int DrawTileInfo(int fs)
     {
@@ -1997,19 +2061,27 @@ internal sealed partial class GameWindow
         if (_stage == MenuStage.ItemPick) { DrawItemWindow(); return; }
         if (CrossMenu) { DrawCrossMenu(fs); return; }
         if (_townButtons && InTownView && !_townTop) { DrawTownButtons(fs); return; }   // 건물 안 — 원작 네 단추
+        if (TownTop)
+        {
+            // 마을 첫 화면은 목록 없이 원작처럼 — 좌우 · 건물 누르기로 고른다(이름 상자가 고른 건물을 보인다, 사용자 요청). 돈만 왼쪽 위에
+            (_menuBox, _menuFit) = (default, _menu.Count);
+            var gold = Text.Render($"돈 {_campaign?.Gold ?? 0}원", fs, 0xFFFFE070);
+            FillRect(8, 8, gold.W + 16, gold.H + 8, 0xA0000000);
+            DrawText(gold, 16, 12);
+            return;
+        }
         var (sx, sy) = _actor is { } u ? TileScreen(u.X, u.Y) : TileScreen(_cursor.X, _cursor.Y);
         if (InTownView) (sx, sy) = (_clientW, 8);   // 마을 그림 위 — 오른쪽 위에(건물 안 목록은 아래에서 가운데로)
         int cell = T * _zoom;
         if (TouchUi) fs = _stage == MenuStage.Mobile ? fs * 2 : fs * 4 / 3;   // 폰은 메뉴 글을 더 크게(모바일 메뉴는 두 배) — 넘치면 줄이지 않고 끌어 넘긴다(사용자 요청)
-        var imgs = _menu.Select((m, i) => WithGlyphs(Text.Render(m.Label, fs, 0xFFFFFFFF), i, fs)).ToList();
+        var imgs = MenuImages(fs);
         if (!TouchUi)
         {
             // 줄이 많아 화면 높이를 넘으면 글을 줄인다
             while (fs > 12 && (imgs.Max(i => i.H) + 12) * imgs.Count > _clientH - 8)
             {
                 fs -= 2;
-                int f = fs;
-                imgs = _menu.Select((m, i) => WithGlyphs(Text.Render(m.Label, f, 0xFFFFFFFF), i, f)).ToList();
+                imgs = MenuImages(fs);
             }
         }
         int pad = TouchUi ? fs / 2 : 12;
@@ -2110,16 +2182,59 @@ internal sealed partial class GameWindow
     /// <summary>메뉴 줄 i 에 원본 글꼴 이름이 붙어 있으면 글 뒤에 이어 붙인다. 물건 그림(<see cref="_menuIcons"/>)이 있으면 그림 · 이름 · 글 차례로.</summary>
     private Text.Image WithGlyphs(Text.Image text, int i, int fs)
     {
-        if (_stage is not (MenuStage.Ask or MenuStage.Deploy or MenuStage.Town or MenuStage.Item or MenuStage.Mobile) || !_menuGlyphs.TryGetValue(i, out int line) || NameImage(line, Math.Max(1, fs / Font16.Size), 0xFFFFE070) is not { } g) return text;
+        if (_stage is not (MenuStage.Ask or MenuStage.Deploy or MenuStage.Town or MenuStage.Item or MenuStage.Mobile) || !_menuGlyphs.TryGetValue(i, out int line) || NameImage(line, MenuNameScale(fs), 0xFFFFE070) is not { } g) return text;
         var parts = new List<Text.Image>();
         if (_menuIcons.TryGetValue(i, out int icon) && IconImage(icon, Math.Max(text.H, g.H)) is { } ic) { parts.Add(ic); parts.Add(g); parts.Add(text); }
         else { parts.Add(text); parts.Add(g); }
-        int w = parts.Sum(p => p.W), h = parts.Max(p => p.H), x = 0;
-        var px = new uint[w * h];
-        foreach (var p in parts)
+        int x = 0;
+        return ComposeRow(parts.Select(p => { var at = (p, x); x += p.W; return at; }).ToList(), x);
+    }
+
+    /// <summary>메뉴 줄 그림들 — 줄 글에 탭(값	효과)이 있으면 이름 · 값 · 효과를 칸으로 맞춘다(상점 목록, 사용자 지적).</summary>
+    private List<Text.Image> MenuImages(int fs)
+    {
+        if (!_menu.Any(m => m.Label.Contains('	')))
+            return _menu.Select((m, i) => WithGlyphs(Text.Render(m.Label, fs, 0xFFFFFFFF), i, fs)).ToList();
+        var rows = _menu.Select((m, i) =>
         {
-            for (int r = 0; r < p.H; r++) Array.Copy(p.Px, r * p.W, px, (r + (h - p.H) / 2) * w + x, p.W);
-            x += p.W;
+            var cols = m.Label.Split('	');
+            if (cols.Length != 2) return (Plain: WithGlyphs(Text.Render(m.Label, fs, 0xFFFFFFFF), i, fs), Icon: (Text.Image?)null, Name: (Text.Image?)null, Price: (Text.Image?)null, Effect: (Text.Image?)null);
+            var price = Text.Render(cols[0], fs, 0xFFFFFFFF);
+            var name = _menuGlyphs.TryGetValue(i, out int line) ? NameImage(line, MenuNameScale(fs), 0xFFFFE070) : null;
+            var icon = _menuIcons.TryGetValue(i, out int ic) ? IconImage(ic, Math.Max(price.H, name?.H ?? 0)) : null;
+            return (Plain: (Text.Image?)null, Icon: icon, Name: name, Price: price, Effect: cols[1].Length > 0 ? Text.Render(cols[1], fs, 0xFFFFFFFF) : null);
+        }).ToList();
+        int gap = Math.Max(8, fs / 2), iconW = rows.Max(r => r.Icon?.W ?? 0), nameW = rows.Max(r => r.Name?.W ?? 0), priceW = rows.Max(r => r.Price?.W ?? 0);
+        return rows.Select(r =>
+        {
+            if (r.Plain is { } plain) return plain;
+            var parts = new List<(Text.Image, int)>();
+            if (r.Icon is { } ic) parts.Add((ic, 0));
+            if (r.Name is { } nm) parts.Add((nm, iconW));
+            int priceX = iconW + nameW + gap;
+            parts.Add((r.Price!, priceX + priceW - r.Price!.W));   // 값은 오른쪽 끝을 맞춘다
+            int w = priceX + priceW;
+            if (r.Effect is { } e) { parts.Add((e, w + gap)); w += gap + e.W; }
+            return ComposeRow(parts, w);
+        }).ToList();
+    }
+
+    /// <summary>원본 글꼴 이름 배율 — 반올림(버리면 글이 24점이어도 이름이 16점으로 작았다).</summary>
+    private static int MenuNameScale(int fs) => Math.Max(1, (fs + Font16.Size / 2) / Font16.Size);
+
+    /// <summary>그림들을 한 줄로 — 위아래 여백이 달라도 그려진 부분의 가운데를 맞춘다.</summary>
+    private static Text.Image ComposeRow(List<(Text.Image Img, int X)> parts, int w)
+    {
+        int h = parts.Max(p => p.Img.H);
+        var px = new uint[w * h];
+        foreach (var (p, x) in parts)
+        {
+            int top = 0, bottom = p.H - 1;
+            bool Blank(int r) => p.Px.AsSpan(r * p.W, p.W).IndexOfAnyExcept(0u) < 0;
+            while (top < bottom && Blank(top)) top++;
+            while (bottom > top && Blank(bottom)) bottom--;
+            int y = Math.Clamp((h - top - bottom - 1) / 2, 0, h - p.H);
+            for (int r = 0; r < p.H; r++) Array.Copy(p.Px, r * p.W, px, (r + y) * w + x, p.W);
         }
         return new Text.Image(px, w, h);
     }
@@ -2131,7 +2246,7 @@ internal sealed partial class GameWindow
     {
         if (_tables == null || id >= _tables.Items.Count) return 2;
         var it = _tables.Items[id];
-        return id < 128 && it.Kind < 32 && it.Atk > 0 ? 0 : it.Kind < 32 && id >= 128 ? 10 : 2;
+        return ItemInfo.IconOf(id, it.Kind, it.Atk);
     }
 
     private readonly Dictionary<(int, int), Text.Image?> _iconImages = new();
@@ -2148,7 +2263,7 @@ internal sealed partial class GameWindow
         }
         if (_buttons is not { Count: > 3 * 10 + 2 } bank) return _iconImages[(icon, h)] = null;
         var (src, w, sh) = bank.Frame(icon, red: false, 0);
-        int s = Math.Max(1, h / Math.Max(1, sh)), gap = Math.Max(4, h / 4), W = w * s + gap;
+        int s = Math.Max(1, (h + sh / 2) / Math.Max(1, sh)), gap = Math.Max(4, h / 4), W = w * s + gap;   // 줄 높이에 맞게 반올림
         var px = new uint[W * sh * s];
         for (int y = 0; y < sh * s; y++)
             for (int x = 0; x < w * s; x++) px[y * W + x] = src[(y / s) * w + x / s];
@@ -2275,7 +2390,7 @@ internal sealed partial class GameWindow
 
         DrawSpellFx(bx, by, s, clip, back: false);
 
-        // 두 사람 정보 창(원작) — 오른쪽에 선 사람은 위 오른쪽, 왼쪽 사람은 아래 왼쪽
+        // 두 캐릭터 정보 창(원작) — 오른쪽에 선 사람은 위 오른쪽, 왼쪽 사람은 아래 왼쪽
         int aSide = _strikeMotion != null ? SideOf(_strikeMotion) : a.Side == Side.Player ? 1 : 0;
         DrawStrikePanel(a, aSide, bx, by, s);
         if (a != d) DrawStrikePanel(d, 1 - aSide, bx, by, s);

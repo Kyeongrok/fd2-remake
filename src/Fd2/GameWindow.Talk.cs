@@ -20,6 +20,22 @@ internal sealed partial class GameWindow
 
     private bool Talking => _talk.Count > 0;
 
+    /// <summary>글 줄들을 얼굴 있는 대화 창에 세 줄씩(레벨업처럼 대사 묶음에 없는 글) — 다 보면 after.</summary>
+    private void StartSay(IReadOnlyList<string> lines, int face, Action after)
+    {
+        _talk.Clear();
+        foreach (var part in lines.Chunk(3))
+            _talk.Add(new Dialogue.Page { Speaker = face, Name = "", Text = string.Join("\n", part) });
+        _talkPage = 0;
+        _talkShown = 0;
+        _talkSkip = 0;
+        _talkMore = false;
+        _talkWindowEnd = int.MaxValue;
+        _afterTalk = after;
+        if (!Talking) EndTalk();
+        else FocusSpeaker();
+    }
+
     /// <summary>장면 scene 의 대사 묶음 messages 를 차례로 보이고, 다 보면 after.</summary>
     private void StartTalk(int scene, IEnumerable<int> messages, Action after)
     {
@@ -44,15 +60,25 @@ internal sealed partial class GameWindow
     }
 
     /// <summary>
-    /// FFEC · FFED 쪽의 말하는 사람(장면 유닛 표 차례 번호)을 그림 번호 · 이름으로 — 동료 · 왕처럼 이름이 있으면 이름과 얼굴,
+    /// FFEC · FFED 쪽의 말하는 사람을 그림 번호 · 이름으로 — 번호는 원작 사람 표(배열 번호: 우리 자리 P 명이 앞, 유닛 표 사람은 P 부터)다. 동료 · 왕처럼 이름이 있으면 이름과 얼굴,
     /// 몬스터 표(해적 같은)면 얼굴만.
     /// </summary>
     private void ResolveSpeakers()
     {
         foreach (var p in _talk)
         {
-            if (p.Roster < 0 || p.Roster >= _scene.Roster.Count) continue;
-            int id = _scene.Roster[p.Roster].Icon;
+            if (p.Roster < 0) continue;
+            int id;
+            if (_screen == Screen.Game)
+            {
+                // 쓰러진 사람도 말한다(2장 주민의 마지막 말) — Alive 를 보지 않는다. 아직 안 나온 사람은 유닛 표 차례로 어림한다
+                int players = _scene.Info.Length > 1 ? _scene.Info[1] : 0;
+                if ((_scene.Units.Find(u => u.Slot == p.Roster) ?? _scene.Hidden.Find(u => u.Slot == p.Roster)) is { } who) id = who.Form;
+                else if (p.Roster >= players && p.Roster - players < _scene.Roster.Count) id = _scene.Roster[p.Roster - players].Icon;
+                else continue;
+            }
+            else if (p.Roster < _scene.Roster.Count) id = _scene.Roster[p.Roster].Icon;   // 프롤로그는 우리 자리가 없다
+            else continue;
             p.Speaker = CharacterNames.SpriteOf(id, _icons.RoyalsMoved);
             p.Name ??= id < CharacterNames.Heroes ? CharacterNames.Of(id).Split('-')[0] : "";
         }

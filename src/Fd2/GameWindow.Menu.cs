@@ -16,7 +16,7 @@ internal sealed partial class GameWindow
 
     private const int MenuScenePrev = 1001, MenuSceneNext = 1002, MenuSceneBase = 1100;
     private const int MenuResBase = 1300, MenuZoomBase = 1400, MenuFullscreen = 1500, MenuResetView = 1501, MenuKeys = 1502, MenuVolume = 1503;
-    private const int MenuEditor = 1600, MenuExit = 1601, MenuHiRes = 1700, MenuShowRange = 1701, MenuMusic = 1702, MenuSound = 1703, MenuShowHelp = 1704, MenuShowGoals = 1705, MenuControlAllies = 1706, MenuMobileView = 1707, MenuBugReport = 1708, MenuSettingsDialog = 1709, MenuModeDialog = 1710, MenuShowUnitInfo = 1711, MenuSharedBag = 1712, MenuSkipEnemyFights = 1713;
+    private const int MenuEditor = 1600, MenuExit = 1601, MenuHiRes = 1700, MenuShowRange = 1701, MenuMusic = 1702, MenuSound = 1703, MenuShowHelp = 1704, MenuShowGoals = 1705, MenuControlAllies = 1706, MenuMobileView = 1707, MenuBugReport = 1708, MenuSettingsDialog = 1709, MenuModeDialog = 1710, MenuShowUnitInfo = 1711, MenuSharedBag = 1712, MenuSkipEnemyFights = 1713, MenuMiniChests = 1714;
     private const int MenuBattle = 1003, MenuBattleStop = 1004, MenuVersions = 1005;
 
     private static readonly (int W, int H)[] ResChoices =
@@ -65,6 +65,10 @@ internal sealed partial class GameWindow
                 _settings.ShowHelp = !_settings.ShowHelp;
                 _settings.Save();
                 break;
+            case MenuMiniChests:
+                _settings.MiniChests = !_settings.MiniChests;
+                _settings.Save();
+                break;
             case MenuSkipEnemyFights:
                 _settings.SkipEnemyFights = !_settings.SkipEnemyFights;
                 _settings.Save();
@@ -84,7 +88,7 @@ internal sealed partial class GameWindow
             case MenuMobileView:
                 _settings.MobileView = !_settings.MobileView;
                 _settings.Save();
-                if (_bs == BattleState.Menu && _stage == MenuStage.Mobile) { _menu.Clear(); _bs = BattleState.Select; }   // 열린 모바일 메뉴는 닫는다
+                if (_bs == BattleState.Menu && _stage == MenuStage.Mobile) CloseTouchMenu();   // 열린 모바일 메뉴는 닫는다
                 Layout();
                 break;
             case MenuControlAllies:

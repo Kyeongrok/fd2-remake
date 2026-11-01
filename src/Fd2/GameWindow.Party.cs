@@ -30,10 +30,10 @@ internal sealed partial class GameWindow
 
     private void CloseParty() => (_partyOpen, _partyDrag) = (false, null);
 
-    /// <summary>우리 편 — 전투 중이면 지도의 사람들(우리가 움직이는 사람 먼저, 컴퓨터 아군 뒤), 밖이면 동료 표를 사람으로 세워서.</summary>
+    /// <summary>우리 편 — 전투 중이면 지도의 사람들(우리가 움직이는 사람 먼저, 컴퓨터 아군 뒤), 밖이나 마을이면 동료 표를 사람으로 세워서(마을에서 산 장비가 보이게).</summary>
     private List<Unit> PartyMembers()
     {
-        if (InBattle)
+        if (InBattle && _town == null)
             return _scene.Units.Where(u => u.Side == Side.Player && u.MaxHp > 0)
                          .OrderBy(u => u.Ai).ThenBy(u => u.Slot < 0 ? int.MaxValue : u.Slot).ToList();
         if (_campaign is not { } c) return [];

@@ -349,8 +349,10 @@ public sealed class Scene
             int p = 2 + 6 * (others + k);
             if (p + 3 > pos.Length) break;
             var (form, id, record) = lineup[k];
-            Place(new Unit { Icon = CharacterNames.SpriteOf(form, _royalsMoved), Form = form, Id = id, Side = Side.Player, Facing = Dir.Up, Slot = _nextSlot++, Record = record },
-                  pos[p], pos[p + 2]);
+            // 원작(sub_1088D)은 빈칸을 찾지 않고 기록된 칸에 그대로 세운다 — 2장처럼 다 한 칸에 겹쳐 두고 시작 이동 대본으로 대열을 펴는 장이 있다
+            var hero = new Unit { Icon = CharacterNames.SpriteOf(form, _royalsMoved), Form = form, Id = id, Side = Side.Player, Facing = Dir.Up, Slot = _nextSlot++, Record = record };
+            (hero.X, hero.Y, hero.FromX, hero.FromY) = (pos[p], pos[p + 2], pos[p], pos[p + 2]);
+            Units.Add(hero);
         }
         _nextSlot = Math.Max(_nextSlot, players);   // 우리 자리는 비어도 0 ~ P-1 번을 차지한다 — 판정 · 대본이 유닛 표 사람을 P 부터의 번호로 본다
         foreach (var e in Roster.Where(e => e.Phase == 0)) Spawn(e);
@@ -378,6 +380,15 @@ public sealed class Scene
         };
         Place(u, e.X, e.Y);
         return Units.Contains(u) ? u : null;
+    }
+
+    /// <summary>시작 이동 대본을 못 돌릴 때(대본 · EXE 없음) — 겹쳐 선 우리 편을 가까운 빈칸으로 벌린다.</summary>
+    public void SpreadPlayers()
+    {
+        int players = Info.Length > 1 ? Info[1] : 0;
+        var team = Units.Where(u => u.Slot >= 0 && u.Slot < players).OrderBy(u => u.Slot).ToList();
+        Units.RemoveAll(team.Contains);
+        foreach (var u in team) Place(u, u.X, u.Y);
     }
 
     /// <summary>싸움 중 기록에서 되살린 사람들로 바꾼다 — 배열 번호는 기록의 유닛 수부터 이어 붙인다.</summary>

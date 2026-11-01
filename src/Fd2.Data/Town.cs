@@ -164,9 +164,6 @@ public sealed class Town(Campaign campaign, Battle battle)
 
     // ── 주점 ───────────────────────────────────────────────────────────────
 
-    /// <summary>동료 보기(주점 sub_29620 → sub_17AED) — 칸을 사람으로 풀어 셈한 능력까지.</summary>
-    public Unit View(int member) => ToUnit(campaign.Party[member]);
-
     // ── 칸 ↔ 사람 ──────────────────────────────────────────────────────────
 
     private Unit ToUnit(byte[] r)

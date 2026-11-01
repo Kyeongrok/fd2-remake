@@ -200,6 +200,44 @@ internal sealed partial class GameWindow
         OpenItemCross(u);
     }
 
+    /// <summary>상점 목록에 붙이는 물건 효과 한 줄 — 장비는 오르는 값 · 사거리 · 부가능력, 쓰는 물건은 사용 효과. 없으면 빈 글.</summary>
+    private string ItemEffect(int id)
+    {
+        if (_tables == null) return "";
+        var it = _tables.Items[id];
+        var parts = new List<string>();
+        if (it.Kind < 32)
+        {
+            if (it.Atk != 0) parts.Add($"공격{it.Atk:+0;-0}");
+            if (it.Hit != 0) parts.Add($"명중{it.Hit:+0;-0}");
+            if (it.Def != 0) parts.Add($"방어{it.Def:+0;-0}");
+            if (it.Evade != 0) parts.Add($"회피{it.Evade:+0;-0}");
+            if (it.Atk != 0 && it.RangeMax > 1) parts.Add(it.RangeMin == it.RangeMax ? $"사거리 {it.RangeMax}" : $"사거리 {it.RangeMin}~{it.RangeMax}");
+            string special = it.Special switch { 2 => "독", 3 => "2회 공격", 4 => "치명타", _ => "" };
+            if (special.Length > 0) parts.Add(it.SpecialValue > 0 ? $"{special} {it.SpecialValue}%" : special);
+        }
+        int v = it.UseValue;
+        string use = it.Use switch
+        {
+            5 or 13 => $"HP {v} 회복",
+            6 => "독 풀기",
+            7 => "마비 풀기",
+            8 => $"역량 +{v}",
+            9 => $"내력 +{v}",
+            10 => $"속도 +{v}",
+            11 => $"MP {v} 회복",
+            12 => "속도 증가",
+            15 => "방어력 증가",
+            16 => "공격력 증가",
+            17 => $"최대 HP +{v}",
+            18 => $"최대 MP +{v}",
+            19 => $"이동력 +{v}",
+            _ => "",
+        };
+        if (use.Length > 0) parts.Add(use);
+        return string.Join(" ", parts);
+    }
+
     /// <summary>아이템 창 — 원작처럼 위 왼쪽 얼굴, 위 오른쪽 이름 · 직업 · LV · EX · DX · MV · HIT · AP · EV · DP · HP/MP 막대, 아래 가방 목록.</summary>
     private void DrawItemWindow()
     {

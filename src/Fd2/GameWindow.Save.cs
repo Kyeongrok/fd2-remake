@@ -334,6 +334,18 @@ internal sealed partial class GameWindow
         if (c.Battle is { } b) { LoadBattleRecord(b); return; }
         _continueOpen = false;
         _campaign = c;
+        // 다음 장 앞에 마을이 있으면 마을에서 이어 간다(기록은 마을 주점에서 한다, 사용자 제보) — 전장은 출구로
+        if (c.NextScene < _sceneCount && HasTown && _tables?.ShopFor(c.NextScene) != null)
+        {
+            _screen = Screen.Game;
+            LoadScene(c.NextScene, c.Ready.ToList());   // 마을 그림에 세울 앞장선 사람까지
+            _battle.Gold = c.Gold;
+            _outcome = 2;   // 마을 화면은 이긴 뒤 화면이다
+            _endingKind = 0;
+            _shopAt = 1;
+            OpenTownMenu();
+            return;
+        }
         PlayCampaign();
     }
 }

@@ -56,7 +56,12 @@ internal sealed partial class GameWindow
         dlg.Content.Controls.Add(stack);
         dlg.Footer.Controls.Add(dlg.MakeButton("닫기", dlg.Close));
         Select(0);
+        // 창이 떠 있는 동안 게임 고리가 멈춘다 — 배율 · 표시 같은 고침이 바로 보이게 그림만 다시 그린다(게임 시간은 흐르지 않는다, 사용자 요청)
+        using var live = new System.Windows.Forms.Timer { Interval = 33 };
+        live.Tick += (_, _) => Render();
+        live.Start();
         dlg.ShowOver(_hwnd);
+        live.Stop();
         _dlg = null;
         _keys.Clear();   // 창이 떠 있는 동안 뗀 키가 눌린 채로 남지 않게
     }
@@ -145,9 +150,12 @@ internal sealed partial class GameWindow
         {
             f.Controls.Add(Toggle("고해상도(4배, 이 PC 에서 차례로 만듦)", _settings.HiRes, MenuHiRes));
             f.Controls.Add(Toggle("이동 · 공격 범위 보기", _settings.ShowRange, MenuShowRange));
-            f.Controls.Add(Toggle("사람 정보 창(전투 왼쪽 아래 — 이름 · HP · 능력치)", _settings.ShowUnitInfo, MenuShowUnitInfo));
+            f.Controls.Add(Toggle("캐릭터 정보 창(전투 왼쪽 아래 — 이름 · HP · 능력치)", _settings.ShowUnitInfo, MenuShowUnitInfo));
             f.Controls.Add(Toggle("공통 가방(우리 편 소모품을 누구나 사용)", _settings.SharedBag, MenuSharedBag));
+            f.Controls.Add(Toggle("미니맵에 보물상자 표시(금색 · 비밀 보라)", _settings.MiniChests, MenuMiniChests));
             f.Controls.Add(Toggle("적 공격은 전투 장면 건너뛰기(지도에서 결과만)", _settings.SkipEnemyFights, MenuSkipEnemyFights));
+            f.Controls.Add(Choice("전투 모션 속도", SpellSpeeds.Select(SpellSpeedName).ToArray(), Array.IndexOf(SpellSpeeds, _settings.StrikeSpeed),
+                i => { _settings.StrikeSpeed = SpellSpeeds[i]; _settings.Save(); }));
             f.Controls.Add(Choice("마법 속도", SpellSpeeds.Select(SpellSpeedName).ToArray(), Array.IndexOf(SpellSpeeds, _settings.SpellSpeed),
                 i => { _settings.SpellSpeed = SpellSpeeds[i]; _settings.Save(); }));
             f.Controls.Add(Heading("소리"));

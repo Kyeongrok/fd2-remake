@@ -44,6 +44,9 @@ internal sealed partial class GameWindow
     /// <summary>마법 속도 배율(모드, 사용자 요청) — 1 이 원작(한 틱 0.055초), 0.5 면 두 배 느리게. 전투 화면 효과 · 쓰는 사람 몸짓 · 지도 위 마법 그림.</summary>
     private double SpellRate => Math.Clamp(_settings.SpellSpeed, 10, 400) / 100.0;
 
+    /// <summary>전투 모션(무기 치기) 속도 배율(모드, 사용자 요청) — 1 이 원작.</summary>
+    private double StrikeRate => Math.Clamp(_settings.StrikeSpeed, 10, 400) / 100.0;
+
     /// <summary>모드 창 · 모바일 설정에서 고르는 마법 속도(%).</summary>
     private static readonly int[] SpellSpeeds = [25, 50, 75, 100, 150, 200];
 

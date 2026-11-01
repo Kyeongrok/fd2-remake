@@ -112,6 +112,29 @@ internal sealed partial class GameWindow
     /// <summary>네 단추 자리(그림 점) — (240 + {−39, −13, 13, 39}, 169), 표 0x52408.</summary>
     private static readonly int[] ButtonDx = [-39, -13, 13, 39];
 
+    /// <summary>마을 그림 자리 · 배율 — 건물 누르기에 쓴다.</summary>
+    private (int X, int Y, double S) _townPicAt;
+
+    /// <summary>마을 첫 화면을 눌렀다 — 가장 가까운 건물을 고르고, 이미 고른 건물이면 들어간다. 받았으면 참.</summary>
+    private bool TownTap(int mx, int my)
+    {
+        if (!TownTop || _campaign is not { } c || _tables?.ShopFor(c.NextScene) is not { } shop) return false;
+        var (px, py, s) = _townPicAt;
+        int best = -1;
+        double bestD = double.MaxValue;
+        for (int i = 1; i < _menu.Count; i++)
+        {
+            var (tx, ty) = _tables.TownSpot(shop.Town, i - 1);
+            double dx = px + (tx + T / 2) * s - mx, dy = py + (ty + T / 2) * s - my, d = dx * dx + dy * dy;
+            if (d < bestD) (bestD, best) = (d, i);
+        }
+        if (best < 0) return false;
+        if (best == _menuIndex) { _menu[best].Do(); return true; }
+        _menuIndex = best;
+        PlaySfx(Sound.UiBank, Sound.Cursor);
+        return true;
+    }
+
     private void DrawTownView()
     {
         if (!InTownView || _campaign is not { } c || _tables?.ShopFor(c.NextScene) is not { } shop) return;
@@ -142,6 +165,7 @@ internal sealed partial class GameWindow
         double s = Math.Min(_clientW / (double)AfmPlayer.Width, _clientH / (double)AfmPlayer.Height);
         int pw = (int)(AfmPlayer.Width * s), ph = (int)(AfmPlayer.Height * s), px = (_clientW - pw) / 2, py = (_clientH - ph) / 2;
         BlitFit(pic, AfmPlayer.Width, AfmPlayer.Height, px, py, pw, ph);
+        _townPicAt = (px, py, s);
         int X(int v) => px + (int)(v * s);
         int Y(int v) => py + (int)(v * s);
         // 앞장선 사람 — 고른 건물 앞(원작은 0 · 1 · 2 · 1 장을 돌린다)

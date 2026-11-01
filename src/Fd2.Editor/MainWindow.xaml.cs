@@ -304,12 +304,31 @@ public partial class MainWindow : Window
         scene.SelectionChanged += (_, _) => units.Refresh();
         UnitsHost.Content = UnitsWithMap(units, scene);
 
-        ItemsHost.Content = new TableEditor(this, StatTables.Items, () => _exe, "FD2.EXE 에 저장", SaveExe, LoadStats);
+        ItemsHost.Content = new TableEditor(this, StatTables.Items, () => _exe, "FD2.EXE 에 저장", SaveExe, LoadStats, ItemPicture) { PortraitHeight = 24 };
         SpellsHost.Content = new TableEditor(this, StatTables.Spells, () => _exe, "FD2.EXE 에 저장", SaveExe, LoadStats);
         ShopsHost.Content = new TableEditor(this, StatTables.Shops, () => _exe, "FD2.EXE 에 저장", SaveExe, LoadStats,
             TownPicture, Label("마을마다 무기점 12 · 도구점 8 · 비밀상점 8칸 — 「없음(255)」 칸에 아이템을 고르면 추가, 「없음(255)」으로 바꾸면 삭제"))
         { PortraitHeight = 100 };
         _tableEditors.AddRange([stats, units, (TableEditor)ItemsHost.Content, (TableEditor)SpellsHost.Content, (TableEditor)ShopsHost.Content]);
+    }
+
+    private (string Dir, Buttons? Bank) _itemButtons;
+
+    /// <summary>아이템 줄 왼쪽 그림 — 게임 메뉴와 같은 칼 · 갑옷 · 주머니 단추(FDOTHER 2).</summary>
+    private ImageSource? ItemPicture(int id)
+    {
+        if (_exe is not { } exe) return null;
+        if (_itemButtons.Dir != _dir)
+        {
+            try { _itemButtons = (_dir, new Buttons(_dir, _pal)); }
+            catch (Exception e) when (e is System.IO.IOException or IndexOutOfRangeException or ArgumentOutOfRangeException) { _itemButtons = (_dir, null); }
+        }
+        var fields = StatTables.Items().Rows[id].Fields;
+        int Value(string name) => StatTables.Get(exe, fields.First(f => f.Name == name));
+        int icon = ItemInfo.IconOf(id, Value("종류"), Value("공격"));
+        if (_itemButtons.Bank is not { } bank || 3 * icon + 2 >= bank.Count) return null;
+        var (px, w, h) = bank.Frame(icon, red: false);
+        return ToBitmap(px, w, h);
     }
 
     /// <summary>초상화 — DATO 얼굴 첫 장, 없으면 지도 그림.</summary>

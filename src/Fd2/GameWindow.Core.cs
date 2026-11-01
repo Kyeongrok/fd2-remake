@@ -170,6 +170,7 @@ internal sealed partial class GameWindow
         if (_screen != Screen.Game) { TitleClick(_mouseX, _mouseY); return; }
         if (Talking) { TalkNext(); return; }
         if (InBattle && HudToggleClick(x, y)) return;
+        if (SkipEnemyWalk()) return;
         MouseToCursor();
         OnClick((int)Math.Floor((_mouseX - _offX) / (double)_zoom), (int)Math.Floor((_mouseY - _offY) / (double)_zoom));
     }
@@ -322,6 +323,7 @@ internal sealed partial class GameWindow
             TitleKey(vk);
             return;
         }
+        if (!_keyRepeat) SkipEnemyWalk();   // 적이 걷는 중이면 그 한 명의 걸음을 건너뛴다 — 키는 그대로 넘긴다
         if (TownSecretKey(vk)) return;   // 마을 비밀상점 열쇠(Shift · Ctrl · Alt + F) — 도움말 같은 단축키보다 먼저
 
         // 바꿀 수 있는 키 — 커서 키는 방향키로 바꿔 넘기고, 목록 · 체력바는 어디서나
