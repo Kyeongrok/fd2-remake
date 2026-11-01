@@ -221,8 +221,8 @@ internal sealed partial class GameWindow
         if (!_dragging && Math.Abs(x - p.X) + Math.Abs(y - p.Y) < DragSlop) return false;
         _dragging = true;
         int mapW = _scene.Width * T, mapH = _scene.Height * T;
-        if (mapW > _boardW) _camX = Math.Clamp(_pressCam.X - (x - p.X) / Math.Max(1, _zoom), 0, mapW - _boardW);
-        if (mapH > _boardH) _camY = Math.Clamp(_pressCam.Y - (y - p.Y) / Math.Max(1, _zoom), 0, mapH - _boardH);
+        if (mapW > _boardW) _camX = Math.Clamp(_pressCam.X - (x - p.X) / Math.Max(1, _zoom), -CamOver, mapW - _boardW + CamOver);
+        if (mapH > _boardH) _camY = Math.Clamp(_pressCam.Y - (y - p.Y) / Math.Max(1, _zoom), -CamOver, mapH - _boardH + CamOver);
         return true;
     }
 
@@ -253,8 +253,8 @@ internal sealed partial class GameWindow
         var at = who ?? _selected;
         if (at == null) return;
         int mw = _scene.Width * T, mh = _scene.Height * T;
-        _camX = mw <= _boardW ? (mw - _boardW) / 2 : Math.Clamp((int)(at.DrawX * T) + T / 2 - _boardW / 2, 0, mw - _boardW);
-        _camY = mh <= _boardH ? (mh - _boardH) / 2 : Math.Clamp((int)(at.DrawY * T) + T / 2 - _boardH / 2, 0, mh - _boardH);
+        _camX = mw <= _boardW ? (mw - _boardW) / 2 : Math.Clamp((int)(at.DrawX * T) + T / 2 - _boardW / 2, -CamOver, mw - _boardW + CamOver);
+        _camY = mh <= _boardH ? (mh - _boardH) / 2 : Math.Clamp((int)(at.DrawY * T) + T / 2 - _boardH / 2, -CamOver, mh - _boardH + CamOver);
     }
 
     /// <summary>
@@ -271,8 +271,8 @@ internal sealed partial class GameWindow
         Layout();
         if (_scene == null) return;
         int mw = _scene.Width * T, mh = _scene.Height * T;
-        _camX = mw <= _boardW ? (mw - _boardW) / 2 : Math.Clamp(cx - _boardW / 2, 0, mw - _boardW);
-        _camY = mh <= _boardH ? (mh - _boardH) / 2 : Math.Clamp(cy - _boardH / 2, 0, mh - _boardH);
+        _camX = mw <= _boardW ? (mw - _boardW) / 2 : Math.Clamp(cx - _boardW / 2, -CamOver, mw - _boardW + CamOver);
+        _camY = mh <= _boardH ? (mh - _boardH) / 2 : Math.Clamp(cy - _boardH / 2, -CamOver, mh - _boardH + CamOver);
     }
 
     /// <summary>배율과 보이는 판 크기를 창 크기에서 셈한다. 판이 바뀌면 화면 버퍼와 텍스처를 다시 만든다.</summary>
@@ -300,8 +300,8 @@ internal sealed partial class GameWindow
             Follow();
             // 화면 크기가 바뀌면(폰을 돌리면) 카메라를 새 판에 맞춘다 — 세로 때 자리 그대로면 가로에서 지도 끝 너머가 검게 보였다(사용자 제보)
             int mw = _scene.Width * T, mh = _scene.Height * T;
-            _camX = mw <= _boardW ? (mw - _boardW) / 2 : Math.Clamp(_camX, 0, mw - _boardW);
-            _camY = mh <= _boardH ? (mh - _boardH) / 2 : Math.Clamp(_camY, 0, mh - _boardH);
+            _camX = mw <= _boardW ? (mw - _boardW) / 2 : Math.Clamp(_camX, -CamOver, mw - _boardW + CamOver);
+            _camY = mh <= _boardH ? (mh - _boardH) / 2 : Math.Clamp(_camY, -CamOver, mh - _boardH + CamOver);
         }
     }
 
@@ -520,6 +520,9 @@ internal sealed partial class GameWindow
         return true;
     }
 
+    /// <summary>폰 전투 — 카메라가 맵 끝을 넘어갈 수 있는 점 수(세 칸). 맵 끝 싸움이 단추에 가리지 않게 가운데 쪽으로 끌어온다(사용자 요청). 밑그림 있는 장면은 끝을 넘지 않는다.</summary>
+    private int CamOver => TouchUi && InBattle && _backdrop == null ? 3 * T : 0;
+
     /// <summary>고른 사람을 화면 가운데에. 지도가 화면보다 작으면 지도를 가운데에.</summary>
     private void Follow()
     {
@@ -530,8 +533,8 @@ internal sealed partial class GameWindow
             {
                 _centerCursor = false;
                 int mw = _scene.Width * T, mh = _scene.Height * T;
-                _camX = mw <= _boardW ? (mw - _boardW) / 2 : Math.Clamp(_cursor.X * T + T / 2 - _boardW / 2, 0, mw - _boardW);
-                _camY = mh <= _boardH ? (mh - _boardH) / 2 : Math.Clamp(_cursor.Y * T + T / 2 - _boardH / 2, 0, mh - _boardH);
+                _camX = mw <= _boardW ? (mw - _boardW) / 2 : Math.Clamp(_cursor.X * T + T / 2 - _boardW / 2, -CamOver, mw - _boardW + CamOver);
+                _camY = mh <= _boardH ? (mh - _boardH) / 2 : Math.Clamp(_cursor.Y * T + T / 2 - _boardH / 2, -CamOver, mh - _boardH + CamOver);
             }
             else if (_scene.Width * T <= _boardW || _scene.Height * T <= _boardH) KeepCursorInView();
             return;
@@ -544,7 +547,7 @@ internal sealed partial class GameWindow
         (int Cam, int Sub) want(double c, int map, int view)
         {
             if (map <= view) return ((map - view) / 2, 0);
-            int px = (int)Math.Round(Math.Clamp(c - view / 2.0, 0, map - view) * z);
+            int px = (int)Math.Round(Math.Clamp(c - view / 2.0, -CamOver, map - view + CamOver) * z);
             return (px / z, px % z);
         }
         (_camX, _subX) = want(cx, mapW, _boardW);

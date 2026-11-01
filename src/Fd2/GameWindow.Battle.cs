@@ -502,7 +502,7 @@ internal sealed partial class GameWindow
             }
             case BattleState.Select:
             {
-                if (!_scene.Inside(tx, ty)) return;
+                if (!_scene.Inside(tx, ty)) { if (_choosingMove) MoveRangeEmptyTap(); return; }
                 var who = _scene.UnitAt(tx, ty);
                 if (_choosingMove && _actor != null && _reach != null && _reach.ContainsKey((tx, ty)) && (who == null || who == _actor))
                 {
@@ -516,7 +516,11 @@ internal sealed partial class GameWindow
                     return;
                 }
                 if (_choosingMove && who != null && who != _actor && Ready(who)) { _selected = who; BeginMove(who); return; }   // 다른 아군으로 바꿔 고름
-                if (_choosingMove) return;   // 범위 밖 — 무시(취소는 Esc · 오른쪽 단추)
+                if (_choosingMove)
+                {
+                    if (who == null) MoveRangeEmptyTap();   // 범위 밖 빈 칸 — 두 번 누르면 Esc 처럼 물린다
+                    return;
+                }
                 if (who == null)
                 {
                     // 빈 칸 — 원작처럼 시스템 십자 메뉴(커서 칸 둘레). PC 마우스 왼쪽 클릭도 같게(사용자 요청), 고른 것이 있으면 푼다
@@ -532,6 +536,15 @@ internal sealed partial class GameWindow
                 return;
             }
         }
+    }
+
+    private double _emptyTapAt = -9;
+
+    /// <summary>이동 범위가 떠 있을 때 범위 밖 빈 곳을 눌렀다 — 0.45초 안에 두 번이면 Esc 와 같다(사용자 요청).</summary>
+    private void MoveRangeEmptyTap()
+    {
+        if (_time - _emptyTapAt <= 0.45) { _emptyTapAt = -9; PlaySfx(Sound.UiBank, Sound.Cursor); BattleCancel(); }
+        else _emptyTapAt = _time;
     }
 
     /// <summary>전투 중 키 — 방향키 커서(메뉴면 위아래), Enter · Space · Z 결정, Esc · X 취소. 처리했으면 참.</summary>
@@ -647,13 +660,13 @@ internal sealed partial class GameWindow
         {
             if (cx - _camX < m) _camX = cx - m;
             if (cx + T - _camX > _boardW - m) _camX = cx + T - _boardW + m;
-            _camX = Math.Clamp(_camX, 0, mapW - _boardW);
+            _camX = Math.Clamp(_camX, -CamOver, mapW - _boardW + CamOver);
         }
         if (mapH > _boardH)
         {
             if (cy - _camY < m) _camY = cy - m;
             if (cy + T - _camY > _boardH - m) _camY = cy + T - _boardH + m;
-            _camY = Math.Clamp(_camY, 0, mapH - _boardH);
+            _camY = Math.Clamp(_camY, -CamOver, mapH - _boardH + CamOver);
         }
     }
 
@@ -1945,8 +1958,8 @@ internal sealed partial class GameWindow
         if (r.W <= 0 || x < r.X || y < r.Y || x >= r.X + r.W || y >= r.Y + r.H) return false;
         int tx = (x - r.X) / _touchMiniCell, ty = (y - r.Y) / _touchMiniCell;
         int mw = _scene.Width * T, mh = _scene.Height * T;
-        if (mw > _boardW) _camX = Math.Clamp(tx * T + T / 2 - _boardW / 2, 0, mw - _boardW);
-        if (mh > _boardH) _camY = Math.Clamp(ty * T + T / 2 - _boardH / 2, 0, mh - _boardH);
+        if (mw > _boardW) _camX = Math.Clamp(tx * T + T / 2 - _boardW / 2, -CamOver, mw - _boardW + CamOver);
+        if (mh > _boardH) _camY = Math.Clamp(ty * T + T / 2 - _boardH / 2, -CamOver, mh - _boardH + CamOver);
         return true;
     }
 

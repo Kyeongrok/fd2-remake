@@ -20,12 +20,12 @@ internal sealed partial class GameWindow
 
     private bool Talking => _talk.Count > 0;
 
-    /// <summary>글 줄들을 얼굴 있는 대화 창에 세 줄씩(레벨업처럼 대사 묶음에 없는 글) — 다 보면 after.</summary>
+    /// <summary>글 줄들을 얼굴 있는 대화 창 한 쪽에(레벨업처럼 대사 묶음에 없는 글) — 다 보면 after.</summary>
     private void StartSay(IReadOnlyList<string> lines, int face, Action after)
     {
         _talk.Clear();
-        foreach (var part in lines.Chunk(3))
-            _talk.Add(new Dialogue.Page { Speaker = face, Name = "", Text = string.Join("\n", part) });
+        // 한 쪽에 다 — 창이 줄 수만큼 커진다(세 줄로 끊으면 공간이 남는데 넘겨야 했다, 사용자 요청)
+        if (lines.Count > 0) _talk.Add(new Dialogue.Page { Speaker = face, Name = "", Text = string.Join("\n", lines) });
         _talkPage = 0;
         _talkShown = 0;
         _talkSkip = 0;
