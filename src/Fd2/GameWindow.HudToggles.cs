@@ -208,6 +208,12 @@ internal sealed partial class GameWindow
                     _settings.Save();
                     OpenTouchMenu(_menuIndex, 2);
                 }, default));
+                _menu.Add(($"NPC 아군 내가 움직이기  [{(_settings.ControlAllies ? "켬" : "끔")}]", () =>
+                {
+                    _settings.ControlAllies = !_settings.ControlAllies;
+                    _settings.Save();
+                    OpenTouchMenu(_menuIndex, 2);
+                }, default));
                 _menu.Add(($"미니맵 보물상자  [{(_settings.MiniChests ? "켬" : "끔")}]", () =>
                 {
                     _settings.MiniChests = !_settings.MiniChests;

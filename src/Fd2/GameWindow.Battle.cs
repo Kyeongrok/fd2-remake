@@ -1687,6 +1687,17 @@ internal sealed partial class GameWindow
             var b = Text.Render(_banner.Length > 0 ? _banner : " ", fs * 2, 0xFFFFE070);
             var name = _bannerName >= 0 ? NameImage(_bannerName, Math.Max(2, fs * 2 / Font16.Size), 0xFFFFE070) : null;
             int w = b.W + (name?.W ?? 0), h = Math.Max(b.H, name?.H ?? 0);
+            if (w > _clientW - 16)
+            {
+                // 폭을 넘으면(세로 화면) 이름은 윗줄, 글은 폭에 맞춰 줄을 나눈다(사용자 요청)
+                var rows = new List<Text.Image>();
+                if (name != null) rows.Add(name);
+                if (_banner.Trim().Length > 0) rows.AddRange(Wrap(_banner.Trim(), fs * 2, _clientW - 16).Select(l => Text.Render(l, fs * 2, 0xFFFFE070)));
+                int total = rows.Sum(r => r.H), ry = _clientH / 2 - total / 2;
+                FillRect(0, ry - fs, _clientW, total + fs * 2, 0xA0000000);
+                foreach (var r in rows) { DrawText(r, (_clientW - r.W) / 2, ry); ry += r.H; }
+                return;
+            }
             FillRect(0, _clientH / 2 - h, _clientW, h * 2, 0xA0000000);
             int x = _clientW / 2 - w / 2;
             if (name != null) { DrawText(name, x, _clientH / 2 - name.H / 2); x += name.W; }
@@ -2113,7 +2124,7 @@ internal sealed partial class GameWindow
         }
         int shown = Math.Min(fit, _menu.Count);
         int x = Math.Min(sx + cell + 6, _clientW - w - 4), y = Math.Max(4, Math.Min(sy, _clientH - rowH * shown - 4));
-        if (_stage == MenuStage.Mobile) { w = Math.Max(w, _clientW / 3); (x, y) = ((_clientW - w) / 2, Math.Max(4, (_clientH - rowH * shown) / 2)); }   // 모바일 메뉴는 화면 가운데에 넓게
+        if (_stage == MenuStage.Mobile) { w = Math.Min(_clientW - 8, Math.Max(w, _clientW / 3)); (x, y) = ((_clientW - w) / 2, Math.Max(4, (_clientH - rowH * shown) / 2)); }   // 모바일 메뉴는 화면 가운데에 넓게
         else if (InTownView && !_townTop) { w = Math.Min(_clientW - 8, Math.Max(w, _clientW / 3)); (x, y) = ((_clientW - w) / 2, Math.Max(4, (_clientH - rowH * shown) / 2)); }   // 건물 안 목록(사기 · 팔기 …) — 화면 가운데에 크게
         _menuBox = (x, y, w, rowH * shown);
         for (int i = 0; i < _menu.Count; i++)
@@ -2201,11 +2212,11 @@ internal sealed partial class GameWindow
     private List<Text.Image> MenuImages(int fs)
     {
         if (!_menu.Any(m => m.Label.Contains('	')))
-            return _menu.Select((m, i) => WithGlyphs(Text.Render(m.Label, fs, 0xFFFFFFFF), i, fs)).ToList();
+            return _menu.Select((m, i) => MenuRow(m.Label, i, fs)).ToList();
         var rows = _menu.Select((m, i) =>
         {
             var cols = m.Label.Split('	');
-            if (cols.Length != 2) return (Plain: WithGlyphs(Text.Render(m.Label, fs, 0xFFFFFFFF), i, fs), Icon: (Text.Image?)null, Name: (Text.Image?)null, Price: (Text.Image?)null, Effect: (Text.Image?)null, Said: "");
+            if (cols.Length != 2) return (Plain: MenuRow(m.Label, i, fs), Icon: (Text.Image?)null, Name: (Text.Image?)null, Price: (Text.Image?)null, Effect: (Text.Image?)null, Said: "");
             var price = Text.Render(cols[0], fs, 0xFFFFFFFF);
             var name = _menuGlyphs.TryGetValue(i, out int line) ? NameImage(line, MenuNameScale(fs), 0xFFFFE070) : null;
             var icon = _menuIcons.TryGetValue(i, out int ic) ? IconImage(ic, Math.Max(price.H, name?.H ?? 0)) : null;
@@ -2213,7 +2224,7 @@ internal sealed partial class GameWindow
         }).ToList();
         int gap = Math.Max(8, fs / 2), iconW = rows.Max(r => r.Icon?.W ?? 0), nameW = rows.Max(r => r.Name?.W ?? 0), priceW = rows.Max(r => r.Price?.W ?? 0);
         // 세로 화면에서 옆이 잘리면 효과는 아랫줄로(사용자 요청) — 줄이 길어져도 메뉴는 끌어 넘긴다
-        int avail = _clientW - 8 - Text.Render("▶", fs, 0xFFFFFFFF).W - 8 - 16;
+        int avail = MenuAvail(fs);
         bool below = _clientW < _clientH && rows.Any(r => r.Effect is { } e && iconW + nameW + 2 * gap + priceW + e.W > avail);
         return rows.Select(r =>
         {
@@ -2232,6 +2243,18 @@ internal sealed partial class GameWindow
             if (r.Effect is { } e) { parts.Add((e, w + gap)); w += gap + e.W; }
             return ComposeRow(parts, w);
         }).ToList();
+    }
+
+    /// <summary>메뉴 줄 글이 쓸 수 있는 폭 — 화면 폭에서 ▶ 자리와 여백을 뺀 것.</summary>
+    private int MenuAvail(int fs) => _clientW - 8 - Text.Render("▶", fs, 0xFFFFFFFF).W - 8 - 16;
+
+    /// <summary>글 한 줄 메뉴 — 화면 폭을 넘으면 줄을 나눈다(세로 화면 설정 메뉴가 잘렸다, 사용자 요청).</summary>
+    private Text.Image MenuRow(string label, int i, int fs)
+    {
+        var row = WithGlyphs(Text.Render(label, fs, 0xFFFFFFFF), i, fs);
+        if (row.W <= MenuAvail(fs) || _menuGlyphs.ContainsKey(i)) return row;
+        var lines = Wrap(label, fs, MenuAvail(fs)).Select(l => Text.Render(l, fs, 0xFFFFFFFF)).ToList();
+        return lines.Count < 2 ? row : StackRows(lines[0], lines.GetRange(1, lines.Count - 1), 0);
     }
 
     /// <summary>윗줄 그림 아래에 글 줄들을 x 만큼 들여 쌓는다.</summary>
