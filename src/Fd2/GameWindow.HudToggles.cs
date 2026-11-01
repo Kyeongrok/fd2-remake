@@ -156,6 +156,8 @@ internal sealed partial class GameWindow
     /// <summary>
     /// 폰 — 아래 가운데에 아직 안 움직인 우리 편 수(「남은 아군 3 / 5」). 누르면 Esc 처럼 다음 안 움직인 아군으로 커서가 간다(사용자 요청).
     /// </summary>
+    private static readonly string[] ReadySpotNames = ["아래 가운데", "아래 왼쪽", "아래 오른쪽", "위 가운데", "숨김"];
+
     private void DrawReadyCount(int fs)
     {
         if (!InBattle || _enemyPhase || _bs is not (BattleState.Select or BattleState.Target)) return;   // 메뉴 · 묻는 창이 떠 있으면 숨긴다(누르기가 겹치지 않게)
@@ -170,7 +172,14 @@ internal sealed partial class GameWindow
             ? Text.Render($"남은 아군 {left} / {mine.Count}", fs, left > 0 ? 0xFFFFFFFF : 0xFFB0B0B0)
             : HJoin(Text.Render($"아군 {heroLeft} / {heroes.Count}", fs, heroLeft > 0 ? 0xFFFFFFFF : 0xFFB0B0B0),
                     Text.Render($"   NPC {npcLeft} / {npcs.Count}", fs, npcLeft > 0 ? 0xFFF0D040 : 0xFFB0B0B0));
+        if (_settings.ReadySpot == 4) return;
         int pad = fs / 2, w = label.W + pad * 2, h = label.H + pad, x = (_clientW - w) / 2, y = _clientH - h - 8;
+        switch (_settings.ReadySpot)
+        {
+            case 1: x = 14; break;
+            case 2: (x, y) = (_clientW - w - 14, _clientH - h * 3 - 24); break;   // ESC 단추 위
+            case 3: y = _hudIconBottom; break;
+        }
         FillRect(x, y, w, h, 0xA0101020);
         FillRect(x, y, w, 1, 0x80FFFFFF); FillRect(x, y + h - 1, w, 1, 0x80FFFFFF);
         FillRect(x, y, 1, h, 0x80FFFFFF); FillRect(x + w - 1, y, 1, h, 0x80FFFFFF);
@@ -237,6 +246,12 @@ internal sealed partial class GameWindow
                 _menu.Add(($"NPC 아군 내가 움직이기  [{(_settings.ControlAllies ? "켬" : "끔")}]", () =>
                 {
                     _settings.ControlAllies = !_settings.ControlAllies;
+                    _settings.Save();
+                    OpenTouchMenu(_menuIndex, 2);
+                }, default));
+                _menu.Add(($"남은 아군 표시  [{ReadySpotNames[Math.Clamp(_settings.ReadySpot, 0, 4)]}]", () =>
+                {
+                    _settings.ReadySpot = (_settings.ReadySpot + 1) % ReadySpotNames.Length;   // 누를 때마다 다음 자리
                     _settings.Save();
                     OpenTouchMenu(_menuIndex, 2);
                 }, default));

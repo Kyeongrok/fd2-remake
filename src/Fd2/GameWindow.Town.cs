@@ -87,12 +87,19 @@ internal sealed partial class GameWindow
         _menu.Add((GoldLine($"{ChapterName(c.NextScene)} 앞 마을"), () => { }, default));
         _menu.Add(("주점 — 동료 보기 · 기록 · 불러오기", OpenTavern, default));
         _menu.Add(("무기점 — 사기 · 팔기", () => OpenShopMenu(shop, 1), default));
-        _menu.Add(($"출구 — 다음 장으로({ChapterName(c.NextScene)})", LeaveTown, default));
+        _menu.Add(($"출구 — 다음 장으로({ChapterName(c.NextScene)})", AskLeaveTown, default));
         _menu.Add(("도구점 — 사기 · 팔기", () => OpenShopMenu(shop, 3), default));
         _menu.Add(("교회 — 부활 · 전직", OpenChurchMenu, default));
         if (shop.Secret.Length > 0) _menu.Add(("??? — 비밀상점", () => OpenShopMenu(shop, 5), default));
         EndTownMenu(building < 0 ? (_shopAt == 5 && shop.Secret.Length > 0 ? 6 : 1) : building + 1);
         _townTop = true;
+    }
+
+    /// <summary>출구(sub_2670E) — 원작 글 513 으로 묻고(sub_19953), 예면 다음 장으로, 아니오면 출구 앞으로.</summary>
+    private void AskLeaveTown()
+    {
+        _townTop = false;
+        AskBox(513, -1, LeaveTown, () => OpenTownMenu(2));
     }
 
     private void LeaveTown()

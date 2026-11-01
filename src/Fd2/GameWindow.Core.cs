@@ -295,7 +295,14 @@ internal sealed partial class GameWindow
             _fb = new uint[_fbW * _fbH];
             OnFbResized();
         }
-        if (_scene != null) Follow();
+        if (_scene != null)
+        {
+            Follow();
+            // 화면 크기가 바뀌면(폰을 돌리면) 카메라를 새 판에 맞춘다 — 세로 때 자리 그대로면 가로에서 지도 끝 너머가 검게 보였다(사용자 제보)
+            int mw = _scene.Width * T, mh = _scene.Height * T;
+            _camX = mw <= _boardW ? (mw - _boardW) / 2 : Math.Clamp(_camX, 0, mw - _boardW);
+            _camY = mh <= _boardH ? (mh - _boardH) / 2 : Math.Clamp(_camY, 0, mh - _boardH);
+        }
     }
 
     /// <summary>이번 키가 누른 채로 들어온 되풀이인가 — 대사는 되풀이로 넘기지 않는다(꾹 누르면 대사가 다 지나가므로).</summary>

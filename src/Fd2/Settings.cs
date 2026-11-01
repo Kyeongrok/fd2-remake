@@ -79,6 +79,9 @@ internal sealed class Settings
 
     /// <summary>미니맵에 안 연 보물상자 · 비밀상자 표시(모드, 사용자 요청) — 기본 켬.</summary>
     public bool MiniChests { get; set; } = true;
+
+    /// <summary>폰 남은 아군 표시 자리 — 0 아래 가운데 · 1 아래 왼쪽 · 2 아래 오른쪽(ESC 위) · 3 위 가운데 · 4 숨김(사용자 요청).</summary>
+    public int ReadySpot { get; set; }
     public bool TouchChests { get; set; }
     public bool TouchGoals { get; set; }
     public bool TouchHelp { get; set; }
