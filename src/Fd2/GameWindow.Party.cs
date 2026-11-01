@@ -30,6 +30,21 @@ internal sealed partial class GameWindow
 
     private void CloseParty() => (_partyOpen, _partyDrag) = (false, null);
 
+    /// <summary>건물 안의 파티 창인가 — 동료를 누르면 그 사람의 장비 · 물건으로 간다(사용자 요청).</summary>
+    private bool PartyGearOn => _town != null && !_townTop && _campaign != null;
+
+    /// <summary>누른 줄(끌면 취소) — 뗄 때 장비로 간다.</summary>
+    private int _partyTap = -1;
+
+    /// <summary>고른 동료의 장비 · 물건 목록을 연다.</summary>
+    private void PartyGear(int i)
+    {
+        if (!PartyGearOn || i < 0 || i >= _party.Count) return;
+        int id = _party[i].NameId, member = _campaign!.Party.FindIndex(r => HeroRecord.Id(r) == id);
+        CloseParty();
+        if (member >= 0) OpenGiveItem(0, member);
+    }
+
     /// <summary>우리 편 — 전투 중이면 지도의 사람들(우리가 움직이는 사람 먼저, 컴퓨터 아군 뒤), 밖이나 마을이면 동료 표를 사람으로 세워서(마을에서 산 장비가 보이게).</summary>
     private List<Unit> PartyMembers()
     {
@@ -63,6 +78,7 @@ internal sealed partial class GameWindow
             case Win32.VK_DOWN: PartySelect(_partyIndex == n - 1 ? 0 : _partyIndex + 1); break;
             case Win32.VK_PRIOR: PartySelect(Math.Max(0, _partyIndex - _partyVisible)); break;
             case Win32.VK_NEXT: PartySelect(Math.Min(n - 1, _partyIndex + _partyVisible)); break;
+            case Win32.VK_RETURN or Win32.VK_SPACE when PartyGearOn: PartyGear(_partyIndex); break;
             case Win32.VK_ESCAPE or Win32.VK_RETURN or Win32.VK_SPACE: CloseParty(); break;
             default: if (action == KeyAction.Party) CloseParty(); break;
         }
@@ -86,6 +102,7 @@ internal sealed partial class GameWindow
         if (!InRect(_partyBox, x, y)) { CloseParty(); return true; }
         int hit = _partyRects.FindIndex(r => InRect(r, x, y));
         if (hit >= 0) _partyIndex = _partyTop + hit;
+        _partyTap = hit >= 0 ? _partyTop + hit : -1;
         _partyDrag = (y, _partyTop);
         return true;
     }
@@ -94,7 +111,10 @@ internal sealed partial class GameWindow
     {
         if (!_partyOpen) return false;
         if (_partyDrag is { } d)
+        {
+            if (Math.Abs(y - d.Y) > _partyCardH / 4) _partyTap = -1;   // 끌면 누르기가 아니다
             _partyTop = Math.Clamp(d.Top - (y - d.Y) / Math.Max(1, _partyCardH), 0, Math.Max(0, _party.Count - _partyVisible));
+        }
         return true;
     }
 
@@ -102,6 +122,8 @@ internal sealed partial class GameWindow
     {
         if (!_partyOpen) return false;
         _partyDrag = null;
+        if (_partyTap >= 0) PartyGear(_partyTap);
+        _partyTap = -1;
         return true;
     }
 
@@ -137,7 +159,8 @@ internal sealed partial class GameWindow
         int fs = Math.Max(14, 7 * HudZoom), small = Math.Max(12, fs * 5 / 6), g = Math.Max(1, fs / Font16.Size);
         int gold = InBattle ? _battle.Gold : _campaign?.Gold ?? 0;
         var title = Text.Render($"파티 정보 — {_party.Count}명 · 돈 {gold}", fs, 0xFFFFE070);
-        var hint = Text.Render(TouchUi ? "줄을 눌러 고르기 · 끌어 넘기기 · 창 밖을 누르면 닫기"
+        bool narrow = _clientW < _clientH;   // 세로 화면 — 옆이 잘리지 않게 줄을 나눠 세로로 길게(사용자 요청)
+        var hint = Text.Render(PartyGearOn ? "동료를 누르면 장비를 바꿉니다 · 창 밖을 누르면 닫기" : narrow ? "끌어 넘기기 · 창 밖을 누르면 닫기" : TouchUi ? "줄을 눌러 고르기 · 끌어 넘기기 · 창 밖을 누르면 닫기"
                                        : $"↑↓ · 휠 고르기 · {KeyBindings.KeyName(_keyMap[KeyAction.Party])} · Esc 닫기", small, 0xFF9098A8, bold: false);
 
         // 한 사람의 글 줄 — 넷째 줄까지(이름 · 막대 · 능력 · 장비)
@@ -145,8 +168,9 @@ internal sealed partial class GameWindow
         int lineH = Line("가").H + 4;
         int barW = small * 6;
         var faceOf = _party.Select(u => Face(u.Icon) is { Count: > 0 } f ? f[0] : ((uint[] Px, int W, int H)?)null).ToList();
-        int textH = lineH * 4;
+        int textH = lineH * (narrow ? 8 : 4);
         int faceS = Math.Max(1, textH / Math.Max(1, faceOf.Where(f => f != null).Select(f => f!.Value.H).DefaultIfEmpty(textH).Max()));
+        if (narrow) faceS = Math.Max(1, Math.Min(faceS, _clientW / 4 / Math.Max(1, faceOf.Where(f => f != null).Select(f => f!.Value.W).DefaultIfEmpty(1).Max())));
         int faceCol = faceOf.Where(f => f != null).Select(f => f!.Value.W * faceS).DefaultIfEmpty(0).Max();
         int faceH = faceOf.Where(f => f != null).Select(f => f!.Value.H * faceS).DefaultIfEmpty(0).Max();
         _partyCardH = Math.Max(textH, faceH) + 12;
@@ -160,7 +184,10 @@ internal sealed partial class GameWindow
             string weapon = u.Bag.FirstOrDefault(b => b.Equipped && b.Item < 128) is { Equipped: true } w ? GameNames.Item(w.Item) : "-";
             string armor = u.Bag.FirstOrDefault(b => b.Equipped && b.Item >= 128) is { Equipped: true } a ? GameNames.Item(a.Item) : "-";
             string status = down ? "쓰러짐" : string.Join(" ", Enumerable.Range(0, 6).Where(k => u.Status[k] > 0).Select(k => $"{Battle.StatusNames[k]}({u.Status[k]})"));
-            return (Head: HJoin(name, Line(head)),
+            string headShort = $"  {GameNames.Class(u.Class)}  Lv {u.Level}", exp = u.Team == 2 ? $"경험 {u.Exp}/100" : "(컴퓨터 아군)";
+            return (Head: HJoin(name, Line(narrow ? headShort : head)), Exp: Line(exp),
+                    Stats1: Line($"공격 {u.Atk}  방어 {u.Def}  명중 {u.Hit}"), Stats2: Line($"회피 {u.Evade}  속도 {u.Speed}  이동 {u.Move}"),
+                    Weapon: Line($"무기 {weapon}"), Armor: HJoin(Line($"옷 {armor}"), status.Length > 0 ? Line($"   {status}", down ? 0xFFFF9090 : 0xFFFFC060) : null),
                     Hp: Line($"{Math.Max(0, u.Hp)} / {u.MaxHp}"), Mp: Line($"{u.Mp} / {u.MaxMp}"),
                     Stats: Line($"공격 {u.Atk}  방어 {u.Def}  명중 {u.Hit}  회피 {u.Evade}  속도 {u.Speed}  이동 {u.Move}"),
                     Gear: HJoin(Line($"무기 {weapon}   옷 {armor}"), status.Length > 0 ? Line($"   {status}", down ? 0xFFFF9090 : 0xFFFFC060) : null));
@@ -168,8 +195,9 @@ internal sealed partial class GameWindow
 
         var hpL = Line("HP");
         int numW = cards.Max(c => Math.Max(c.Hp.W, c.Mp.W));
-        int barsW = 2 * (hpL.W + 6 + barW + 8 + numW) + small;
-        int textW = Math.Max(barsW, cards.Max(c => Math.Max(c.Head.W, Math.Max(c.Stats.W, c.Gear.W))));
+        if (narrow) barW = Math.Max(small * 2, _clientW - 20 - faceCol - 56 - hpL.W - 6 - 8 - numW);
+        int barsW = narrow ? hpL.W + 6 + barW + 8 + numW : 2 * (hpL.W + 6 + barW + 8 + numW) + small;
+        int textW = narrow ? barsW : Math.Max(barsW, cards.Max(c => Math.Max(c.Head.W, Math.Max(c.Stats.W, c.Gear.W))));
         int w = Math.Min(_clientW - 20, Math.Max(Math.Max(title.W, hint.W) + 40, faceCol + textW + 56));
         int headH = title.H + hint.H + 22;
         _partyVisible = Math.Max(1, Math.Min(_party.Count, (_clientH - 20 - headH - 10) / _partyCardH));
@@ -197,20 +225,34 @@ internal sealed partial class GameWindow
                 BlitFrame(f.Px, f.W, f.H, x + 16 + (faceCol - f.W * faceS) / 2, cy + (_partyCardH - 4 - f.H * faceS) / 2, faceS, false, 0, 0, clip);
             int tx = x + 16 + faceCol + 16, ty = cy + (_partyCardH - 4 - textH) / 2 + 2;
             DrawText(c.Head, tx, ty);
-            int bx = tx;
+            int bx = tx, barRow = narrow ? 2 : 1;
             void Bar(Text.Image label, Text.Image num, int now, int max, uint color)
             {
-                DrawText(label, bx, ty + lineH);
-                int barX = bx + hpL.W + 6, barY = ty + lineH + (label.H - small / 2) / 2, bh = Math.Max(4, small / 2);
+                int by = ty + lineH * barRow;
+                DrawText(label, bx, by);
+                int barX = bx + hpL.W + 6, barY = by + (label.H - small / 2) / 2, bh = Math.Max(4, small / 2);
                 FillRect(barX, barY, barW, bh, 0xFF3A4670);
                 if (max > 0) FillRect(barX + 1, barY + 1, (barW - 2) * Math.Clamp(now, 0, max) / max, bh - 2, color);
-                DrawText(num, barX + barW + 8, ty + lineH);
-                bx = barX + barW + 8 + numW + small;
+                DrawText(num, barX + barW + 8, by);
+                if (narrow) barRow++;
+                else bx = barX + barW + 8 + numW + small;
             }
             Bar(hpL, c.Hp, u.Hp, u.MaxHp, 0xFFF0C030);
             if (u.MaxMp > 0) Bar(Line("MP"), c.Mp, u.Mp, u.MaxMp, 0xFF58A030);
-            DrawText(c.Stats, tx, ty + lineH * 2);
-            DrawText(c.Gear, tx, ty + lineH * 3);
+            if (narrow)
+            {
+                // 이름 · 경험 · HP · MP · 능력 둘 · 무기 · 옷 — MP 가 없는 사람도 자리를 맞춘다
+                DrawText(c.Exp, tx, ty + lineH);
+                DrawText(c.Stats1, tx, ty + lineH * 4);
+                DrawText(c.Stats2, tx, ty + lineH * 5);
+                DrawText(c.Weapon, tx, ty + lineH * 6);
+                DrawText(c.Armor, tx, ty + lineH * 7);
+            }
+            else
+            {
+                DrawText(c.Stats, tx, ty + lineH * 2);
+                DrawText(c.Gear, tx, ty + lineH * 3);
+            }
             cy += _partyCardH;
         }
     }

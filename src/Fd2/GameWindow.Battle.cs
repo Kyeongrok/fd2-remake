@@ -2205,13 +2205,16 @@ internal sealed partial class GameWindow
         var rows = _menu.Select((m, i) =>
         {
             var cols = m.Label.Split('	');
-            if (cols.Length != 2) return (Plain: WithGlyphs(Text.Render(m.Label, fs, 0xFFFFFFFF), i, fs), Icon: (Text.Image?)null, Name: (Text.Image?)null, Price: (Text.Image?)null, Effect: (Text.Image?)null);
+            if (cols.Length != 2) return (Plain: WithGlyphs(Text.Render(m.Label, fs, 0xFFFFFFFF), i, fs), Icon: (Text.Image?)null, Name: (Text.Image?)null, Price: (Text.Image?)null, Effect: (Text.Image?)null, Said: "");
             var price = Text.Render(cols[0], fs, 0xFFFFFFFF);
             var name = _menuGlyphs.TryGetValue(i, out int line) ? NameImage(line, MenuNameScale(fs), 0xFFFFE070) : null;
             var icon = _menuIcons.TryGetValue(i, out int ic) ? IconImage(ic, Math.Max(price.H, name?.H ?? 0)) : null;
-            return (Plain: (Text.Image?)null, Icon: icon, Name: name, Price: price, Effect: cols[1].Length > 0 ? Text.Render(cols[1], fs, 0xFFFFFFFF) : null);
+            return (Plain: (Text.Image?)null, Icon: icon, Name: name, Price: price, Effect: cols[1].Length > 0 ? Text.Render(cols[1], fs, 0xFFFFFFFF) : null, Said: cols[1]);
         }).ToList();
         int gap = Math.Max(8, fs / 2), iconW = rows.Max(r => r.Icon?.W ?? 0), nameW = rows.Max(r => r.Name?.W ?? 0), priceW = rows.Max(r => r.Price?.W ?? 0);
+        // 세로 화면에서 옆이 잘리면 효과는 아랫줄로(사용자 요청) — 줄이 길어져도 메뉴는 끌어 넘긴다
+        int avail = _clientW - 8 - Text.Render("▶", fs, 0xFFFFFFFF).W - 8 - 16;
+        bool below = _clientW < _clientH && rows.Any(r => r.Effect is { } e && iconW + nameW + 2 * gap + priceW + e.W > avail);
         return rows.Select(r =>
         {
             if (r.Plain is { } plain) return plain;
@@ -2221,9 +2224,25 @@ internal sealed partial class GameWindow
             int priceX = iconW + nameW + gap;
             parts.Add((r.Price!, priceX + priceW - r.Price!.W));   // 값은 오른쪽 끝을 맞춘다
             int w = priceX + priceW;
+            if (below && r.Effect != null)
+            {
+                var lines = Wrap(r.Said, fs, Math.Max(fs, avail - iconW)).Select(l => Text.Render(l, fs, 0xFFFFFFFF)).ToList();
+                return StackRows(ComposeRow(parts, w), lines, iconW);
+            }
             if (r.Effect is { } e) { parts.Add((e, w + gap)); w += gap + e.W; }
             return ComposeRow(parts, w);
         }).ToList();
+    }
+
+    /// <summary>윗줄 그림 아래에 글 줄들을 x 만큼 들여 쌓는다.</summary>
+    private static Text.Image StackRows(Text.Image top, List<Text.Image> lines, int x)
+    {
+        int w = Math.Max(top.W, lines.Max(l => x + l.W)), h = top.H + lines.Sum(l => l.H), y = 0;
+        var px = new uint[w * h];
+        void Put(Text.Image p, int ox) { for (int r = 0; r < p.H; r++) Array.Copy(p.Px, r * p.W, px, (y + r) * w + ox, p.W); y += p.H; }
+        Put(top, 0);
+        foreach (var l in lines) Put(l, x);
+        return new Text.Image(px, w, h);
     }
 
     /// <summary>원본 글꼴 이름 배율 — 반올림(버리면 글이 24점이어도 이름이 16점으로 작았다).</summary>
