@@ -68,7 +68,7 @@ internal sealed partial class GameWindow
         try
         {
             string cache = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fd2", "music");
-            if (Fd2.Data.Music.MidiFile(_dir, index, cache) is not { } file) return;
+            if (Fd2.Data.Music.MidiFile(_dir, index, cache) is not { } file) { MusicFail($"곡 {index} 없음(FDMUS.DAT)"); return; }
             _player = new Android.Media.MediaPlayer();
             _player.SetDataSource(file);
             _player.Looping = true;
@@ -77,7 +77,19 @@ internal sealed partial class GameWindow
             _player.Start();
             _musicPlaying = index;
         }
-        catch (Exception) { StopMusic(); }   // 소리가 안 나도 게임은 계속
+        catch (Exception e)   // 소리가 안 나도 게임은 계속
+        {
+            MusicFail($"곡 {index} 재생 실패: {e.GetType().Name}: {e.Message}");
+            StopMusic();
+        }
+    }
+
+    /// <summary>버그 리포트에 붙일 지금 음악 상태 — 곡 번호와 플레이어가 도는지.</summary>
+    private partial string MusicStatus()
+    {
+        if (_musicPlaying < 0) return "안 트는 중";
+        try { return $"곡 {_musicPlaying}: {(_player?.IsPlaying == true ? "playing" : "멈춤")}"; }
+        catch (Java.Lang.IllegalStateException) { return $"곡 {_musicPlaying}: 플레이어 상태 못 읽음"; }
     }
 
     /// <summary>설정 소리 크기의 배경음 — 트는 곡에 바로.</summary>

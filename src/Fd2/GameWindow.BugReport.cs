@@ -158,14 +158,49 @@ internal sealed partial class GameWindow
             ["turn"] = battle ? Turn : null,
             ["state"] = battle ? $"{_bs}{(_enemyPhase ? " · 적 차례" : "")}" : null,
         };
+        c["music"] = $"{(_settings.Music ? "켬" : "끔")} · 크기 {_settings.MusicVolume} · {MusicStatus()}";
+        if (MusicLogTail() is { } music) c["musicLog"] = music;
         if (CrashTail() is { } crash) c["crashLog"] = crash;
         return c;
+    }
+
+    /// <summary>지금 음악 상태 — 플랫폼마다(PC MCI · 안드로이드 미디어 플레이어).</summary>
+    private partial string MusicStatus();
+
+    private static string MusicLog => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fd2", "music.txt");
+
+    private string? _musicFailLast;
+
+    /// <summary>음악을 못 튼 까닭을 기록에 남긴다(MusicTick 이 되풀이해도 같은 줄은 한 번만) — 게임은 계속.</summary>
+    private void MusicFail(string what)
+    {
+        if (what == _musicFailLast) return;
+        _musicFailLast = what;
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(MusicLog)!);
+            if (File.Exists(MusicLog) && new FileInfo(MusicLog).Length > 32 * 1024) File.Delete(MusicLog);
+            File.AppendAllText(MusicLog, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {AppVersion} {what}\n");
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+    }
+
+    /// <summary>음악 기록의 끝 — 마지막 20 줄.</summary>
+    private static string? MusicLogTail()
+    {
+        try
+        {
+            if (!File.Exists(MusicLog)) return null;
+            var lines = File.ReadAllLines(MusicLog);
+            return Scrub(string.Join('\n', lines.Skip(Math.Max(0, lines.Length - 20))));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
     }
 
     /// <summary>창 아래에 보일 요약 — 무엇이 함께 가는지.</summary>
     private static string BugSummary(Dictionary<string, object?> c) =>
         $"함께 보내는 것: 버전 {c["game"]} · {c["platform"]} · 화면 {c["frame"]} · 자료 {c["data"]}" +
-        (c["chapter"] is int ch ? $" · {ch}장" : "") + (c["turn"] is int t ? $" {t}턴" : "") + (c.ContainsKey("crashLog") ? " · 오류 기록 끝" : "") +
+        (c["chapter"] is int ch ? $" · {ch}장" : "") + (c["turn"] is int t ? $" {t}턴" : "") + " · 음악 상태" + (c.ContainsKey("musicLog") ? " · 음악 기록" : "") + (c.ContainsKey("crashLog") ? " · 오류 기록 끝" : "") +
         "\n이름 · 계정 · IP 는 보내지 않습니다.";
 
     /// <summary>오류 기록(crash.txt)의 끝 — 마지막 100 줄 · 16KB 까지.</summary>

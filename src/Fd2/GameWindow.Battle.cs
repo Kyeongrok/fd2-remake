@@ -604,7 +604,8 @@ internal sealed partial class GameWindow
         if (_bs == BattleState.Menu)
         {
             bool townRow = _townTop && _stage == MenuStage.Town;   // 마을 첫 화면 — 건물 사이를 옮긴다
-            if ((AskBoxOpen || _townButtons || townRow) && vk is Win32.VK_LEFT or Win32.VK_RIGHT) vk = vk == Win32.VK_LEFT ? Win32.VK_UP : Win32.VK_DOWN;   // YES · NO · 건물 네 단추 · 마을 건물은 좌우로
+            if (townRow && vk is Win32.VK_LEFT or Win32.VK_RIGHT) vk = vk == Win32.VK_RIGHT ? Win32.VK_UP : Win32.VK_DOWN;   // 마을 건물은 줄 차례가 그림에서 반시계라 오른쪽이 앞 줄 = 시계 방향(사용자 요청)
+            else if ((AskBoxOpen || _townButtons) && vk is Win32.VK_LEFT or Win32.VK_RIGHT) vk = vk == Win32.VK_LEFT ? Win32.VK_UP : Win32.VK_DOWN;   // YES · NO · 건물 네 단추는 좌우로
             if (vk is Win32.VK_UP or Win32.VK_DOWN) _menuScrolledByDrag = false;   // 키로 고르면 고른 줄이 보이게 다시 따라간다
             if (vk is Win32.VK_UP or Win32.VK_DOWN)
             {

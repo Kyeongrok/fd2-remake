@@ -26,11 +26,38 @@ internal sealed partial class GameWindow
         string cache = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fd2", "music");
         string? file;
         try { file = Music.MidiFile(_dir, index, cache); }
-        catch (Exception e) when (e is IOException or InvalidDataException or IndexOutOfRangeException or UnauthorizedAccessException) { file = null; }
-        if (file == null) return;
+        catch (Exception e) when (e is IOException or InvalidDataException or IndexOutOfRangeException or UnauthorizedAccessException)
+        {
+            MusicFail($"곡 {index} 만들기 실패: {e.GetType().Name}: {e.Message}");
+            return;
+        }
+        if (file == null) { MusicFail($"곡 {index} 없음(FDMUS.DAT)"); return; }
         if (!OpenMusic(file)) return;
-        Mci($"play {MusicAlias} from 0");
+        MciPlay(0);
         _musicPlaying = index;
+    }
+
+    /// <summary>시각 from(밀리초)부터 튼다 — 안 되면 기록.</summary>
+    private void MciPlay(long from)
+    {
+        int error = Mci($"play {MusicAlias} from {from}");
+        if (error != 0) MusicFail($"재생 실패: {MciError(error)}");
+    }
+
+    /// <summary>MCI 오류 번호와 윈도우가 주는 까닭 글.</summary>
+    private static string MciError(int error)
+    {
+        var text = new StringBuilder(256);
+        return mciGetErrorStringW(error, text, text.Capacity) ? $"MCI {error} {text}" : $"MCI {error}";
+    }
+
+    /// <summary>버그 리포트에 붙일 지금 음악 상태 — 곡 번호와 시퀀서가 말하는 상태.</summary>
+    private partial string MusicStatus()
+    {
+        if (_musicPlaying < 0) return "안 트는 중";
+        var mode = new StringBuilder(32);
+        int error = mciSendStringW($"status {MusicAlias} mode", mode, mode.Capacity, IntPtr.Zero);
+        return $"곡 {_musicPlaying}: " + (error == 0 ? mode.ToString() : MciError(error));
     }
 
     /// <summary>곡을 지금 크기로 연다(시각은 밀리초).</summary>
@@ -45,7 +72,12 @@ internal sealed partial class GameWindow
             try { File.WriteAllBytes(path, ScaleMidi(File.ReadAllBytes(file), Math.Sqrt(_musicVolume / 100.0))); }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { path = file; }
         }
-        if (Mci($"open \"{path}\" type sequencer alias {MusicAlias}") != 0) return false;
+        int error = Mci($"open \"{path}\" type sequencer alias {MusicAlias}");
+        if (error != 0)
+        {
+            MusicFail($"열기 실패: {MciError(error)} ({Path.GetFileName(path)})");
+            return false;
+        }
         Mci($"set {MusicAlias} time format milliseconds");
         return true;
     }
@@ -100,15 +132,19 @@ internal sealed partial class GameWindow
             Mci($"stop {MusicAlias}");
             Mci($"close {MusicAlias}");
             if (!OpenMusic(file)) { _musicPlaying = -1; return; }
-            Mci($"play {MusicAlias} from {at}");
+            MciPlay(at);
             return;
         }
         if (mciSendStringW($"status {MusicAlias} mode", mode, mode.Capacity, IntPtr.Zero) == 0 && mode.ToString() == "stopped")
-            Mci($"play {MusicAlias} from 0");
+            MciPlay(0);
     }
 
     private static int Mci(string command) => mciSendStringW(command, null, 0, IntPtr.Zero);
 
     [DllImport("winmm.dll", CharSet = CharSet.Unicode)]
     private static extern int mciSendStringW(string command, StringBuilder? buffer, int bufferSize, IntPtr callback);
+
+    [DllImport("winmm.dll", CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool mciGetErrorStringW(int error, StringBuilder buffer, int bufferSize);
 }

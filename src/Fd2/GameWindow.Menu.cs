@@ -218,11 +218,21 @@ internal sealed partial class GameWindow
 
     private string _titleStatus = "";
 
-    /// <summary>제목 줄 — 「용의기사2 — 지금 버전 이름」, 고해상도를 만드는 동안은 끝에 지금 상태를 붙인다(바뀔 때만 고친다).</summary>
+    /// <summary>제목 줄의 게임 버전 — 릴리즈는 「v0.14.21」, 버전을 안 넣고 빌드한 것(csproj 기본 1.0.0)은 「dev」.</summary>
+    private static string TitleVersion
+    {
+        get
+        {
+            string v = AppVersion.Split('+')[0];
+            return v is "1.0.0" or "0.0.0" or "?" ? "dev" : $"v{v}";
+        }
+    }
+
+    /// <summary>제목 줄 — 「용의기사2 v0.14.21 — 지금 자료 이름」, 고해상도를 만드는 동안은 끝에 지금 상태를 붙인다(바뀔 때만 고친다).</summary>
     private void UpdateTitleStatus()
     {
         string st = _hires.Enabled ? _hires.Status : "";
-        string text = $"용의기사2 — {VersionName}" + (st.Length > 0 ? $"  · {st}" : "");
+        string text = $"용의기사2 {TitleVersion} — {VersionName}" + (st.Length > 0 ? $"  · {st}" : "");
         if (text == _titleStatus) return;
         _titleStatus = text;
         SetCaption(text);
