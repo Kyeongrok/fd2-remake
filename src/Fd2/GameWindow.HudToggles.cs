@@ -141,14 +141,14 @@ internal sealed partial class GameWindow
         if (bottom > 0) _hudIconBottom = bottom + 6;
         if (TownTop)
         {
-            // 마을 — 그림 왼쪽 위 · 오른쪽 위에 건물 옮기기 단추(사용자 요청). 위 단추들과 겹치지 않게 그 아래로
-            int big = fs * 2, ty = Math.Max(_hudIconBottom, _townPicAt.Y + 8), prevW = Text.Render("◀", big, 0xFFFFFFFF).W + big;
-            _townPrev = DrawHudButton("◀", big, 14 + prevW, ty);
-            _townNext = DrawHudButton("▶", big, _clientW - 14, ty);
-            // 고른 건물에 들어가기 — 아래 가운데, 출구면 나가기(사용자 요청)
-            string go = _townSpot == 2 ? "나가기" : "들어가기";
-            var goLabel = Text.Render(go, big, 0xFFFFFFFF);
-            _townEnter = DrawHudButton(go, big, (_clientW + goLabel.W + big) / 2, _clientH - goLabel.H - big / 2 - 14);
+            // 마을 — 아래 ESC 와 같은 줄 · 같은 크기로 ◀ ▶ · 들어가기(그림을 가리지 않게, 사용자 요청). ESC 가 왼쪽 아래면 그 옆부터
+            int big = fs * 3 / 2, gap = 10, by = _clientH - Text.Render("ESC", big, 0xFFFFFFFF).H - big / 2 - 14;
+            int Width(string t) => Text.Render(t, big, 0xFFFFFFFF).W + big / 2 * 2;
+            int bx = 14 + (spot == 3 ? Width("ESC") + gap : 0);
+            (int X, int Y, int W, int H) Next(string t) { bx += Width(t); var r = DrawHudButton(t, big, bx, by); bx += gap; return r; }
+            _townPrev = Next("◀");
+            _townNext = Next("▶");
+            _townEnter = Next(_townSpot == 2 ? "나가기" : "들어가기");   // 고른 건물에 들어가기, 출구면 나가기
         }
         DrawReadyCount(fs);
     }

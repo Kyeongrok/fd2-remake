@@ -103,6 +103,9 @@ internal sealed partial class GameWindow
     /// <summary>건물 안 말 창 · 단추 · 돈 상자의 자리와 배율 — 가로는 그림과 같고, 세로는 그림 아래에 화면 폭 크기로.</summary>
     private (int X, int Y, double S) _insideUi;
 
+    /// <summary>세로 화면의 큰 말 창 자리 — 가로 화면은 비어 있고 원작 자리(5, 112)를 쓴다.</summary>
+    private (int X, int Y, int W, int H) _insideBox;
+
     /// <summary>건물 안 첫 메뉴가 원작 네 단추(오른쪽 아래)로 떠 있나 — 상점 사기 · 팔기 · 정보 · 장비, 주점 동료 · 기록 · 불러오기 · 이탈, 교회 동료 · 장비 · 부활 · 전직.</summary>
     private bool _townButtons;
 
@@ -153,13 +156,15 @@ internal sealed partial class GameWindow
             int uy = iy;
             if (_clientW < _clientH)
             {
-                // 세로 화면 — 좌우를 조금 잘라 그림을 키우고(가운데 72%), 말 창 · 단추는 그림 아래에 화면 폭 크기로(사용자 요청)
-                int boxH = (int)(84 * fit);
-                si = Math.Min(fit / 0.72, (_clientH - boxH - 96) / (double)AfmPlayer.Height);
+                // 세로 화면 — 좌우를 조금 잘라 그림을 키우고(가운데 72%), 말 창은 그림 아래에 크게 — 글 · 단추도 함께 키운다(사용자 요청). 아래 ESC 자리는 비운다
+                int boxH = _clientW / 2, esc = _clientW / 6;
+                si = Math.Min(fit / 0.72, (_clientH - boxH - esc - 16) / (double)AfmPlayer.Height);
                 (iw, ih) = ((int)(AfmPlayer.Width * si), (int)(AfmPlayer.Height * si));
-                (ix, iy) = ((_clientW - iw) / 2, Math.Max(8, (_clientH - ih - boxH - 8) / 2));
-                uy = iy + ih + 8 - (int)(112 * fit);
+                (ix, iy) = ((_clientW - iw) / 2, Math.Max(8, (_clientH - ih - boxH - esc - 8) / 2));
+                _insideBox = (14, iy + ih + 8, _clientW - 28, boxH);
+                uy = _insideBox.Y - (int)(112 * fit);
             }
+            else _insideBox = default;
             _insideAt = (ix, iy, si);
             _insideUi = ((_clientW - (int)(AfmPlayer.Width * fit)) / 2, uy, fit);
             BlitFit(inside.Back, AfmPlayer.Width, AfmPlayer.Height, ix, iy, iw, ih);
@@ -267,12 +272,15 @@ internal sealed partial class GameWindow
         if (!_townButtons) return;   // 목록(사기 · 팔기 …)이 떠 있으면 말 창은 숨긴다 — 목록만 보이게(사용자 요청)
         var (ix, iy, si) = _insideUi;
         int bx = ix + (int)(5 * si), by = iy + (int)(112 * si), bw = (int)(304 * si), bh = (int)(80 * si), line = Math.Max(1, (int)si);
+        bool big = _insideBox.W > 0;
+        if (big) (bx, by, bw, bh) = _insideBox;
         FillRect(bx, by, bw, bh, 0xE028458A);
         FillRect(bx, by, bw, line * 2, 0xFF8090C0); FillRect(bx, by + bh - line * 2, bw, line * 2, 0xFF8090C0);
         FillRect(bx, by, line * 2, bh, 0xFF8090C0); FillRect(bx + bw - line * 2, by, line * 2, bh, 0xFF8090C0);
         if (!_townButtons || _townGreeting < 0) return;
-        int g = Math.Max(1, (int)si);
+        int g = big ? Math.Max(1, (int)(si * 1.6)) : Math.Max(1, (int)si);
         var text = NameImage(_townGreeting, g, 0xFFFFFFFF);
+        while (big && g > 1 && text != null && text.W > bw - 40) text = NameImage(_townGreeting, --g, 0xFFFFFFFF);   // 긴 말은 창 안으로
         if (text == null) return;
         // 한 자씩(말하는 동안) — 글 그림을 왼쪽부터 드러낸다
         double shown = Math.Clamp((_time - _talkAt) / 1.0, 0, 1);
@@ -280,7 +288,7 @@ internal sealed partial class GameWindow
         if (w <= 0) return;
         var part = new Text.Image(new uint[w * text.H], w, text.H);
         for (int y = 0; y < text.H; y++) Array.Copy(text.Px, y * text.W, part.Px, y * w, w);
-        DrawText(part, ix + (int)(12 * si), iy + (int)(119 * si));
+        DrawText(part, big ? bx + 20 : ix + (int)(12 * si), big ? by + 20 : iy + (int)(119 * si));
     }
 
     /// <summary>네 단추(원작 sub_26EDA) — 메뉴 줄 i 가 단추 i. 고른 것은 2k+4 그림, 위에 이름. 누를 자리는 단추 그림.</summary>
@@ -293,14 +301,24 @@ internal sealed partial class GameWindow
             bool lit = i == _menuIndex && (int)(_time / (2 * TownTick)) % 2 == 0;   // 고른 단추는 두 그림을 번갈아(원작 sub_27079)
             var (px, w, h) = inside.Icons[Math.Min(inside.Icons.Count - 1, 2 * i + (lit ? 1 : 0))];
             int x = ix + (int)((240 + ButtonDx[i]) * si), y = iy + (int)(169 * si), dw = (int)(w * si), dh = (int)(h * si);
+            if (_insideBox.W > 0)
+            {
+                // 세로 — 큰 말 창 아래쪽에 네 칸으로 나눠 크게
+                var b = _insideBox;
+                int cell = (b.W - 32) / 4;
+                double bs = Math.Min(cell * 0.92 / w, b.H * 0.42 / h);
+                (dw, dh) = ((int)(w * bs), (int)(h * bs));
+                (x, y) = (b.X + 16 + i * cell + (cell - dw) / 2, b.Y + b.H - dh - 14);
+            }
             if (_mouseMoved && !_menuDragging && _mouseX >= x && _mouseY >= y && _mouseX < x + dw && _mouseY < y + dh) _menuIndex = i;
             BlitFit(px, w, h, x, y, dw, dh);
             _menu[i] = (_menu[i].Label, _menu[i].Do, (x, y, dw, dh));
         }
         if (_menuIndex is >= 0 and < 4 && _menuIndex < _menu.Count)
         {
-            var label = Text.Render(_menu[_menuIndex].Label, fs, 0xFFFFE070);
+            var label = Text.Render(_menu[_menuIndex].Label, _insideBox.W > 0 ? fs * 3 / 2 : fs, 0xFFFFE070);
             int lx = ix + (int)(240 * si) - label.W / 2, ly = iy + (int)(165 * si) - label.H - 4;
+            if (_insideBox.W > 0 && _menu[_menuIndex].Rect is var at) (lx, ly) = (Math.Clamp(at.X + at.W / 2 - label.W / 2, _insideBox.X + 8, _insideBox.X + _insideBox.W - label.W - 8), at.Y - label.H - 12);
             FillRect(lx - 8, ly - 4, label.W + 16, label.H + 8, 0xC0101830);
             DrawText(label, lx, ly);
         }

@@ -34,6 +34,7 @@ internal sealed partial class GameWindow
     {
         _stage = MenuStage.Town;
         _townTop = false;
+        _menuFace = -1;
         _menu.Clear();
         _menuGlyphs.Clear(); _menuIcons.Clear();
         _townBack = back;
@@ -51,6 +52,11 @@ internal sealed partial class GameWindow
         _bs = BattleState.Menu;
     }
 
+
+    /// <summary>건물 안 목록 위에 보일 사람 얼굴(그림 번호) — -1 이면 없음. 목록이 그 사람 것일 때(사용자 요청).</summary>
+    private int _menuFace = -1;
+
+    private int FaceOfRecord(byte[] r) => CharacterNames.SpriteOf(r[7], _icons.RoyalsMoved);
 
     private void EndTownMenu(int row)
     {
@@ -250,6 +256,7 @@ internal sealed partial class GameWindow
         var bag = Town.Bag(r);
         if (bag.Count == 0) { PlaySfx(Sound.UiBank, 7); TownBanner(" 가방이 비었습니다", Back, HeroRecord.Id(r) + 1); return; }
         BeginTownMenu(Back);
+        _menuFace = FaceOfRecord(r);
         _menuGlyphs[0] = HeroRecord.Id(r) + 1;
         _menu.Add((GoldLine("팔 물건 — "), () => { }, default));
         for (int k = 0; k < bag.Count; k++)
@@ -318,6 +325,7 @@ internal sealed partial class GameWindow
         var bag = Town.Bag(r);
         if (bag.Count == 0) { PlaySfx(Sound.UiBank, 7); TownBanner(" 건넬 물건이 없습니다", () => OpenGiveFrom(page), HeroRecord.Id(r) + 1); return; }
         BeginTownMenu(() => OpenGiveFrom(page));
+        _menuFace = FaceOfRecord(r);
         _menuGlyphs[0] = HeroRecord.Id(r) + 1;
         _menu.Add((GoldLine("물건 — "), () => { }, default));
         for (int k = 0; k < bag.Count; k++)
@@ -340,6 +348,7 @@ internal sealed partial class GameWindow
         int name = HeroRecord.Id(c.Party[member]) + 1;
         void Back() => OpenGiveItem(page, member);
         BeginTownMenu(Back);
+        _menuFace = FaceOfRecord(c.Party[member]);
         _menuGlyphs[0] = 181 + item;
         _menu.Add(("어떻게 할까요 — ", () => { }, default));
         _menu.Add((on ? "벗는다" : "장비한다", () =>

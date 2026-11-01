@@ -2127,6 +2127,16 @@ internal sealed partial class GameWindow
         if (_stage == MenuStage.Mobile) { w = Math.Min(_clientW - 8, Math.Max(w, _clientW / 3)); (x, y) = ((_clientW - w) / 2, Math.Max(4, (_clientH - rowH * shown) / 2)); }   // 모바일 메뉴는 화면 가운데에 넓게
         else if (InTownView && !_townTop) { w = Math.Min(_clientW - 8, Math.Max(w, _clientW / 3)); (x, y) = ((_clientW - w) / 2, Math.Max(4, (_clientH - rowH * shown) / 2)); }   // 건물 안 목록(사기 · 팔기 …) — 화면 가운데에 크게
         _menuBox = (x, y, w, rowH * shown);
+        if (_menuFace >= 0 && _stage == MenuStage.Town && Face(_menuFace) is { Count: > 0 } mf)
+        {
+            // 목록 주인 얼굴 — 세로는 목록 위, 위가 모자라면(가로) 목록 왼쪽
+            var (fp, fw, fh) = mf[0];
+            int fs2 = Math.Max(1, Math.Min(_clientW / 4 / Math.Max(1, fw), Math.Max(_clientH / 5, 1) / Math.Max(1, fh)));
+            int dw = fw * fs2, dh = fh * fs2, fx = x + 8, fy = y - dh - 8;
+            if (fy < 8) (fx, fy) = (Math.Max(4, x - dw - 8), y);
+            FillRect(fx - 4, fy - 4, dw + 8, dh + 8, 0xE0101830);
+            BlitFit(fp, fw, fh, fx, fy, dw, dh);
+        }
         for (int i = 0; i < _menu.Count; i++)
         {
             int row = i - _menuScroll;
