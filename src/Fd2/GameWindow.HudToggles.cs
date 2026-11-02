@@ -524,6 +524,7 @@ internal sealed partial class GameWindow
                         _settings.Save();
                         OpenTouchMenu(_menuIndex, 2);
                     }, default));
+                _menu.Add(("조작법 보기", () => { Close(); OpenTutorial(); }, default));
                 _menu.Add(("소리 크기", () => { Close(); OpenVolume(); }, default));
                 _menu.Add(("단축키 · 패드 설정", () => { Close(); _keysOpen = true; _keysRow = 0; _keysCapture = -1; }, default));
                 break;

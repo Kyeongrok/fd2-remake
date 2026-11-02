@@ -204,12 +204,16 @@ internal sealed partial class GameWindow
         });
         var died = _tickDied;
         void Notes() => PlayDeathFx(died, () => ShowNotices(notes, () => RunTiming(2, () => { if (!CheckOver()) Banner(); })));
-        if (heuristic && _scene.Roster.Any(e => e.Phase == turn))
+        // 원작(sub_1A30B)처럼 차례 수가 오르면 먼저 「TURN 차례 수」 판(사용자 요청 w-92)
+        TurnPlate(() =>
         {
-            _bs = BattleState.Talk;
-            StartTalk(_scene.Index, [turn], Notes);   // 이 차례의 무리가 나올 때의 대사(없으면 바로 넘어간다)
-        }
-        else Notes();
+            if (heuristic && _scene.Roster.Any(e => e.Phase == turn))
+            {
+                _bs = BattleState.Talk;
+                StartTalk(_scene.Index, [turn], Notes);   // 이 차례의 무리가 나올 때의 대사(없으면 바로 넘어간다)
+            }
+            else Notes();
+        });
     }
 
     /// <summary>그 편 차례 시작의 독 · 상태 줄이기 — 독으로 쓰러진 사람의 떨굼까지 알림으로.</summary>
@@ -374,7 +378,7 @@ internal sealed partial class GameWindow
                 MarchTick();
                 break;
             case BattleState.Phase:
-                if ((_phaseT += dt) >= PhaseLen) { _bs = BattleState.None; var a = _phaseAfter; _phaseAfter = null; a?.Invoke(); }
+                if ((_phaseT += dt) >= (_phaseWho == PhaseTurn ? PlateLen : PhaseLen)) { _bs = BattleState.None; var a = _phaseAfter; _phaseAfter = null; a?.Invoke(); }
                 break;
         }
     }
@@ -927,22 +931,64 @@ internal sealed partial class GameWindow
     /// <summary>모자이크를 하려면 지도도 CPU 로 찍는다(윈도우는 평소 GPU 지도).</summary>
     private bool PhaseFxOn => _bs == BattleState.Phase;
 
+    private void LoadPhaseArt()
+    {
+        if (_phaseArtTried) return;
+        _phaseArtTried = true;
+        try { _phaseArt = new EffectFrames(_dir, 5, _pal); if (_phaseArt.Count <= PlateDigit + 9) _phaseArt = null; }
+        catch (Exception e) when (e is IOException or IndexOutOfRangeException or ArgumentOutOfRangeException) { _phaseArt = null; }
+    }
+
     private void PhaseFx(int who, Action after)
     {
-        if (!_phaseArtTried)
-        {
-            _phaseArtTried = true;
-            try { _phaseArt = new EffectFrames(_dir, 5, _pal); if (_phaseArt.Count <= PhaseEnemy) _phaseArt = null; }
-            catch (Exception e) when (e is IOException or IndexOutOfRangeException or ArgumentOutOfRangeException) { _phaseArt = null; }
-        }
+        LoadPhaseArt();
         if (_phaseArt == null) { ShowBanner(who == PhaseEnemy ? $"{Turn}턴 — 적군 차례" : $"{Turn}턴 — 아군 차례", after); return; }
         (_phaseWho, _phaseT, _phaseAfter) = (who, 0, after);
         _bs = BattleState.Phase;
     }
 
+    // ── 차례 판(sub_1A30B, 적 차례가 끝나 차례 수가 오른 뒤) — FDOTHER 5 의 83 ~ 91(「TURN·」 판이 한 줄에서 펼쳐진다)을 (120,84)에 70ms 씩,
+    //    일곱째 장부터 차례 수 세 자리(sub_187D6 「%03d」, 6 점 간격)를 판 (51,7)에, 다 펴면 0.5초 쉬고 판이 아래로(+4 · 9 · 16 · 81) 빠진다.
+    //    숫자 그림은 원작이 다른 묶음(dword_53A81 의 42+)에서 가져오는데, 같은 글꼴의 FDOTHER 5 의 94 ~ 103 을 쓴다(짐작).
+
+    private const int PhaseTurn = -2, PlateFirst = 83, PlateDigit = 94;
+    private const double PlateStep = 0.07, PlateHold = 0.5, PlateDrop = 0.05;
+    private static readonly int[] PlateFall = [4, 9, 16, 81];
+    private static double PlateLen => 9 * PlateStep + PlateHold + PlateFall.Length * PlateDrop + 0.2;
+
+    /// <summary>「TURN 차례 수」 판을 보인 뒤 after(그림이 없으면 바로).</summary>
+    private void TurnPlate(Action after)
+    {
+        LoadPhaseArt();
+        if (_phaseArt == null) { after(); return; }
+        (_phaseWho, _phaseT, _phaseAfter) = (PhaseTurn, 0, after);
+        _bs = BattleState.Phase;
+    }
+
+    private void DrawTurnPlate()
+    {
+        if (_phaseArt == null) return;
+        double t = _phaseT;
+        int frame = Math.Min(8, (int)(t / PlateStep)), fall = 0;
+        double drop = t - 9 * PlateStep - PlateHold;
+        if (drop >= 0) { int k = (int)(drop / PlateDrop); if (k >= PlateFall.Length) return; fall = PlateFall[k]; }
+        int s = Math.Max(1, _zoom), cx = _clientW / 2, cy = _clientH / 2;
+        int x = cx + (120 - 160) * s, y = cy + (84 + fall - 100) * s;
+        var (pp, pw, ph) = _phaseArt[PlateFirst + frame];
+        BlitScaled(pp, pw, ph, x, y, s, 0, 0, _fbW, _fbH);
+        if (frame < 7) return;
+        string n = Math.Clamp(Turn, 0, 999).ToString("000");
+        for (int i = 0; i < n.Length; i++)
+        {
+            var (dp, dw, dh) = _phaseArt[PlateDigit + n[i] - '0'];
+            BlitScaled(dp, dw, dh, x + (51 + 6 * i) * s, y + 7 * s, s, 0, 0, _fbW, _fbH);
+        }
+    }
+
     private void DrawPhaseFx()
     {
         if (_phaseArt == null) return;
+        if (_phaseWho == PhaseTurn) { DrawTurnPlate(); return; }
         double t = _phaseT;
         int slideIn = 5, block = 1, dark = 0, slideOut = 0;
         if ((t -= 5 * PhaseSlide) < 0) slideIn = (int)((t + 5 * PhaseSlide) / PhaseSlide);   // 0..4 — 밀려 들어오는 중

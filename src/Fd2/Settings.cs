@@ -94,6 +94,9 @@ internal sealed class Settings
     /// </summary>
     public Dictionary<string, double[]> HudSpots { get; set; } = new();
 
+    /// <summary>폰 조작법 안내를 다 봤나(닫았나) — 처음 시작할 때 한 번만 저절로 연다.</summary>
+    public bool TouchTutorialSeen { get; set; }
+
     public bool TouchChests { get; set; }
     public bool TouchGoals { get; set; }
     public bool TouchHelp { get; set; }

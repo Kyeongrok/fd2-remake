@@ -514,6 +514,7 @@ internal sealed partial class GameWindow
         int lw = (int)(AfmPlayer.Width * ls), lh = (int)(AfmPlayer.Height * ls);
         int lx = (_clientW - lw) / 2, ly = (_clientH - lh) / 2;
         if (_titleBack != null) BlitFit(_titleBack, AfmPlayer.Width, AfmPlayer.Height, lx, ly, lw, lh);
+        MaybeOpenTutorial();   // 폰 — 처음 시작이면 조작법 안내(w-91)
         if (_continueOpen) { DrawLoadScreen(fs); return; }
         if (TouchUi)
         {

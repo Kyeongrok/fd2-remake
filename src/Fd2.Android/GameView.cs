@@ -171,8 +171,11 @@ public sealed unsafe class GameView : SurfaceView, ISurfaceHolderCallback
     private (int X, int Y) ToFrame(float x, float y) =>
         ((int)((x - _dst.Left) * _fbW / Math.Max(1, _dst.Width())), (int)((y - _dst.Top) * _fbH / Math.Max(1, _dst.Height())));
 
-    private bool _pinched;
-    private float _pinchFrom;
+    private bool _pinched, _zoomed;
+    private float _pinchFrom, _pinchStart;
+    /// <summary>두 손가락이 닿은 때(-1 이면 이미 봄) — 짧게 댔다 떼면 ESC.</summary>
+    private long _twoAt = -1;
+    private const int TwoTapMs = 350;
 
     /// <summary>두 손가락 사이 거리(화면 점).</summary>
     private static float Spread(MotionEvent e) =>
@@ -194,7 +197,10 @@ public sealed unsafe class GameView : SurfaceView, ISurfaceHolderCallback
             case MotionEventActions.PointerDown when e.PointerCount == 2:
                 // 두 손가락 — 벌리면 지도를 키우고 오므리면 줄인다(누르기 · 끌기 · 길게 누르기는 버린다)
                 _pinchFrom = Spread(e);
+                _pinchStart = _pinchFrom;
                 _pinched = true;
+                _zoomed = false;
+                _twoAt = Clock.ElapsedMilliseconds;
                 _downAt = -1;
                 _input.Enqueue(g => g.PointerAbort());
                 return true;
@@ -206,6 +212,7 @@ public sealed unsafe class GameView : SurfaceView, ISurfaceHolderCallback
                     int step = d > _pinchFrom ? 1 : -1;
                     _input.Enqueue(g => g.PinchZoom(step));
                     _pinchFrom = d;
+                    _zoomed = true;
                 }
                 return true;
             }
@@ -214,6 +221,15 @@ public sealed unsafe class GameView : SurfaceView, ISurfaceHolderCallback
             case MotionEventActions.Move:
                 if (Math.Abs(e.GetX() - _downX) > 24 || Math.Abs(e.GetY() - _downY) > 24) _downAt = -1;   // 움직이면 길게 누르기가 아니다
                 _input.Enqueue(g => g.PointerMove(x, y));
+                return true;
+            case MotionEventActions.PointerUp when _pinched && e.PointerCount == 2:
+                // 두 손가락을 짧게 댔다 뗐다(벌리거나 오므리지 않고) — ESC(사용자 요청). 한 손가락이 먼저 떨어질 때 본다
+                if (!_zoomed && _twoAt >= 0 && Clock.ElapsedMilliseconds - _twoAt < TwoTapMs && Math.Abs(Spread(e) - _pinchStart) < 60)
+                {
+                    _input.Enqueue(g => { g.KeyDown(Win32.VK_ESCAPE); g.KeyUp(Win32.VK_ESCAPE); });
+                    _zoomed = true;   // 남은 손가락이 떨어질 때 다시 보지 않게
+                }
+                _twoAt = -1;
                 return true;
             case MotionEventActions.Up:
                 bool tap = !_longDone && !_pinched;
