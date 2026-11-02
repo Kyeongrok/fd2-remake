@@ -277,8 +277,8 @@ internal sealed partial class GameWindow
         switch (vk)
         {
             // 원작 제목 메뉴 소리 — 소리 77 의 2(커서) · 1(결정)
-            case Win32.VK_UP: _titleIndex = (_titleIndex + items.Length - 1) % items.Length; PlaySfx(77, 2); break;
-            case Win32.VK_DOWN: _titleIndex = (_titleIndex + 1) % items.Length; PlaySfx(77, 2); break;
+            case Win32.VK_UP: _titleIndex = (_titleIndex + items.Length - 1) % items.Length; _loadFollow = true; PlaySfx(77, 2); break;
+            case Win32.VK_DOWN: _titleIndex = (_titleIndex + 1) % items.Length; _loadFollow = true; PlaySfx(77, 2); break;
             case Win32.VK_RETURN or Win32.VK_SPACE: PlaySfx(77, 1); items[_titleIndex].Do(); break;
             case Win32.VK_ESCAPE when _continueOpen: _continueOpen = false; _titleIndex = 0; break;
             case Win32.VK_ESCAPE: _running = false; break;
@@ -303,6 +303,33 @@ internal sealed partial class GameWindow
     private int _loadTop;
     private (int X, int Y, int W, int H) _loadUp, _loadDown;
     private int _loadPage = 1;
+
+    /// <summary>고른 카드가 보이게 목록을 따라 밀까 — 끌거나 휠로 넘기면 끈다(키로 고르면 다시 켠다).</summary>
+    private bool _loadFollow = true;
+
+    /// <summary>카드 한 장 높이(사이 포함) · 끌기 시작할 때의 맨 위 카드.</summary>
+    private int _loadStep = 1;
+    private int? _loadDragTop;
+
+    /// <summary>누른 채 끌면 목록을 넘긴다(폰, 사용자 요청). 처리했으면 참 — 끄는 동안은 고른 줄도 안 바꾼다.</summary>
+    private bool LoadDrag(int y)
+    {
+        if (_screen != Screen.Title || !_continueOpen || _press is not { } p) { _loadDragTop = null; return false; }
+        if (_loadDragTop == null && Math.Abs(y - p.Y) <= DragSlop * 2) return true;
+        _loadDragTop ??= _loadTop;
+        _loadFollow = false;
+        _loadTop = Math.Clamp(_loadDragTop.Value - (y - p.Y) / Math.Max(1, _loadStep), 0, Math.Max(0, _continueList.Count - _loadPage));
+        return true;
+    }
+
+    /// <summary>휠로 목록 넘기기.</summary>
+    private bool LoadWheel(int notches)
+    {
+        if (_screen != Screen.Title || !_continueOpen) return false;
+        _loadFollow = false;
+        _loadTop = Math.Clamp(_loadTop - notches, 0, Math.Max(0, _continueList.Count - _loadPage));
+        return true;
+    }
 
     private bool LoadScrollClick(int mx, int my)
     {
@@ -369,7 +396,8 @@ internal sealed partial class GameWindow
         int fit = Math.Max(1, (listBottom - listTop + gap) / (cardH + gap));
         if (n > fit) fit = Math.Max(1, (listBottom - listTop - 2 * (arrowH + gap) + gap) / (cardH + gap));   // ▲ ▼ 띠 자리
         _loadPage = fit;
-        if (_titleIndex < n)
+        _loadStep = cardH + gap;
+        if (_loadFollow && _titleIndex < n)
         {
             if (_titleIndex < _loadTop) _loadTop = _titleIndex;
             if (_titleIndex >= _loadTop + fit) _loadTop = _titleIndex - fit + 1;

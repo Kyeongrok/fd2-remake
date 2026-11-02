@@ -152,6 +152,7 @@ internal sealed partial class GameWindow
         (_mouseX, _mouseY) = (x, y);
         _mouseMoved = true;
         if (HudHoldMove(x, y)) return;
+        if (LoadDrag(y)) return;   // 불러오기 목록을 끌어 넘긴다
         if (PartyMove(x, y) || VolumeMove(x, y) || MenuMove(y)) return;
         if (DragMap(x, y)) return;
         if (_versionsOpen) VersionsHover(_mouseX, _mouseY);
