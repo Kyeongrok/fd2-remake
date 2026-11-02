@@ -212,10 +212,11 @@ internal sealed partial class GameWindow
         if (HudHoldRelease()) return;
         if (PartyRelease() || VolumeRelease()) { _press = null; return; }
         if (MenuRelease(x, y)) return;
-        if (_press == null) return;
+        if (_press is not { } p) return;
         bool dragged = _dragging;
         (_press, _dragging) = (null, false);
-        if (!dragged) PointerDown(x, y);
+        // 끌다가 뗀 것은 누르기가 아니다(사용자 요청 — 넘기다 손을 떼면 그 자리가 눌렸다). 지도를 못 끄는 화면에서도
+        if (!dragged && Math.Abs(x - p.X) + Math.Abs(y - p.Y) <= DragSlop * 2) PointerDown(p.X, p.Y);
     }
 
     /// <summary>누른 채 움직이면 지도를 민다. 끄는 중이면 true(커서는 따라가지 않는다).</summary>

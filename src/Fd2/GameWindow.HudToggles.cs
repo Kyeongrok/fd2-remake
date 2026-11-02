@@ -312,6 +312,7 @@ internal sealed partial class GameWindow
         ["에디트 — 돈 · 경험치"] = ("에디트", "돈 · 경험치"),
         ["세이브 연동(구글 · 개발중)"] = ("세이브 연동(개발중)", "구글 계정에 기록 올리고 받기"),
         ["버그 리포트"] = ("버그 리포트", "문제를 적어 보내기"),
+        ["타이틀로"] = ("타이틀로", "처음 화면으로(기록하지 않은 진행은 사라짐)"),
     };
 
     /// <summary>
@@ -344,7 +345,7 @@ internal sealed partial class GameWindow
         FillRect(0, y, _clientW, h, 0xFF1C2850);
         FillRect(0, y, _clientW, Math.Max(2, U(2)), 0xFFC8A040);
 
-        string title = _mobilePage switch { 0 => "메뉴", 1 => "화면 표시", 2 => "설정", _ => "에디트" };
+        string title = _mobilePage switch { 0 => "메뉴", 1 => "화면 표시", 2 => "설정", 5 => "타이틀로 갈까요?", _ => "에디트" };
         string now = _touchFromTown ? "마을" : $"{ChapterName(_scene.Index)} · {Turn}턴 · 아군 차례";
         var head = Text.Render(title, large, 0xFFEEF0FF);
         var state = Text.Render(now, small, 0xFFC4CAE6, bold: false);
@@ -562,6 +563,19 @@ internal sealed partial class GameWindow
                 _menu.Add(("에디트 — 돈 · 경험치", () => OpenTouchMenu(0, 3), default));
                 _menu.Add(("세이브 연동(구글 · 개발중)", () => { Close(); OpenCloudDialog(); }, default));
                 _menu.Add(("버그 리포트", () => { Close(); OpenBugReport(); }, default));
+                _menu.Add(("타이틀로", () => OpenTouchMenu(1, 5), default));   // 메뉴에서 타이틀로 갈 길이 없었다(사용자 요청) — 한 번 묻는다
+                break;
+            case 5:
+                // 타이틀로 — 기록하지 않은 진행은 사라진다고 알리고 묻는다
+                _menu.Add(("기록하지 않은 진행은 사라집니다", () => { }, default));
+                _menu.Add(("예 — 타이틀로", () =>
+                {
+                    _menu.Clear();
+                    _touchFromTown = false;
+                    _town = null;
+                    ToTitle();
+                }, default));
+                _menu.Add(("아니오 — 메뉴로", () => OpenTouchMenu(0), default));
                 break;
         }
         _menu.Add(("닫기", Close, default));   // 맨 아래 닫기(사용자 요청) — 밖을 누르거나 Esc 로도 닫힌다
