@@ -429,7 +429,15 @@ internal sealed partial class GameWindow
     {
         if (_campaign is not { } camp || camp.Party.Any(r => HeroRecord.Id(r) == c) || camp.Party.Count >= Campaign.MaxParty) return;
         var onMap = _scene.Units.Find(u => u.NameId == c && u.Side == Side.Player);
-        if (onMap != null) { camp.Party.Add(HeroRecord.From(onMap)); return; }
+        if (onMap != null)
+        {
+            // 원작 sub_112A5 는 지도가 아니라 동료 표에서 가방을 채운다 — 장면 유닛 표에 없는 소피아의 황금훈장(동료 표 +14)이 그래서 따라온다
+            if (_tables != null && c < GameTables.HeroCount)
+                foreach (int item in _tables.Heroes[c].Bag.Where(b => b != 255).Select(b => (int)b))
+                    if (onMap.Bag.Count < 8 && onMap.Bag.All(b => b.Item != item)) onMap.Bag.Add((item, false));
+            camp.Party.Add(HeroRecord.From(onMap));
+            return;
+        }
         var u = new Unit { Icon = c, Form = c, Id = c, Side = Side.Player };
         _battle.Setup(u);
         camp.Party.Add(HeroRecord.From(u));
