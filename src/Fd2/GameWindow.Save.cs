@@ -322,6 +322,7 @@ internal sealed partial class GameWindow
     {
         _continueList = ContinueSlots();
         _continueRow = 0;
+        _loadTop = 0;
         _continueOpen = true;
     }
 

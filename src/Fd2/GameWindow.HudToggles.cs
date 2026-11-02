@@ -123,9 +123,9 @@ internal sealed partial class GameWindow
         int spot = _settings.EscSpot;
         if (CanTouchEsc && spot is 0 or 2)
         {
-            _escIcon = DrawHudButton("ESC", fs, right, y);
-            right = _escIcon.X - 10;
-            bottom = _escIcon.Y + _escIcon.H;
+            _escIcon = DrawHudButton("ESC", fs, right, y, "esc");
+            right = _hudDefault.X - 10;   // 옆 단추는 기본 자리를 따라 줄 선다(옮긴 단추 자리와 상관없이)
+            bottom = _hudDefault.Y + _hudDefault.H;
         }
         if (CanTouchEsc && spot is 1 or 2 or 3)
         {
@@ -133,15 +133,17 @@ internal sealed partial class GameWindow
             int big = fs * 3 / 2;
             var label = Text.Render("ESC", big, 0xFFFFFFFF);
             int w = label.W + big / 2 * 2, h = label.H + big / 2;
-            _escIcon2 = DrawHudButton("ESC", big, spot == 3 ? 14 + w : _clientW - 14, _clientH - h - 14);   // 3 은 왼쪽 아래
+            _escIcon2 = DrawHudButton("ESC", big, spot == 3 ? 14 + w : _clientW - 14, _clientH - h - 14, "esc2");   // 3 은 왼쪽 아래
         }
         if (CanOpenTouchMenu)
         {
-            _menuIcon = DrawHudButton("메뉴", fs, right, y);
-            bottom = Math.Max(bottom, _menuIcon.Y + _menuIcon.H);
+            _menuIcon = DrawHudButton("메뉴", fs, right, y, "menu");
+            var menuAt = _hudDefault;
+            bottom = Math.Max(bottom, menuAt.Y + menuAt.H);
             // 지도 — 누르면 미니맵이 뜨고 한 번 더 누르면 닫힌다(사용자 요청)
-            if (!TownTop) _mapIcon = DrawHudButton("지도", fs, _menuIcon.X - 10, y);
-            _partyIcon = DrawHudButton("파티", fs, (TownTop ? _menuIcon.X : _mapIcon.X) - 10, y);   // 파티 정보 — 메뉴에서 빼 단추로(사용자 요청)
+            int next = menuAt.X;
+            if (!TownTop) { _mapIcon = DrawHudButton("지도", fs, next - 10, y, "map"); next = _hudDefault.X; }
+            _partyIcon = DrawHudButton("파티", fs, next - 10, y, "party");   // 파티 정보 — 메뉴에서 빼 단추로(사용자 요청)
         }
         if (bottom > 0) _hudIconBottom = bottom + 6;
         if (TownTop)
@@ -185,23 +187,120 @@ internal sealed partial class GameWindow
             case 2: (x, y) = (_clientW - w - 14, _clientH - h * 3 - 24); break;   // ESC 단추 위
             case 3: y = _hudIconBottom; break;
         }
+        (x, y) = HudSpot("ready", x, y, w, h);
+        uint edge = _hudMoving == "ready" ? 0xFFFFE070 : 0x80FFFFFF;
         FillRect(x, y, w, h, 0xA0101020);
-        FillRect(x, y, w, 1, 0x80FFFFFF); FillRect(x, y + h - 1, w, 1, 0x80FFFFFF);
-        FillRect(x, y, 1, h, 0x80FFFFFF); FillRect(x + w - 1, y, 1, h, 0x80FFFFFF);
+        FillRect(x, y, w, 1, edge); FillRect(x, y + h - 1, w, 1, edge);
+        FillRect(x, y, 1, h, edge); FillRect(x + w - 1, y, 1, h, edge);
         DrawText(label, x + pad, y + pad / 2);
         _readyIcon = (x, y, w, h);
     }
 
-    /// <summary>오른쪽 끝이 right 인 글자 단추를 그리고 자리를 돌려준다.</summary>
-    private (int X, int Y, int W, int H) DrawHudButton(string text, int fs, int right, int y)
+    /// <summary>
+    /// 오른쪽 끝이 right 인 글자 단추를 그리고 자리를 돌려준다. key 가 있으면 3초 눌러 옮긴 자리에 그린다
+    /// (기본 자리는 <see cref="_hudDefault"/> — 옆 단추를 그 옆에 줄 세울 때 쓴다).
+    /// </summary>
+    private (int X, int Y, int W, int H) DrawHudButton(string text, int fs, int right, int y, string? key = null)
     {
         var label = Text.Render(text, fs, 0xFFFFFFFF);
         int pad = fs / 2, w = label.W + pad * 2, h = label.H + pad, x = right - w;
+        _hudDefault = (x, y, w, h);
+        (x, y) = HudSpot(key, x, y, w, h);
+        uint edge = key != null && key == _hudMoving ? 0xFFFFE070 : 0xC0FFFFFF;
         FillRect(x, y, w, h, 0x90101020);
-        FillRect(x, y, w, 1, 0xC0FFFFFF); FillRect(x, y + h - 1, w, 1, 0xC0FFFFFF);
-        FillRect(x, y, 1, h, 0xC0FFFFFF); FillRect(x + w - 1, y, 1, h, 0xC0FFFFFF);
+        FillRect(x, y, w, 1, edge); FillRect(x, y + h - 1, w, 1, edge);
+        FillRect(x, y, 1, h, edge); FillRect(x + w - 1, y, 1, h, edge);
         DrawText(label, x + pad, y + pad / 2);
         return (x, y, w, h);
+    }
+
+    // ── 폰 단추 옮기기(사용자 요청) — 겹쳐 보이는 단추를 3초 누르고 있으면 테두리가 노래지고, 끌어 놓은 자리에 남는다 ──
+
+    private const double HudHoldSeconds = 3;
+
+    /// <summary>마지막으로 그린 단추의 기본 자리(옮기기 전).</summary>
+    private (int X, int Y, int W, int H) _hudDefault;
+
+    /// <summary>누르고 있는 단추 · 누른 시간 · 누른 자리.</summary>
+    private string? _hudHoldKey;
+    private double _hudHoldTime;
+    private (int X, int Y) _hudHoldFrom;
+
+    /// <summary>옮기는 중인 단추 · 그 가운데 자리 · 손가락과 가운데의 차이.</summary>
+    private string? _hudMoving;
+    private (int X, int Y) _hudMoveAt, _hudGrab;
+
+    /// <summary>단추를 누르고 있거나 옮기는 중 — 안드로이드의 길게 누르기(물리기)를 건너뛴다.</summary>
+    internal bool HudHolding => _hudHoldKey != null || _hudMoving != null;
+
+    private string HudSpotKey(string key) => key + (_clientH > _clientW ? ":세로" : ":가로");
+
+    /// <summary>단추 key 를 그릴 자리 — 옮기는 중이면 손가락을 따라, 옮겨 둔 자리가 있으면 거기, 아니면 기본 자리. 화면 밖으로는 안 나간다.</summary>
+    private (int X, int Y) HudSpot(string? key, int x, int y, int w, int h)
+    {
+        if (key == null || !TouchUi) return (x, y);
+        (int X, int Y)? center = null;
+        if (key == _hudMoving) center = _hudMoveAt;
+        else if (_settings.HudSpots.TryGetValue(HudSpotKey(key), out var f) && f is [var fx, var fy])
+            center = ((int)(fx * _clientW), (int)(fy * _clientH));
+        if (center is not { } c) return (x, y);
+        return (Math.Clamp(c.X - w / 2, 0, Math.Max(0, _clientW - w)), Math.Clamp(c.Y - h / 2, 0, Math.Max(0, _clientH - h)));
+    }
+
+    /// <summary>그 자리의 옮길 수 있는 단추.</summary>
+    private (string Key, (int X, int Y, int W, int H) Rect)? HudButtonAt(int x, int y)
+    {
+        foreach (var (key, r) in new[] { ("esc", _escIcon), ("esc2", _escIcon2), ("menu", _menuIcon), ("map", _mapIcon), ("party", _partyIcon), ("ready", _readyIcon) })
+            if (r.W > 0 && x >= r.X - 4 && y >= r.Y - 4 && x < r.X + r.W + 4 && y < r.Y + r.H + 4) return (key, r);
+        return null;
+    }
+
+    /// <summary>단추 위를 눌렀다 — 뗄 때 누르기로 하고(3초 넘게 누르면 옮기기) true.</summary>
+    private bool HudHoldPress(int x, int y)
+    {
+        if (!TouchUi || !InBattle || HudButtonAt(x, y) is not { } hit) return false;
+        (_hudHoldKey, _hudHoldTime, _hudHoldFrom, _hudMoving) = (hit.Key, 0, (x, y), null);
+        _press = null;
+        return true;
+    }
+
+    private void HudHoldTick(double dt)
+    {
+        if (_hudHoldKey == null) return;
+        _hudHoldTime += dt;
+        if (_hudHoldTime < HudHoldSeconds) return;
+        var r = HudButtonAt(_hudHoldFrom.X, _hudHoldFrom.Y) is { } hit && hit.Key == _hudHoldKey ? hit.Rect : default;
+        if (r.W == 0) { _hudHoldKey = null; return; }   // 그새 단추가 사라졌다
+        (int X, int Y) center = (r.X + r.W / 2, r.Y + r.H / 2);
+        (_hudMoving, _hudMoveAt, _hudGrab, _hudHoldKey) = (_hudHoldKey, center, (_hudHoldFrom.X - center.X, _hudHoldFrom.Y - center.Y), null);
+        PlaySfx(Sound.UiBank, Sound.Menu);
+    }
+
+    /// <summary>누른 채 움직였다 — 옮기는 중이면 단추가 따라오고, 3초 전에 많이 움직이면 누르기를 버린다.</summary>
+    private bool HudHoldMove(int x, int y)
+    {
+        if (_hudMoving != null) { _hudMoveAt = (x - _hudGrab.X, y - _hudGrab.Y); return true; }
+        if (_hudHoldKey == null) return false;
+        if (Math.Abs(x - _hudHoldFrom.X) + Math.Abs(y - _hudHoldFrom.Y) > DragSlop * 3) _hudHoldKey = null;
+        return true;
+    }
+
+    /// <summary>뗐다 — 옮기는 중이면 그 자리를 남기고, 3초 전이면 그냥 누르기.</summary>
+    private bool HudHoldRelease()
+    {
+        if (_hudMoving is { } moved)
+        {
+            _hudMoving = null;
+            _settings.HudSpots[HudSpotKey(moved)] = [Math.Clamp(_hudMoveAt.X / (double)Math.Max(1, _clientW), 0, 1), Math.Clamp(_hudMoveAt.Y / (double)Math.Max(1, _clientH), 0, 1)];
+            _settings.Save();
+            PlaySfx(Sound.UiBank, Sound.Cursor);
+            return true;
+        }
+        if (_hudHoldKey == null) return false;
+        _hudHoldKey = null;
+        _press = null;
+        PointerDown(_hudHoldFrom.X, _hudHoldFrom.Y);
+        return true;
     }
 
     /// <summary>맨 위 줄의 이름 · 설명 — 시안(메뉴).</summary>
@@ -211,7 +310,7 @@ internal sealed partial class GameWindow
         ["설정"] = ("설정", "속도 · 회전 고정 · 소리 · 조작"),
         ["시스템 메뉴"] = ("시스템 메뉴", "턴 끝 · 행군 · 전황 기록"),
         ["에디트 — 돈 · 경험치"] = ("에디트", "돈 · 경험치"),
-        ["세이브 연동(구글)"] = ("세이브 연동", "구글 계정에 기록 올리고 받기"),
+        ["세이브 연동(구글 · 개발중)"] = ("세이브 연동(개발중)", "구글 계정에 기록 올리고 받기"),
         ["버그 리포트"] = ("버그 리포트", "문제를 적어 보내기"),
     };
 
@@ -417,6 +516,13 @@ internal sealed partial class GameWindow
                         ApplyScreenLock();
                         OpenTouchMenu(_menuIndex, 2);
                     }, default));
+                if (_settings.HudSpots.Count > 0)
+                    _menu.Add(("단추 자리 처음대로(3초 눌러 옮긴 것)", () =>
+                    {
+                        _settings.HudSpots.Clear();
+                        _settings.Save();
+                        OpenTouchMenu(_menuIndex, 2);
+                    }, default));
                 _menu.Add(("소리 크기", () => { Close(); OpenVolume(); }, default));
                 _menu.Add(("단축키 · 패드 설정", () => { Close(); _keysOpen = true; _keysRow = 0; _keysCapture = -1; }, default));
                 break;
@@ -454,7 +560,7 @@ internal sealed partial class GameWindow
                 _menu.Add(("설정", () => OpenTouchMenu(0, 2), default));
                 if (!_touchFromTown) _menu.Add(("시스템 메뉴", OpenSystemMenu, default));   // 턴 끝 · 전황 기록은 싸움 것
                 _menu.Add(("에디트 — 돈 · 경험치", () => OpenTouchMenu(0, 3), default));
-                _menu.Add(("세이브 연동(구글)", () => { Close(); OpenCloudDialog(); }, default));
+                _menu.Add(("세이브 연동(구글 · 개발중)", () => { Close(); OpenCloudDialog(); }, default));
                 _menu.Add(("버그 리포트", () => { Close(); OpenBugReport(); }, default));
                 break;
         }

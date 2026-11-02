@@ -46,7 +46,7 @@ internal sealed partial class GameWindow
         Win32.AppendMenuW(tools, Win32.MF_STRING, MenuEditor, "편집기 열기(&E)...");
         Win32.AppendMenuW(bar, Win32.MF_POPUP, (nuint)tools, "도구(&T)");
         Win32.AppendMenuW(bar, Win32.MF_SEPARATOR, 0, null);
-        Win32.AppendMenuW(bar, Win32.MF_STRING, MenuCloud, "세이브 연동(&C)...");
+        Win32.AppendMenuW(bar, Win32.MF_STRING, MenuCloud, "세이브 연동(개발중)(&C)...");
         Win32.AppendMenuW(bar, Win32.MF_STRING, MenuBugReport, "버그 리포트(&B)...");
         Win32.AppendMenuW(bar, Win32.MF_STRING, MenuExit, "끝내기(&X)");
         return bar;
@@ -217,16 +217,6 @@ internal sealed partial class GameWindow
     }
 
     private string _titleStatus = "";
-
-    /// <summary>제목 줄의 게임 버전 — 릴리즈는 「v0.14.21」, 버전을 안 넣고 빌드한 것(csproj 기본 1.0.0)은 「dev」.</summary>
-    private static string TitleVersion
-    {
-        get
-        {
-            string v = AppVersion.Split('+')[0];
-            return v is "1.0.0" or "0.0.0" or "?" ? "dev" : $"v{v}";
-        }
-    }
 
     /// <summary>제목 줄 — 「용의기사2 v0.14.21 — 지금 자료 이름」, 고해상도를 만드는 동안은 끝에 지금 상태를 붙인다(바뀔 때만 고친다).</summary>
     private void UpdateTitleStatus()

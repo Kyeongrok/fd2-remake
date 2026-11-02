@@ -106,6 +106,23 @@ internal static class Rules
         saul.Hp = 10;
         var drop = b.Drops([thief], saul);
         Same("약초(192) 를 받음", saul.Bag.Any(x => x.Item == 192 && !x.Equipped) && drop.Count == 1 && drop[0].Name == 181 + 192, true);
+
+        Console.WriteLine("\n[떨굼 — 가방이 차면 바꾸기 / 공통 가방이면 빈 동료에게]");
+        while (saul.Bag.Count < 8) saul.Bag.Add((192, false));
+        var others = b.Scene.Units.Where(o => o != saul && o.Team == 2 && o.Hp > 0).ToList();
+        thief.DropKind = 0; thief.DropValue = 193;
+        var full = new List<(Unit Who, int Item)>();
+        b.Drops([thief], saul, full, shared: false);
+        Same("공통 가방 끔 — 바꿀 거리로 남음", full.Count == 1 && full[0].Item == 193 && saul.Bag.Count == 8, true);
+        b.SwapDrop(saul, 193, 0);
+        Same("바꾸면 그 칸에 들어감", saul.Bag[0].Item, 193);
+        if (others.Count > 0)
+        {
+            thief.DropKind = 0; thief.DropValue = 194;
+            full.Clear();
+            b.Drops([thief], saul, full, shared: true);
+            Same("공통 가방 켬 — 빈 동료가 받음", full.Count == 0 && others.Any(o => o.Bag.Any(x => x.Item == 194)), true);
+        }
     }
 
     /// <summary>두 사람을 평지에 나란히 — 1장 지도에서 지형 0 이 둘 이어진 첫 자리.</summary>

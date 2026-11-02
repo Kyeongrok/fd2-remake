@@ -279,8 +279,8 @@ public sealed partial class Battle
         return e;
     }
 
-    /// <summary>최대 레벨 — 꼴 30 · 31(카일 · 워터)은 110, 나머지 50.</summary>
-    public static int MaxLevel(Unit u) => u.FormId is 30 or 31 ? 110 : 50;
+    /// <summary>최대 레벨 — 꼴 30 · 31(카일 · 워터)은 110, 나머지는 원작 50 을 99 로 올렸다(사용자 요청).</summary>
+    public static int MaxLevel(Unit u) => u.FormId is 30 or 31 ? 110 : 99;
 
     /// <summary>
     /// 경험 e 를 받는다(sub_1E292) — 합이 100 이 넘는 동안 레벨 +1 · 성장 · 100 빼기(최대 레벨에 닿으면 합 0).
@@ -399,9 +399,10 @@ public sealed partial class Battle
     /// <summary>
     /// 이번에 쓰러진 사람들의 떨굼(sub_1B6B7 → sub_1AA1D) — 0 물건 · 1 돈은 죽인 사람이 우리 편(편 2)일 때만 받고,
     /// 그렇지 않으면 그 자리에서 나머지 처리를 통째로 멈춘다(원작 그대로). 3 은 대사 묶음. 2(사건 함수)는 원작 코드라 옮기지 못했다.
-    /// 짐이 가득이면 원작은 버릴 물건을 고르게 하지만 여기서는 받지 못한 것으로 둔다.
+    /// 짐이 가득이면 — shared(공통 가방)면 가방에 자리가 있는 우리 편(가장 빈 사람, 같으면 앞 배열)에게 가고,
+    /// 그래도 없으면 full 에 담아 돌려준다(원작처럼 버릴 물건을 고르게 — <see cref="SwapDrop"/>). full 이 없으면 받지 못한 것으로 둔다.
     /// </summary>
-    public List<Notice> Drops(IEnumerable<Unit> died, Unit? killer)
+    public List<Notice> Drops(IEnumerable<Unit> died, Unit? killer, List<(Unit Who, int Item)>? full = null, bool shared = false)
     {
         var notes = new List<Notice>();
         foreach (var u in died)
@@ -415,6 +416,14 @@ public sealed partial class Battle
                 case 0 when killer!.Bag.Count < 8:
                     killer.Bag.Add((value, false));
                     notes.Add(new Notice(" 획득", 181 + value));
+                    break;
+                case 0 when shared && Scene.Units.Where(o => o.Team == 2 && o.Hp > 0 && o.Bag.Count < 8)
+                                                 .OrderBy(o => o.Bag.Count).ThenBy(o => o.Slot).FirstOrDefault() is { } taker:
+                    taker.Bag.Add((value, false));
+                    notes.Add(new Notice(" 획득(공통 가방 — 가방이 빈 동료에게)", 181 + value));
+                    break;
+                case 0 when full != null:
+                    full.Add((killer!, value));
                     break;
                 case 0:
                     notes.Add(new Notice(" — 짐이 가득해 받지 못함", 181 + value));
@@ -496,6 +505,19 @@ public sealed partial class Battle
         Recompute(u);
         notes.Add(new Notice(" 획득", 181 + take));
         notes.Add(new Notice(" 을(를) 상자에 넣음", 181 + give));
+        return notes;
+    }
+
+    /// <summary>떨군 물건을 가방이 차서 바꾼다 — 고른 가방 칸의 물건은 버리고 떨군 물건을 그 칸에.</summary>
+    public List<Notice> SwapDrop(Unit u, int item, int slot)
+    {
+        var notes = new List<Notice>();
+        if (slot < 0 || slot >= u.Bag.Count) return notes;
+        int give = u.Bag[slot].Item;
+        u.Bag[slot] = (item, false);
+        Recompute(u);
+        notes.Add(new Notice(" 획득", 181 + item));
+        notes.Add(new Notice(" 을(를) 버림", 181 + give));
         return notes;
     }
 

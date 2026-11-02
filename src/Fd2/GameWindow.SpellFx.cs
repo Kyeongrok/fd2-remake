@@ -42,7 +42,27 @@ internal sealed partial class GameWindow
     ];
 
     /// <summary>마법 속도 배율(모드, 사용자 요청) — 1 이 원작(한 틱 0.055초), 0.5 면 두 배 느리게. 전투 화면 효과 · 쓰는 사람 몸짓 · 지도 위 마법 그림.</summary>
-    private double SpellRate => Math.Clamp(_settings.SpellSpeed, 10, 400) / 100.0;
+    private double SpellRate => Math.Clamp(_settings.SpellSpeed, 10, 400) / 100.0 * (_spellFast ? SpellFastRate : 1);
+
+    /// <summary>마법이 도는 중에 누르거나 탭하면 그 마법이 끝날 때까지 이 배로 빨리(사용자 요청).</summary>
+    private const double SpellFastRate = 4;
+    private bool _spellFast;
+
+    /// <summary>마법 그림이 도는 중인가 — 전투 화면의 마법 치기 · 효과, 지도 위 마법 그림.</summary>
+    private bool SpellPlaying => _sfx != null || _fx != null || _bs == BattleState.CutIn && _strike.Magic;
+
+    /// <summary>마법이 도는 중이면 빨리 감기를 켜고 참(누르기는 거기서 끝난다). 마법이 끝나면 <see cref="SpellFastTick"/> 가 끈다.</summary>
+    private bool SpellFastForward()
+    {
+        if (!InBattle || !SpellPlaying) return false;
+        _spellFast = true;
+        return true;
+    }
+
+    private void SpellFastTick()
+    {
+        if (_spellFast && !SpellPlaying) _spellFast = false;
+    }
 
     /// <summary>전투 모션(무기 치기) 속도 배율(모드, 사용자 요청) — 1 이 원작.</summary>
     private double StrikeRate => Math.Clamp(_settings.StrikeSpeed, 10, 400) / 100.0;

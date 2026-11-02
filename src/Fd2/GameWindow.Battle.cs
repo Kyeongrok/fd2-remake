@@ -1313,15 +1313,47 @@ internal sealed partial class GameWindow
             _strikeNotes.AddRange(_battle.GainExp(_castCaster, _battle.SpellExp(_castCaster, _castSpell, _spellResults)));
         _castSpell = -1;
         var notes = new List<Notice>(_strikeNotes);
+        var full = new List<(Unit Who, int Item)>();
         foreach (var group in _fallen.GroupBy(f => f.Killer))
-            notes.AddRange(_battle.Drops(group.Select(f => f.Dead), group.Key));
+            notes.AddRange(_battle.Drops(group.Select(f => f.Dead), group.Key, full, _settings.SharedBag));
         var dead = _fallen.Select(f => f.Dead).ToList();
         _strikeNotes.Clear();
         _fallen.Clear();
         var after = _afterStrikes;
         _afterStrikes = null;
         // 쓰러진 사람은 빙글 돌다 펑(sub_1DB65) 한 뒤 알림
-        PlayDeathFx(dead, () => ShowNotices(notes, () => { _bs = BattleState.Select; after?.Invoke(); }));
+        PlayDeathFx(dead, () => ShowNotices(notes, () => AskDropSwaps(full, 0, () => { _bs = BattleState.Select; after?.Invoke(); })));
+    }
+
+    /// <summary>
+    /// 떨굼을 받을 가방이 찼다 — 원작처럼 버릴 물건을 고르게 한다(고른 물건은 버리고 떨군 물건을 그 칸에). 「바꾸지 않는다」면 떨군 물건을 버린다.
+    /// </summary>
+    private void AskDropSwaps(List<(Unit Who, int Item)> full, int i, Action done)
+    {
+        if (i >= full.Count) { done(); return; }
+        var (u, item) = full[i];
+        void Next() { _menuGlyphs.Clear(); _menuIcons.Clear(); ClearSelection(); AskDropSwaps(full, i + 1, done); }
+        _stage = MenuStage.Ask;
+        _menu.Clear();
+        _menuGlyphs.Clear(); _menuIcons.Clear();
+        _menu.Add(("가방이 가득 — 버리고 바꿀 물건을 고르세요", () => { }, default));
+        _menuGlyphs[0] = 181 + item;
+        for (int k = 0; k < u.Bag.Count; k++)
+        {
+            int slot = k;
+            _menuGlyphs[_menu.Count] = 181 + u.Bag[k].Item;
+            _menu.Add((u.Bag[k].Equipped ? "(장비) " : "", () =>
+            {
+                var notes = _battle.SwapDrop(u, item, slot);
+                _menuGlyphs.Clear(); _menuIcons.Clear(); ClearSelection();
+                ShowNotices(notes, () => AskDropSwaps(full, i + 1, done));
+            }, default));
+        }
+        _menuGlyphs[_menu.Count] = 181 + item;
+        _menu.Add(("받지 않고 버림 — ", Next, default));
+        _menuIndex = 1;
+        _selected = u;
+        _bs = BattleState.Menu;
     }
 
     /// <summary>한 사람의 치기가 끝났다 — 모은 경험을 넣고(sub_1E292) 레벨업 알림.</summary>
@@ -1872,6 +1904,8 @@ internal sealed partial class GameWindow
         BuildChestCells();
         var rows = new List<Text.Image>();
         var cells = new List<(int X, int Y)>();
+        int titleFs = fs;
+        if (TouchUi && _settings.ShowChests) fs = fs * 3 / 2;   // 폰은 펼친 목록을 1.5배로(접힌 제목 줄은 그대로, 사용자 요청)
         int g = Math.Max(1, fs / Font16.Size);
         foreach (var (x, y, k) in _chestCells)
         {
@@ -1887,7 +1921,7 @@ internal sealed partial class GameWindow
             cells.Add((x, y));
         }
         if (rows.Count == 0) return;
-        var title = Text.Render("보물상자", fs, 0xFFA8C8FF);
+        var title = Text.Render("보물상자", titleFs, 0xFFA8C8FF);
         int btn = title.H;
         bool open = _settings.ShowChests;   // 접으면 제목 줄 + [+] 만
         int w = Math.Max(title.W + (TouchUi ? 0 : btn + 16), open ? rows.Max(r => r.W) : 0) + 20, h = open ? title.H + rows.Sum(r => r.H + 2) + 14 : title.H + 12;

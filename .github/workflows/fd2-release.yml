@@ -168,7 +168,7 @@ jobs:
             Write-Host "고정 키로 서명합니다"
           } else { Write-Host "비밀값이 없어 디버그 키로 서명합니다 — 폰에서 업데이트하려면 지우고 다시 깔아야 합니다" }
           dotnet publish src/Fd2.Android/Fd2.Android.csproj -c Release -f net10.0-android -o apk `
-            -p:ApplicationDisplayVersion=$v -p:ApplicationVersion=${{ steps.version.outputs.code }} @sign
+            -p:ApplicationDisplayVersion=$v -p:ApplicationVersion=${{ steps.version.outputs.code }} -p:Version=$v -p:InformationalVersion=$v @sign
           if ($LASTEXITCODE -ne 0) { throw "안드로이드 publish 실패" }
           $signed = Get-ChildItem apk -Filter "*-Signed.apk" | Select-Object -First 1
           if (-not $signed) { throw "서명된 APK 가 없습니다" }

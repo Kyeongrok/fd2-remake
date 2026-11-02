@@ -42,7 +42,7 @@ internal sealed partial class GameWindow
     private readonly List<(int X, int Y, int W, int H)> _titleRects = new();
 
     private (string Label, Action Do)[] TitleItems => _continueOpen
-        ? [.. _continueList.Select(s => (s.Label, (Action)(() => ContinueFrom(s.Campaign)))), ("세이브 연동(구글)", OpenCloudDialog), ("돌아가기", () => { _continueOpen = false; _titleIndex = 0; })]
+        ? [.. _continueList.Select(s => (s.Label, (Action)(() => ContinueFrom(s.Campaign)))), ("세이브 연동(구글 · 개발중)", OpenCloudDialog), ("돌아가기", () => { _continueOpen = false; _titleIndex = 0; })]
         : [
         ("Start", StartGame),
         ("Load", () => { OpenContinue(); _titleIndex = 0; }),
@@ -288,10 +288,145 @@ internal sealed partial class GameWindow
     private void TitleClick(int mx, int my)
     {
         if (_screen == Screen.Opening) { SkipOpening(); return; }
+        if (_continueOpen && LoadScrollClick(mx, my)) return;
         for (int i = 0; i < _titleRects.Count; i++)
         {
             var r = _titleRects[i];
             if (mx >= r.X && my >= r.Y && mx < r.X + r.W && my < r.Y + r.H) { _titleIndex = i; TitleItems[i].Do(); return; }
+        }
+    }
+
+    // ── 불러오기 화면(사용자 요청 — 제목 그림 위 한 줄 글은 읽기 어려웠다) ─────────────────────────────
+    // 그림을 어둡게 덮고, 기록마다 카드 한 장: 왼쪽 색 띠(전황 파랑 · 자동 청록 · 기록 금 · 원작 보라), 위 줄 이름 · 시각, 아래 줄 장 · 동료 · 돈.
+    // 넘치면 고른 카드가 보이게 밀고, 위 · 아래 끝의 「▲ · ▼」 띠를 누르면 한 쪽씩 넘긴다. 세이브 연동 · 돌아가기는 맨 아래 단추 줄.
+
+    private int _loadTop;
+    private (int X, int Y, int W, int H) _loadUp, _loadDown;
+    private int _loadPage = 1;
+
+    private bool LoadScrollClick(int mx, int my)
+    {
+        static bool In((int X, int Y, int W, int H) r, int x, int y) => r.W > 0 && x >= r.X && y >= r.Y && x < r.X + r.W && y < r.Y + r.H;
+        int n = _continueList.Count;
+        if (In(_loadUp, mx, my)) { _loadTop = Math.Max(0, _loadTop - _loadPage); _titleIndex = _loadTop; PlaySfx(77, 2); return true; }
+        if (In(_loadDown, mx, my)) { _loadTop = Math.Min(Math.Max(0, n - _loadPage), _loadTop + _loadPage); _titleIndex = _loadTop; PlaySfx(77, 2); return true; }
+        return false;
+    }
+
+    // 원작 창 색(컷인 정보 창 · 묻는 창) — 파란 바탕 · 연보라 테두리, 막대의 노랑(HP) · 초록(MP) · 빨강(깎인 몫)
+    private const uint FdBlue = 0xFF28458A, FdBlueLit = 0xFF3A5CA8, FdEdge = 0xFF8090C0, FdEdgeLit = 0xFFA8B8E8,
+                       FdYellow = 0xFFF0C030, FdGreen = 0xFF58A030, FdRed = 0xFFC02020, FdShade = 0xFF1A2C5C;
+
+    /// <summary>사울 망토의 붉은빛(지도 그림 0 의 팔레트 색).</summary>
+    private const uint SaulCape = 0xFFA60000;
+
+    /// <summary>카드 왼쪽 띠 — 원작 색으로: 전황 사울 망토 빨강 · 자동 초록(MP) · 기록 연보라 · 원작 노랑(HP)(사용자 요청).</summary>
+    private static uint LoadKindColor(string head) =>
+        head.StartsWith("원작") ? FdYellow : head.StartsWith("자동") ? FdGreen : head.StartsWith("전황") ? SaulCape : FdEdgeLit;
+
+    private void DrawLoadScreen(int fs)
+    {
+        var items = TitleItems;
+        int n = _continueList.Count;
+        FillRect(0, 0, _clientW, _clientH, 0xD8080A14);
+        _titleRects.Clear();
+        for (int i = 0; i < items.Length; i++) _titleRects.Add(default);
+        (_loadUp, _loadDown) = (default, default);
+
+        int pad = Math.Max(8, fs / 2), gap = Math.Max(6, fs / 3);
+        int cw = Math.Min(_clientW - 2 * pad, fs * 30), cx = (_clientW - cw) / 2;
+
+        // 머리 — 제목과 도움말
+        var head = Text.Render("불러오기", fs * 3 / 2, 0xFFFFE070);
+        var hint = Text.Render(n == 0 ? "이어 할 기록이 없습니다" : $"기록 {n}개 — 고르면 그 자리에서 이어 합니다", Math.Max(12, fs * 3 / 4), FdEdgeLit, bold: false);
+        int y = pad + 4;
+        DrawText(head, cx, y);
+        DrawText(hint, cx + cw - hint.W, y + head.H - hint.H);
+        y += head.H + gap;
+        FillRect(cx, y, cw, 3, FdEdge);
+        y += gap + 2;
+
+        // 아래 단추 줄 — 세이브 연동 · 돌아가기
+        int bfs = fs, bh = Text.Render("가", bfs, 0xFFFFFFFF).H + pad * 2, by = _clientH - bh - pad;
+        int bw = (cw - gap) / 2;
+        for (int k = 0; k < 2; k++)
+        {
+            int i = n + k, bx = cx + k * (bw + gap);
+            bool sel = i == _titleIndex;
+            var label = Text.Render(items[i].Label, bfs, sel ? 0xFFFFE070 : 0xFFFFFFFF);
+            if (label.W > bw - pad) label = Text.Render(items[i].Label, Math.Max(12, bfs * (bw - pad) / Math.Max(1, label.W)), sel ? 0xFFFFE070 : 0xFFFFFFFF);
+            FillRect(bx, by, bw, bh, sel ? FdBlueLit : FdBlue);
+            Frame(bx, by, bw, bh, sel ? FdYellow : FdEdge);
+            DrawText(label, bx + (bw - label.W) / 2, by + (bh - label.H) / 2);
+            _titleRects[i] = (bx, by, bw, bh);
+        }
+
+        // 카드들
+        int mainFs = fs, subFs = Math.Max(12, fs * 4 / 5);
+        int cardH = Text.Render("가", mainFs, 0xFFFFFFFF).H + Text.Render("가", subFs, 0xFFFFFFFF).H + pad * 2 + 4;
+        int listTop = y, listBottom = by - gap;
+        int arrowH = Math.Max(fs, cardH / 2);
+        int fit = Math.Max(1, (listBottom - listTop + gap) / (cardH + gap));
+        if (n > fit) fit = Math.Max(1, (listBottom - listTop - 2 * (arrowH + gap) + gap) / (cardH + gap));   // ▲ ▼ 띠 자리
+        _loadPage = fit;
+        if (_titleIndex < n)
+        {
+            if (_titleIndex < _loadTop) _loadTop = _titleIndex;
+            if (_titleIndex >= _loadTop + fit) _loadTop = _titleIndex - fit + 1;
+        }
+        _loadTop = Math.Clamp(_loadTop, 0, Math.Max(0, n - fit));
+        int cy = listTop;
+        if (n > fit)
+        {
+            _loadUp = Strip(cy, "▲", _loadTop > 0);
+            cy += arrowH + gap;
+        }
+        for (int i = _loadTop; i < Math.Min(n, _loadTop + fit); i++)
+        {
+            string label = items[i].Label;
+            int dash = label.IndexOf(" — ", StringComparison.Ordinal);
+            string name = dash >= 0 ? label[..dash] : label, detail = dash >= 0 ? label[(dash + 3)..] : "", when = "";
+            // 전황 · 자동의 끝 「· 11-02 17:58」은 위 줄 오른쪽으로
+            int at = detail.LastIndexOf(" · ", StringComparison.Ordinal);
+            if (at >= 0 && System.Text.RegularExpressions.Regex.IsMatch(detail[(at + 3)..], @"^\d\d-\d\d \d\d:\d\d$")) (detail, when) = (detail[..at], detail[(at + 3)..]);
+            bool sel = i == _titleIndex;
+            uint kind = LoadKindColor(name);
+            FillRect(cx, cy, cw, cardH, sel ? FdBlueLit : FdBlue);
+            Frame(cx, cy, cw, cardH, sel ? FdYellow : FdEdge);
+            FillRect(cx + 3, cy + 3, Math.Max(4, pad / 2), cardH - 6, kind);
+            int tx = cx + Math.Max(4, pad / 2) + pad;
+            var nameImg = Text.Render(name, mainFs, sel ? 0xFFFFE070 : 0xFFFFFFFF);
+            DrawText(nameImg, tx, cy + pad);
+            if (when.Length > 0)
+            {
+                var whenImg = Text.Render(when, subFs, FdEdgeLit, bold: false);
+                DrawText(whenImg, cx + cw - whenImg.W - pad, cy + pad + (nameImg.H - whenImg.H) / 2);
+            }
+            if (detail.Length > 0)
+            {
+                var d = Text.Render(detail, subFs, 0xFFFFFFFF, bold: false);
+                int room = cx + cw - pad - tx;
+                if (d.W > room) d = Text.Render(detail, Math.Max(10, subFs * room / Math.Max(1, d.W)), 0xFFFFFFFF, bold: false);
+                DrawText(d, tx, cy + pad + nameImg.H + 4);
+            }
+            _titleRects[i] = (cx, cy, cw, cardH);
+            cy += cardH + gap;
+        }
+        if (n > fit) _loadDown = Strip(listBottom - arrowH, "▼", _loadTop + fit < n);
+
+        (int X, int Y, int W, int H) Strip(int sy, string mark, bool on)
+        {
+            FillRect(cx, sy, cw, arrowH, on ? FdBlue : FdShade);
+            var m = Text.Render(mark, Math.Max(12, arrowH * 2 / 3), on ? 0xFFFFE070 : FdBlueLit);   // 넘길 곳이 없으면 바탕에 묻히게(글자 그림은 반투명이 안 먹는다)
+            DrawText(m, cx + (cw - m.W) / 2, sy + (arrowH - m.H) / 2);
+            return on ? (cx, sy, cw, arrowH) : default;
+        }
+
+        void Frame(int fx, int fy, int fw, int fh, uint c)   // 원작 창처럼 굵은 테두리
+        {
+            int t = 3;
+            FillRect(fx, fy, fw, t, c); FillRect(fx, fy + fh - t, fw, t, c);
+            FillRect(fx, fy, t, fh, c); FillRect(fx + fw - t, fy, t, fh, c);
         }
     }
 
@@ -351,6 +486,13 @@ internal sealed partial class GameWindow
         int lw = (int)(AfmPlayer.Width * ls), lh = (int)(AfmPlayer.Height * ls);
         int lx = (_clientW - lw) / 2, ly = (_clientH - lh) / 2;
         if (_titleBack != null) BlitFit(_titleBack, AfmPlayer.Width, AfmPlayer.Height, lx, ly, lw, lh);
+        if (_continueOpen) { DrawLoadScreen(fs); return; }
+        if (TouchUi)
+        {
+            // 폰은 창 제목 줄이 없어 게임 버전이 안 보였다 — 오른쪽 위에 작게(사용자 요청)
+            var ver = Text.Render(TitleVersion, Math.Max(12, fs * 3 / 4), 0xC0FFFFFF, bold: false);
+            DrawText(ver, _clientW - ver.W - 12, 8);
+        }
 
         var items = TitleItems;
         int vrow = TitleVersionRow;

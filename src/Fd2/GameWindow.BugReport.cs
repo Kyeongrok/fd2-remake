@@ -43,6 +43,16 @@ internal sealed partial class GameWindow
         }
     }
 
+    /// <summary>제목 줄 · 폰 시작 화면의 게임 버전 — 릴리즈는 「v0.14.21」, 버전을 안 넣고 빌드한 것(csproj 기본 1.0.0)은 「dev」.</summary>
+    private static string TitleVersion
+    {
+        get
+        {
+            string v = AppVersion.Split('+')[0];
+            return v is "1.0.0" or "0.0.0" or "?" ? "dev" : $"v{v}";
+        }
+    }
+
     /// <summary>글 쓰는 창 — 플랫폼마다(PC WinForms · 안드로이드 AlertDialog). 보내기를 누르면 send(글).</summary>
     private partial void AskBugText(string summary, Action<string> send);
 

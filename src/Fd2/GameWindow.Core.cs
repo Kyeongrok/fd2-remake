@@ -151,6 +151,7 @@ internal sealed partial class GameWindow
         if ((x, y) == (_mouseX, _mouseY)) return;
         (_mouseX, _mouseY) = (x, y);
         _mouseMoved = true;
+        if (HudHoldMove(x, y)) return;
         if (PartyMove(x, y) || VolumeMove(x, y) || MenuMove(y)) return;
         if (DragMap(x, y)) return;
         if (_versionsOpen) VersionsHover(_mouseX, _mouseY);
@@ -169,6 +170,7 @@ internal sealed partial class GameWindow
         if (_screen == Screen.Ending) { EndingNext(); return; }
         if (_screen != Screen.Game) { TitleClick(_mouseX, _mouseY); return; }
         if (Talking) { TalkNext(); return; }
+        if (SpellFastForward()) return;   // 마법이 도는 중 — 탭 · 클릭은 빨리 감기(사용자 요청)
         if (InBattle && HudToggleClick(x, y)) return;
         if (SkipEnemyWalk()) return;
         MouseToCursor();
@@ -195,17 +197,19 @@ internal sealed partial class GameWindow
     /// </summary>
     internal void PointerPress(int x, int y, bool defer = false)
     {
+        if (HudHoldPress(x, y)) return;
         if (PartyPress(x, y) || VolumePress(x, y) || MenuPress(x, y)) return;
         if (!defer && (!CanDragMap || InBattle && HudHit(x, y))) { PointerDown(x, y); return; }
         (_press, _pressCam, _dragging) = ((x, y), (_camX, _camY), false);
     }
 
     /// <summary>누르기를 버린다(안드로이드 길게 누르기로 물렸을 때).</summary>
-    internal void PointerAbort() => (_press, _dragging, _partyDrag, _volumeDrag, _menuPress, _menuDragging) = (null, false, null, -1, null, false);
+    internal void PointerAbort() => (_press, _dragging, _partyDrag, _volumeDrag, _menuPress, _menuDragging, _hudHoldKey, _hudMoving) = (null, false, null, -1, null, false, null, null);
 
     /// <summary>뗐다 — 끌지 않았으면 그 자리를 누른 것으로.</summary>
     internal void PointerRelease(int x, int y)
     {
+        if (HudHoldRelease()) return;
         if (PartyRelease() || VolumeRelease()) { _press = null; return; }
         if (MenuRelease(x, y)) return;
         if (_press == null) return;
@@ -229,6 +233,7 @@ internal sealed partial class GameWindow
     /// <summary>오른쪽 단추(안드로이드는 길게 누르기) — 전투에서 한 단계 물리기.</summary>
     internal void PointerCancel()
     {
+        if (HudHolding) return;   // 단추를 누르고 있다 — 길게 누르기는 단추 옮기기다
         if (_partyOpen) { CloseParty(); return; }
         if (_volumeOpen) { CloseVolume(); return; }
         if (InBattle) BattleCancel();
@@ -330,6 +335,7 @@ internal sealed partial class GameWindow
             TitleKey(vk);
             return;
         }
+        if (!_keyRepeat) SpellFastForward();   // 마법이 도는 중이면 키로도 빨리 감기 — 키는 그대로 넘긴다
         if (!_keyRepeat) SkipEnemyWalk();   // 적이 걷는 중이면 그 한 명의 걸음을 건너뛴다 — 키는 그대로 넘긴다
         if (TownSecretKey(vk)) return;   // 마을 비밀상점 열쇠(Shift · Ctrl · Alt + F) — 도움말 같은 단축키보다 먼저
 
@@ -432,6 +438,8 @@ internal sealed partial class GameWindow
     private void Tick(double dt)
     {
         _time += dt;
+        HudHoldTick(dt);
+        SpellFastTick();
         PlatformTick();
         MusicTick();
         if (_screen == Screen.Prologue) { PrologueTick(dt); return; }

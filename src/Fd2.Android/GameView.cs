@@ -107,7 +107,7 @@ public sealed unsafe class GameView : SurfaceView, ISurfaceHolderCallback
                 double dt = Math.Min(now - last, 0.1);
                 last = now;
                 long downAt = _downAt;
-                if (downAt >= 0 && !_longDone && Clock.ElapsedMilliseconds - downAt > LongPress * 1000)
+                if (downAt >= 0 && !_longDone && !game.HudHolding && Clock.ElapsedMilliseconds - downAt > LongPress * 1000)   // 단추를 누르고 있으면 물리기가 아니라 단추 옮기기(3초)
                 {
                     _longDone = true;
                     _input.Enqueue(g => g.PointerCancel());

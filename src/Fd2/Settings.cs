@@ -88,6 +88,12 @@ internal sealed class Settings
 
     /// <summary>폰 남은 아군 표시 자리 — 0 아래 가운데 · 1 아래 왼쪽 · 2 아래 오른쪽(ESC 위) · 3 위 가운데 · 4 숨김(사용자 요청).</summary>
     public int ReadySpot { get; set; }
+    /// <summary>
+    /// 폰 겹쳐 보이는 단추(ESC · 메뉴 · 지도 · 파티 · 남은 아군)를 3초 눌러 옮긴 자리 — 「단추이름:세로|가로」 → 단추 가운데의 화면 비율 [x, y](사용자 요청).
+    /// 없으면 기본 자리.
+    /// </summary>
+    public Dictionary<string, double[]> HudSpots { get; set; } = new();
+
     public bool TouchChests { get; set; }
     public bool TouchGoals { get; set; }
     public bool TouchHelp { get; set; }
