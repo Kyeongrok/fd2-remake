@@ -62,78 +62,153 @@ internal sealed partial class GameWindow
         VersionSwitcher?.Invoke(dir);
     }
 
+    // ── 배경음악 — 미디어 플레이어는 음악 스레드에서만 만진다 ──
+    // 예전에는 게임 루프에서 곡을 바꿨다(Stop · Release · Prepare 를 기다림). MIDI 플레이어가 그 자리에서 가끔 돌아오지 않으면
+    // 적 차례 → 우리 차례(곡이 바뀌는 때)에 게임이 통째로 멈췄다(w-88, 곡우 버전 폰 제보). 이제 걸려도 음악만 끊긴다.
+
     private Android.Media.MediaPlayer? _player;
+    /// <summary>게임 쪽에서 본 곡 — 음악 스레드에 맡긴 마지막 곡(-1 이면 끔).</summary>
     private int _musicPlaying = -1;
+    /// <summary>음악 스레드가 실제로 틀고 있는 곡.</summary>
+    private volatile int _musicActual = -1;
+    private Worker? _musicWorker, _sfxWorker;
+
+    /// <summary>
+    /// 미디어 플레이어 일을 하나씩 하는 뒤 스레드 — 게임 루프는 맡기기만 하고 기다리지 않는다.
+    /// 1초 넘게 걸린 일 · 실패는 음악 기록(버그 리포트에 붙는다)에 남는다.
+    /// </summary>
+    private sealed class Worker
+    {
+        private readonly System.Collections.Concurrent.BlockingCollection<(string What, Action Job)> _jobs = new();
+        public volatile string Doing = "";
+
+        public Worker(string name, Action<string> log)
+        {
+            new Thread(() =>
+            {
+                foreach (var (what, job) in _jobs.GetConsumingEnumerable())
+                {
+                    Doing = what;
+                    var clock = System.Diagnostics.Stopwatch.StartNew();
+                    try { job(); }
+                    catch (Exception e) { log($"{what} 실패: {e.GetType().Name}: {e.Message}"); }   // 소리가 안 나도 게임은 계속
+                    if (clock.Elapsed.TotalSeconds > 1) log($"{what} 느림 {clock.Elapsed.TotalSeconds:0.0}초");
+                    Doing = "";
+                }
+            }) { IsBackground = true, Name = name }.Start();
+        }
+
+        /// <summary>맡긴다 — 밀린 일이 많으면(플레이어가 걸렸으면) 버려도 되는 일은 버린다.</summary>
+        public void Add(string what, Action job, bool droppable = false)
+        {
+            if (droppable && _jobs.Count > 4) return;
+            _jobs.Add((what, job));
+        }
+    }
+
+    /// <summary>음악 일을 음악 스레드에 맡긴다.</summary>
+    private void MusicJob(string what, Action job) => (_musicWorker ??= new Worker("fd2-music", MusicFail)).Add(what, job);
 
     /// <summary>배경음악 — 곡을 MIDI 파일로 바꿔 두고 안드로이드 미디어 플레이어로 되풀이.</summary>
     partial void PlayMusic(int index)
     {
         if (index == _musicPlaying) return;
-        StopMusic();
-        try
+        _musicPlaying = index;
+        MusicJob($"곡 {index} 틀기", () =>
         {
-            string cache = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fd2", "music");
-            if (Fd2.Data.Music.MidiFile(_dir, index, cache) is not { } file) { MusicFail($"곡 {index} 없음(FDMUS.DAT)"); return; }
-            _player = new Android.Media.MediaPlayer();
-            _player.SetDataSource(file);
-            _player.Looping = true;
-            _player.Prepare();
-            ApplyVolume();
-            _player.Start();
-            _musicPlaying = index;
-        }
-        catch (Exception e)   // 소리가 안 나도 게임은 계속
-        {
-            MusicFail($"곡 {index} 재생 실패: {e.GetType().Name}: {e.Message}");
-            StopMusic();
-        }
+            if (_musicPlaying != index) return;   // 그 사이 다른 곡으로 바뀌었다
+            StopPlayer();
+            try
+            {
+                string cache = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fd2", "music");
+                if (Fd2.Data.Music.MidiFile(_dir, index, cache) is not { } file) { MusicFail($"곡 {index} 없음(FDMUS.DAT)"); return; }
+                var p = new Android.Media.MediaPlayer();
+                _player = p;
+                p.SetDataSource(file);
+                p.Looping = true;
+                p.Prepare();
+                float v = _settings.MusicVolume / 100f;
+                p.SetVolume(v, v);
+                if (!_away) p.Start();
+                _musicActual = index;
+            }
+            catch (Exception e)   // 소리가 안 나도 게임은 계속 — 다음에 같은 곡을 부르면 다시 해 본다
+            {
+                MusicFail($"곡 {index} 재생 실패: {e.GetType().Name}: {e.Message}");
+                StopPlayer();
+                Interlocked.CompareExchange(ref _musicPlaying, -1, index);
+            }
+        });
     }
 
-    /// <summary>버그 리포트에 붙일 지금 음악 상태 — 곡 번호와 플레이어가 도는지.</summary>
-    private partial string MusicStatus()
-    {
-        if (_musicPlaying < 0) return "안 트는 중";
-        try { return $"곡 {_musicPlaying}: {(_player?.IsPlaying == true ? "playing" : "멈춤")}"; }
-        catch (Java.Lang.IllegalStateException) { return $"곡 {_musicPlaying}: 플레이어 상태 못 읽음"; }
-    }
+    /// <summary>버그 리포트에 붙일 지금 음악 상태 — 곡 번호와 음악 스레드가 하는 일(플레이어는 건드리지 않는다).</summary>
+    private partial string MusicStatus() =>
+        (_musicActual < 0 ? "안 트는 중" : $"곡 {_musicActual}") + (_musicPlaying != _musicActual ? $" → 곡 {_musicPlaying} 기다림" : "") +
+        (_musicWorker?.Doing is { Length: > 0 } doing ? $" · 하는 중: {doing}" : "") +
+        (_sfxWorker?.Doing is { Length: > 0 } sfx ? $" · 효과음 하는 중: {sfx}" : "");
 
     /// <summary>설정 소리 크기의 배경음 — 트는 곡에 바로.</summary>
     partial void ApplyVolume()
     {
         float v = _settings.MusicVolume / 100f;
-        try { _player?.SetVolume(v, v); } catch (Java.Lang.IllegalStateException) { }
+        MusicJob("소리 크기", () => { try { _player?.SetVolume(v, v); } catch (Java.Lang.IllegalStateException) { } });
     }
+
+    private volatile bool _away;
 
     /// <summary>앱이 뒤로 가면 배경음악을 멈추고, 돌아오면 이어서 — MainActivity.OnPause · OnResume.</summary>
     internal void Background(bool away)
     {
-        try
+        _away = away;
+        MusicJob(away ? "음악 쉬기" : "음악 잇기", () =>
         {
-            if (away) { if (_player?.IsPlaying == true) _player.Pause(); }
-            else if (_settings.Music) _player?.Start();
-        }
-        catch (Java.Lang.IllegalStateException) { }
+            try
+            {
+                if (away) { if (_player?.IsPlaying == true) _player.Pause(); }
+                else if (_settings.Music) _player?.Start();
+            }
+            catch (Java.Lang.IllegalStateException) { }
+        });
     }
 
     partial void StopMusic()
     {
-        try { _player?.Stop(); } catch (Java.Lang.IllegalStateException) { }
-        _player?.Release();
-        _player = null;
         _musicPlaying = -1;
+        MusicJob("음악 끄기", () => { if (_musicPlaying < 0) StopPlayer(); });
+    }
+
+    /// <summary>음악 스레드에서만 — 플레이어를 멈추고 놓는다.</summary>
+    private void StopPlayer()
+    {
+        var p = _player;
+        _player = null;
+        _musicActual = -1;
+        if (p == null) return;
+        try { p.Stop(); } catch (Java.Lang.IllegalStateException) { }
+        p.Release();
     }
 
     // ── 효과음 — 소리 묶음을 WAV 파일로 만들어 두고 미디어 플레이어 둘(원작 소리 갈래 A · B)로 ──
 
+    // 플레이어는 효과음 스레드에서만 만진다(배경음악과 같은 까닭 — Prepare 가 걸리면 게임이 멈췄다)
     private Android.Media.MediaPlayer? _sfxA, _sfxB;
 
-    partial void PlaySfx(int entry, int index) => PlayWav(ref _sfxA, entry, index);
+    partial void PlaySfx(int entry, int index) => SfxJob(entry, index, false);
 
-    partial void PlaySfx2(int entry, int index) => PlayWav(ref _sfxB, entry, index);
+    partial void PlaySfx2(int entry, int index) => SfxJob(entry, index, true);
+
+    private void SfxJob(int entry, int index, bool second)
+    {
+        if (!_settings.Sound || _settings.SoundVolume <= 0) return;
+        (_sfxWorker ??= new Worker("fd2-sfx", MusicFail)).Add($"효과음 {entry}-{index}", () =>
+        {
+            if (second) PlayWav(ref _sfxB, entry, index);
+            else PlayWav(ref _sfxA, entry, index);
+        }, droppable: true);
+    }
 
     private void PlayWav(ref Android.Media.MediaPlayer? player, int entry, int index)
     {
-        if (!_settings.Sound || _settings.SoundVolume <= 0) return;
         try
         {
             string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fd2", "sfx");
@@ -155,12 +230,12 @@ internal sealed partial class GameWindow
         catch (Exception) { }   // 소리가 안 나도 게임은 계속
     }
 
-    partial void StopSfx()
+    partial void StopSfx() => _sfxWorker?.Add("효과음 끄기", () =>
     {
         _sfxA?.Release();
         _sfxB?.Release();
         _sfxA = _sfxB = null;
-    }
+    });
 
     private partial bool CanAddVersion() => VersionAdder != null;
 

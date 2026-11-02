@@ -1336,21 +1336,19 @@ internal sealed partial class GameWindow
         _stage = MenuStage.Ask;
         _menu.Clear();
         _menuGlyphs.Clear(); _menuIcons.Clear();
-        _menu.Add(("가방이 가득 — 버리고 바꿀 물건을 고르세요", () => { }, default));
-        _menuGlyphs[0] = 181 + item;
+        // 이름은 글자로 — 원본 글꼴 그림 이름은 판본(곡우 등)에 따라 안 나와 목록이 빈칸이었다(w-87)
+        _menu.Add(($"가방이 가득 — {GameNames.Item(item)} 대신 버릴 물건을 고르세요", () => { }, default));
         for (int k = 0; k < u.Bag.Count; k++)
         {
             int slot = k;
-            _menuGlyphs[_menu.Count] = 181 + u.Bag[k].Item;
-            _menu.Add((u.Bag[k].Equipped ? "(장비) " : "", () =>
+            _menu.Add(((u.Bag[k].Equipped ? "(장비) " : "") + GameNames.Item(u.Bag[k].Item), () =>
             {
                 var notes = _battle.SwapDrop(u, item, slot);
                 _menuGlyphs.Clear(); _menuIcons.Clear(); ClearSelection();
                 ShowNotices(notes, () => AskDropSwaps(full, i + 1, done));
             }, default));
         }
-        _menuGlyphs[_menu.Count] = 181 + item;
-        _menu.Add(("받지 않고 버림 — ", Next, default));
+        _menu.Add(($"받지 않고 버림 — {GameNames.Item(item)}", Next, default));
         _menuIndex = 1;
         _selected = u;
         _bs = BattleState.Menu;
@@ -1379,6 +1377,7 @@ internal sealed partial class GameWindow
         _strikeClock = 0;
         _strikeTail = 0;
         _strikeDamage = -1;
+        (_strikeHitsSeen, _strikeLastFrame) = (0, -1);
         _strikeMiss = _strikeCrit = false;
         if (_strikeOnMap || _settings.SkipEnemyFights && _enemyPhase)
         {
@@ -1444,6 +1443,18 @@ internal sealed partial class GameWindow
         return _motions[icon * 4 + kind] = m;
     }
 
+    /// <summary>나눠 보이기 — 친 앞의 HP · 지난 맞는 컷 수 · 마지막으로 본 컷.</summary>
+    private int _strikeHpBefore, _strikeHitsSeen, _strikeLastFrame = -1;
+
+    /// <summary>이 모션의 맞는 컷 수(무기 치기만 나눈다 — 마법 · 회복은 한 번에).</summary>
+    private int StrikeHits => _strike.Spell >= 0 || _strike.Heal > 0 || _strikeMotion == null ? 1 : Math.Max(1, _strikeMotion.Frames.Count(f => f.Hit != 0));
+
+    /// <summary>지금까지 보인 피해 — 맞는 컷마다 몫을 더하고 마지막 컷에서 다 보인다(셈은 첫 맞는 컷에 한 번, 원작과 같은 합).</summary>
+    private int ShownDamage => _strikeDamage <= 0 ? _strikeDamage : _strikeHitsSeen >= StrikeHits ? _strikeDamage : _strikeDamage * _strikeHitsSeen / StrikeHits;
+
+    /// <summary>맞는 쪽 정보 창에 보일 HP.</summary>
+    private int ShownHp(Unit d) => _strikeDamage > 0 && !_strikeFriendly && !_strikeMiss ? Math.Max(d.Hp, _strikeHpBefore - ShownDamage) : d.Hp;
+
     /// <summary>맞는 컷 — 원작 식으로 한 번 치기 · 마법 · 물건을 셈해 HP 를 바꾼다.</summary>
     private void ResolveStrike()
     {
@@ -1493,7 +1504,22 @@ internal sealed partial class GameWindow
         FrameSound();
         SpellFxTick(dt);
         bool hitFrame = _strikeMotion == null ? _strikeFrame >= frames / 2 : _strikeMotion.Frames[_strikeFrame].Hit != 0 || _strikeFrame == frames - 1;
-        if (_strikeDamage < 0 && hitFrame) ResolveStrike();
+        if (_strikeDamage < 0 && hitFrame)
+        {
+            int before = _strike.D.Hp;
+            ResolveStrike();
+            (_strikeHpBefore, _strikeHitsSeen, _strikeLastFrame) = (before, 1, _strikeFrame);
+        }
+        else if (_strikeDamage >= 0 && _strikeFrame != _strikeLastFrame)
+        {
+            // 원작(sub_2CF30)은 모션의 맞는 컷마다 HP 를 나눠 깎는다 — 둘째 맞는 컷에서도 흔들리고 숫자 · HP 막대가 더 줄게
+            _strikeLastFrame = _strikeFrame;
+            if (_strikeMotion != null && _strikeMotion.Frames[_strikeFrame].Hit != 0 && _strikeHitsSeen < StrikeHits)
+            {
+                _strikeHitsSeen++;
+                if (!_strikeMiss && !_strikeFriendly) _strikeTail = 0;
+            }
+        }
         if (_strikeDamage >= 0 && _strikeFrame == frames - 1 && _strikeTail > 0.7 && !SpellFxRunning) NextStrike();
     }
 
@@ -2622,11 +2648,12 @@ internal sealed partial class GameWindow
         // 두 캐릭터 정보 창(원작) — 오른쪽에 선 사람은 위 오른쪽, 왼쪽 사람은 아래 왼쪽
         int aSide = _strikeMotion != null ? SideOf(_strikeMotion) : a.Side == Side.Player ? 1 : 0;
         DrawStrikePanel(a, aSide, bx, by, s);
-        if (a != d) DrawStrikePanel(d, 1 - aSide, bx, by, s);
+        if (a != d) DrawStrikePanel(d, 1 - aSide, bx, by, s, ShownHp(d));
         if (hit)
         {
+            int shown = ShownDamage;
             string label = heal ? $"+{_strikeDamage}" : _strikeMiss ? "빗나감"
-                         : (_strikeCrit ? "필살! " : "") + (d.Hp == 0 ? $"-{_strikeDamage}  쓰러짐!" : $"-{_strikeDamage}");
+                         : (_strikeCrit ? "필살! " : "") + (ShownHp(d) == 0 ? $"-{shown}  쓰러짐!" : $"-{shown}");
             uint color = heal ? 0xFF60FF80 : _strikeMiss ? 0xFFE0E0E0 : 0xFFFF4040;
             // 크기는 장면 배율을 따라(세로 화면에서 따로 그려 줄일 때도 같은 비율), 검은 테두리 — 맞는 쪽이 하얗게 번쩍여 글이 묻혔다(사용자 요청)
             int size = Math.Max(fs * 2, 22 * s);
@@ -2668,8 +2695,9 @@ internal sealed partial class GameWindow
     /// 컷인 정보 창 — 파란 바탕에 이름(원본 글꼴) · LV, HP(노랑) · MP(초록) 막대와 숫자, 줄어든 몫은 빨강.
     /// side 1 이면 위 오른쪽(320x200 화면의 172~316, 4~46), 0 이면 아래 왼쪽(4~148, 154~196).
     /// </summary>
-    private void DrawStrikePanel(Unit u, int side, int bx, int by, int s)
+    private void DrawStrikePanel(Unit u, int side, int bx, int by, int s, int hp = -1)
     {
+        if (hp < 0) hp = u.Hp;
         const int W = 144, H = 42;
         int x = bx + (side == 1 ? 172 : 4) * s, y = by + (side == 1 ? 4 : 154) * s;
         FillRect(x, y, W * s, H * s, 0xFFA8B8E8);
@@ -2692,7 +2720,7 @@ internal sealed partial class GameWindow
             FillRect(barX + s, ry + 2 * s, barW - 2 * s, barH - 2 * s, 0xFFC02020);
             FillRect(barX + s, ry + 2 * s, (barW - 2 * s) * Math.Clamp(now, 0, max) / max, barH - 2 * s, color);
         }
-        Bar("HP", 21, u.Hp, u.MaxHp, 0xFFF0C030);
+        Bar("HP", 21, hp, u.MaxHp, 0xFFF0C030);
         Bar("MP", 31, u.Mp, u.MaxMp, 0xFF58A030);
     }
 

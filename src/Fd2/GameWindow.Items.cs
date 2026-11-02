@@ -25,8 +25,7 @@ internal sealed partial class GameWindow
         for (int i = 0; i < u.Bag.Count; i++)
         {
             int slot = i;
-            _menuGlyphs[_menu.Count] = 181 + u.Bag[i].Item;
-            _menu.Add((u.Bag[i].Equipped ? "(장비) " : "", () => OpenItemActions(u, slot, from), default));
+            _menu.Add(((u.Bag[i].Equipped ? "(장비) " : "") + GameNames.Item(u.Bag[i].Item), () => OpenItemActions(u, slot, from), default));
         }
         _menu.Add(("돌아가기", () => { _menuGlyphs.Clear(); _menuIcons.Clear(); BackTo(from); }, default));
         _menuIndex = 0;
