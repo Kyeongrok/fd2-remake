@@ -1890,11 +1890,15 @@ internal sealed partial class GameWindow
         var title = Text.Render("보물상자", fs, 0xFFA8C8FF);
         int btn = title.H;
         bool open = _settings.ShowChests;   // 접으면 제목 줄 + [+] 만
-        int w = Math.Max(title.W + btn + 16, open ? rows.Max(r => r.W) : 0) + 20, h = open ? title.H + rows.Sum(r => r.H + 2) + 14 : title.H + 12;
+        int w = Math.Max(title.W + (TouchUi ? 0 : btn + 16), open ? rows.Max(r => r.W) : 0) + 20, h = open ? title.H + rows.Sum(r => r.H + 2) + 14 : title.H + 12;
         int bx = 12, by = Math.Max(Math.Max(12, VersionLabelBottom + 4), _miniBottom + 8);
+        // 폰 세로는 위 단추 줄과 겹치면 그 밑으로
+        int buttonsLeft = new[] { _partyIcon, _mapIcon, _menuIcon, _escIcon }.Where(r => r.W > 0).Select(r => r.X).DefaultIfEmpty(_clientW).Min();
+        if (TouchUi && bx + w + 8 > buttonsLeft) by = Math.Max(by, _hudIconBottom);
         FillRect(bx, by, w, h, 0xC0101020);
         DrawText(title, bx + 10, by + 6);
-        _chestFold = FoldButton(bx + w - btn - 6, by + 6, btn, open);
+        // 폰은 작은 단추 없이 제목 줄 전체를 눌러 접고 편다(사용자 요청)
+        _chestFold = TouchUi ? (bx, by, w, title.H + 12) : FoldButton(bx + w - btn - 6, by + 6, btn, open);
         if (!open) return;
         int cy = by + 8 + title.H;
         for (int i = 0; i < rows.Count; i++)

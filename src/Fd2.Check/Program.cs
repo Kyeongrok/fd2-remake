@@ -149,6 +149,10 @@ internal static class Program
         Same("사울 이름 글자 수", n.Character(0).Length, 2);
         Same("화염술 이름 글자 수", n.Spell(0).Length, 3);
         Same("31 번 마법 이름은 빈 줄", n.Spell(31).Length, 0);
+        var glyphs = DialogueFile.SeedGlyphs(dir);
+        Console.WriteLine($"글자표 씨앗 {glyphs.Count}자");
+        Same("대사 내보내기 → 불러오기가 FDTXT.DAT 와 바이트까지 같다",
+             DialogueFile.Import(dir, DialogueFile.Export(dir, glyphs), glyphs).SequenceEqual(File.ReadAllBytes(Path.Combine(dir, "FDTXT.DAT"))), true);
     }
 
     /// <summary>

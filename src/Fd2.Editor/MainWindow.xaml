@@ -35,6 +35,9 @@
             </MenuItem>
             <MenuItem Header="에셋(_A)">
                 <MenuItem Header="배경음악(_M)..." Click="OnOpenMusic" />
+                <Separator />
+                <MenuItem Header="대사 내보내기(_E)..." Click="OnExportDialogue" />
+                <MenuItem Header="대사 불러오기(_I)..." Click="OnImportDialogue" />
             </MenuItem>
         </Menu>
         <StatusBar DockPanel.Dock="Bottom">
