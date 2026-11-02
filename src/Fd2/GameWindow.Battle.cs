@@ -350,8 +350,9 @@ internal sealed partial class GameWindow
             case BattleState.Moving:
                 if (_actor is { Moving: false } m && m.Path.Count == 0)
                 {
-                    _bs = BattleState.None;   // 땅 칸 사건이 도는 동안 다시 들어오지 않게
-                    GroundCheck(m, () => { if (m.Hp > 0 && !CheckOver()) { _actor = m; OpenMenu(); } });   // 우리 편도 멈춘 칸의 사건(sub_18890 → sub_13A44)
+                    // 땅 칸 사건은 여기서 걸지 않는다 — 원작(sub_18890)은 명령을 고른 뒤에 그 자리를 본다(<see cref="AfterPlayerAction"/>)
+                    _bs = BattleState.None;
+                    if (m.Hp > 0 && !CheckOver()) { _actor = m; OpenMenu(); }
                 }
                 break;
             case BattleState.CutIn:
@@ -466,7 +467,7 @@ internal sealed partial class GameWindow
                 {
                     int slot = _pendingItem;
                     _pendingItem = -1;
-                    a.Acted = true;
+                    Commit(a);
                     ClearSelection();
                     UsePlayerItem(a, slot, (tx, ty), AfterPlayerAction);
                     return;
@@ -480,7 +481,7 @@ internal sealed partial class GameWindow
                 }
                 if (spell == 23 && _teleportWho is { } moved)
                 {
-                    a.Acted = true;
+                    Commit(a);
                     ClearSelection();
                     Teleport(a, moved, (tx, ty), AfterPlayerAction);
                     return;
@@ -488,13 +489,13 @@ internal sealed partial class GameWindow
                 if (spell >= 0)
                 {
                     // 마법 — 고른 칸을 가운데로(사거리 0 이면 자기 칸)
-                    a.Acted = true;
+                    Commit(a);
                     ClearSelection();
                     CastSpell(a, spell, (tx, ty), AfterPlayerAction);
                     return;
                 }
                 if (_scene.UnitAt(tx, ty) is not { } t) return;
-                a.Acted = true;
+                Commit(a);
                 ClearSelection();
                 Attack(a, t, AfterPlayerAction);
                 return;
@@ -781,7 +782,7 @@ internal sealed partial class GameWindow
         _menu.Add(("대기", () =>
         {
             if ((u.X, u.Y) == _origin) { _battle.Rest(u); u.Facing = Dir.Down; PlaySfx(Sound.UiBank, Sound.Rest); }   // 안 걸었으면 쉬어 회복 — 쉬는 사람은 앞을 본다
-            u.Acted = true;
+            Commit(u);
             if (_battle.ChestAt(u) is { } chest) { AskChest(u, chest.Index, chest.Hidden); return; }
             ClearSelection();
             AfterPlayerAction();
@@ -1200,8 +1201,28 @@ internal sealed partial class GameWindow
         _bs = BattleState.Menu;
     }
 
+    /// <summary>명령을 정해 차례를 끝낸 우리 편 — 행동이 다 끝나면 그 자리의 땅 칸 사건을 본다.</summary>
+    private Unit? _groundActor;
+
+    /// <summary>우리 편이 명령을 정했다(행동 끝 표시) — 끝난 뒤 <see cref="AfterPlayerAction"/> 가 땅 칸 사건을 본다.</summary>
+    private void Commit(Unit u)
+    {
+        u.Acted = true;
+        _groundActor = u;
+    }
+
+    /// <summary>
+    /// 우리 편 한 사람의 행동이 끝났다. 원작(sub_18890)처럼 명령(공격 · 마법 · 물건 · 대기)을 고른 뒤 선 자리의 땅 칸 사건을 건다 —
+    /// 걷지 않고 제자리에서 골라도(13장 용자훈장: 사울이 그 칸에서 휴식, 버그 리포트 #8). 걸어서 지나간 칸의 사건도 이때.
+    /// </summary>
     private void AfterPlayerAction()
     {
+        if (_groundActor is { } g)
+        {
+            _groundActor = null;
+            if (g.Hp > 0 && !CheckOver()) { _bs = BattleState.None; GroundCheck(g, AfterPlayerAction); return; }
+            g.Walked.Clear();
+        }
         if (CheckOver()) return;
         _bs = BattleState.Select;
         if (!Controlled.Any(u => !u.Acted && !u.Paralyzed)) EndPlayerTurn();   // 남은 우리 편이 없거나 모두 마비(sub_13565)
