@@ -1441,7 +1441,7 @@ internal sealed partial class GameWindow
         var after = _afterStrikes;
         _afterStrikes = null;
         // 쓰러진 사람은 빙글 돌다 펑(sub_1DB65) 한 뒤 알림
-        PlayDeathFx(dead, () => ShowNotices(notes, () => AskDropSwaps(full, 0, () => { _bs = BattleState.Select; after?.Invoke(); })));
+        ShowPops(() => PlayDeathFx(dead, () => ShowNotices(notes, () => AskDropSwaps(full, 0, () => { _bs = BattleState.Select; after?.Invoke(); }))));
     }
 
     /// <summary>
@@ -1503,8 +1503,9 @@ internal sealed partial class GameWindow
             // 지도 위 마법 · 적 공격 장면 건너뛰기(모드) — 원작처럼 전투 화면 없이 그 자리에서 셈하고 알림만
             ResolveStrike();
             var d = _strike.D;
-            if (_strikeMiss) _strikeNotes.Add(new Notice(" 빗나감", Battle.NameLine(d)));
-            else if (_strikeDamage > 0) _strikeNotes.Add(new Notice(_strikeFriendly ? $" HP {_strikeDamage} 회복" : $" {_strikeDamage} 피해", Battle.NameLine(d)));
+            // 원작처럼 맞은 사람 머리 위에 숫자(오른 · 채운 값 / 피해) · MISS — 다 치고 한꺼번에 튀어 오른다(w-118)
+            if (_strikeMiss) AddMiss(d);
+            else if (_strikeDamage > 0) AddPop(d, _strikeDamage, damage: !_strikeFriendly);
             NextStrike();
             return;
         }
@@ -1585,7 +1586,7 @@ internal sealed partial class GameWindow
             _strikeDamage = r.Amount;
             _strikeMiss = !r.Hit;
             if (!_strikeOnMap && r.Hit) StartSpellFx(_strike.Spell, a.Team == 0);   // 전투 화면 마법 효과(0~8)
-            if (r.Hit && r.Note != null) _strikeNotes.Add(new Notice(r.Note, Battle.NameLine(d)));
+            if (r.Hit && r.Note != null && !_strikeOnMap) _strikeNotes.Add(new Notice(r.Note, Battle.NameLine(d)));   // 지도 위 마법은 머리 위 숫자로(w-118)
         }
         else if (_strike.Heal > 0)
         {

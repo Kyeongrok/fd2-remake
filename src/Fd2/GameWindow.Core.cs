@@ -606,6 +606,7 @@ internal sealed partial class GameWindow
     private void Compose()
     {
         ComposeScreen();
+        DrawPops();   // 지도 위 마법 결과 숫자(w-118)
         DrawParty();
         DrawVolume();
         DrawSetup();

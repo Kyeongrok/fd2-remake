@@ -189,9 +189,12 @@ public sealed partial class Battle
     private SpellResult Raise(Unit target, int k)
     {
         if (target.Status[k] > 0) return new SpellResult(target, false, 0, false);
+        int Stat() => k switch { 0 => target.Atk, 1 => target.Def, _ => target.Hit };
+        int before = Stat();
         target.Status[k] = BuffTurns(target, k, Rng.Next(4) + 2);   // 버전마다 차례 코드(Battle.Code.cs)
         Recompute(target);
-        return new SpellResult(target, true, 0, false, $" {StatusNames[k]}");
+        // 오른 값 — 원작은 이 수를 머리 위에 띄운다(sub_1E0DB(오른 값, 105, …))
+        return new SpellResult(target, true, Math.Max(0, Stat() - before), true, $" {StatusNames[k]}");
     }
 
     /// <summary>걸기(sub_22D1B) — 이미 걸렸거나 직업 25 · 26 이면 빗나감, 아니면 50% 로 맞아 피해 10 굴림 · 2~5 차례. 표의 명중은 이 길에서 안 쓴다.</summary>

@@ -438,6 +438,10 @@ internal sealed partial class GameWindow
             int tx = cx + Math.Max(4, pad / 2) + pad;
             var nameImg = Text.Render(name, mainFs, sel ? 0xFFFFE070 : 0xFFFFFFFF);
             DrawText(nameImg, tx, cy + pad);
+            // 장 제목(원작 글 550 + 장면 — 「사라촌가는길」 …, 사용자 요청 w-117) — 원작 글꼴로 장 번호 옆에
+            if (i < _continueList.Count && (_continueList[i].Campaign.Battle?.Scene ?? _continueList[i].Campaign.NextScene) is int sc and >= 0 and < 30
+                && NameImage(550 + sc, MenuNameScale(mainFs), sel ? 0xFFFFE070 : 0xFFE8E0C0) is { } title)
+                DrawText(title, tx + nameImg.W + pad, cy + pad + (nameImg.H - title.H) / 2);
             if (when.Length > 0)
             {
                 var whenImg = Text.Render(when, subFs, FdEdgeLit, bold: false);
