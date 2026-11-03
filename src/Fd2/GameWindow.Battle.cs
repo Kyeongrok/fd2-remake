@@ -122,9 +122,11 @@ internal sealed partial class GameWindow
     private void StartBattle(int scene)
     {
         PlayEnd("quit");   // 하던 판이 있으면 장면을 바꾸기 전에 닫는다
+        SweepRecords();    // 공통 가방(w-114) — 동료 가방의 소모품을 모은 뒤 세운다
         LoadScene(scene, BattleParty);
         if (!UseEvents || _tables == null) _scene.SpreadPlayers();   // 원작은 겹쳐 세우고 시작 대본으로 편다 — 대본을 못 돌리면 여기서 벌린다
         _partyAtStart = _campaign?.Party.Select(r => (byte[])r.Clone()).ToList();   // 지면 되돌릴 동료 표(싸움 중 합류가 겹치지 않게)
+        _poolAtStart = Pool.ToList();
         Array.Clear(_flags);
         _battle.Turn = 0;
         _battle.Gold = _campaign?.Gold ?? 0;
@@ -352,7 +354,7 @@ internal sealed partial class GameWindow
         switch (_bs)
         {
             case BattleState.Banner:
-                if ((_bannerLeft -= dt) <= 0) { var a = _afterBanner; _afterBanner = null; a?.Invoke(); }
+                if ((_bannerLeft -= dt * Math.Clamp(_settings.NoticeSpeed, 100, 400) / 100.0) <= 0) { var a = _afterBanner; _afterBanner = null; a?.Invoke(); }
                 break;
             case BattleState.Moving:
                 if (_actor is { Moving: false } m && m.Path.Count == 0)
@@ -377,6 +379,9 @@ internal sealed partial class GameWindow
             case BattleState.Enemy:
                 EnemyTick(dt * EnemyRate);
                 break;
+            case BattleState.Select when !_enemyPhase:
+                SweepUnits();   // 상자 · 사건으로 들어온 소모품을 공통 가방으로(고르는 중에만 — 가방 칸을 쥔 메뉴가 없을 때)
+                break;
             case BattleState.March:
                 MarchTick();
                 break;
@@ -391,10 +396,38 @@ internal sealed partial class GameWindow
     /// <summary>범위만 보여 주는 사람(적 · 행동을 마친 아군).</summary>
     private Unit? _rangeOf;
 
+    /// <summary>적 법사를 한 번 더 누르면 — 이번 차례에 걸어가서 공격 마법이 닿는 칸(w-116). null 이면 이동 범위.</summary>
+    private HashSet<(int X, int Y)>? _magicTiles;
+
+    /// <summary>
+    /// u 가 이번 차례에 갈 수 있는 칸에서 지금 MP 로 걸 수 있는 공격 마법(편 0)이 맞힐 수 있는 칸 — 사거리 안 가운데 칸 둘레의 범위까지.
+    /// 공격 마법이 없으면(법사가 아니면) 빈 칸.
+    /// </summary>
+    private HashSet<(int X, int Y)> MagicTiles(Unit u)
+    {
+        var set = new HashSet<(int X, int Y)>();
+        var spells = _battle.KnownSpells(u).Where(m => _battle.CanCast(u, m) && _battle.SpellOf(m) is { Side: 0, Power: > 0 }).ToList();
+        if (spells.Count == 0) return set;
+        var stops = _scene.Stops(_battle.Reach(u), u).ToList();
+        foreach (int m in spells)
+        {
+            var sp = _battle.SpellOf(m)!;
+            int ar = sp.Area < 16 ? sp.Area : sp.Area - 16;
+            var centers = new HashSet<(int X, int Y)>();
+            foreach (var st in stops) centers.UnionWith(_battle.SpellCenters(u, m, st));
+            foreach (var (cx, cy) in centers)
+                for (int dy = -ar; dy <= ar; dy++)
+                    for (int dx = -ar; dx <= ar; dx++)
+                        if (Battle.InArea(dx, dy, sp.Area, 0) && _scene.Inside(cx + dx, cy + dy)) set.Add((cx + dx, cy + dy));
+        }
+        return set;
+    }
+
     private void ClearSelection()
     {
         _actor = null;
         _rangeOf = null;
+        _magicTiles = null;
         _choosingMove = false;
         _pendingSpell = -1;
         _reach = null;
@@ -434,6 +467,9 @@ internal sealed partial class GameWindow
     {
         switch (_bs)
         {
+            case BattleState.Banner:   // 알림 글 — 누르면 바로 다음(w-115)
+                _bannerLeft = 0;
+                return;
             case BattleState.Over:
                 OpenOverMenu();
                 return;
@@ -476,6 +512,7 @@ internal sealed partial class GameWindow
                     int slot = _pendingItem;
                     _pendingItem = -1;
                     _sharedBorrow = null;   // 빌려 온 소모품은 쓰면 없어진다
+                    _poolBorrow = null;
                     Commit(a);
                     ClearSelection();
                     UsePlayerItem(a, slot, (tx, ty), AfterPlayerAction);
@@ -538,10 +575,17 @@ internal sealed partial class GameWindow
                     return;
                 }
                 if (Ready(who)) { _selected = who; BeginMove(who); return; }
-                // 적이나 행동을 마친 아군 — 범위만 보여 준다
+                // 적이나 행동을 마친 아군 — 범위만 보여 준다. 범위를 보던 적 법사를 한 번 더 누르면 공격 마법 범위, 또 누르면 이동 범위로(w-116)
+                if (_rangeOf == who && who.Team != 2)
+                {
+                    if (_magicTiles != null) { _magicTiles = null; return; }
+                    var magic = MagicTiles(who);
+                    if (magic.Count > 0) { _magicTiles = magic; PlaySfx(Sound.UiBank, Sound.Cursor); return; }
+                }
                 Select(who);
                 _actor = null;
                 _rangeOf = who;
+                _magicTiles = null;
                 return;
             }
         }
@@ -562,6 +606,7 @@ internal sealed partial class GameWindow
         bool confirm = vk is Win32.VK_RETURN or Win32.VK_SPACE;
         bool cancel = vk == Win32.VK_ESCAPE;
         var action = _keyMap.ActionFor(vk);
+        if (_bs == BattleState.Banner && (confirm || cancel)) { _bannerLeft = 0; return true; }   // 알림 글은 Enter · Space · Esc 로 바로 다음(곡우 버전처럼, w-115)
         if (_bs == BattleState.Over)
         {
             if (confirm || cancel) OpenOverMenu();
@@ -736,6 +781,7 @@ internal sealed partial class GameWindow
                 _pendingSpell = -1;
                 _pendingItem = -1;
                 ReturnSharedBorrow();   // 남의 소모품을 고르고 물렸으면 임자에게
+                ReturnPoolBorrow();     // 공통 가방에서 꺼낸 것은 공통 가방으로
                 _teleportWho = null;
                 _teleportByItem = false;
                 BackTo(_targetFrom);
@@ -788,7 +834,7 @@ internal sealed partial class GameWindow
         // 걸은 뒤에도 마법을 연다 — 원작 메뉴(sub_18D8C)가 움직인 뒤 마법을 막는지는 아직 안 봤다(짐작)
         if (!u.Sealed && CastableSpells(u).Count > 0)
             _menu.Add(("마법", () => OpenSpellMenu(u, stage), default));
-        if (u.Bag.Count > 0 || SharedItems(u).Count > 0) _menu.Add(("물건", () => { _itemFrom = stage; OpenItemCross(u); }, default));
+        if (u.Bag.Count > 0 || SharedItems(u).Count > 0 || SharedItems(u, ItemMode.Equip).Count > 0) _menu.Add(("물건", () => { _itemFrom = stage; OpenItemCross(u); }, default));
         _menu.Add(("대기", () =>
         {
             if ((u.X, u.Y) == _origin) { _battle.Rest(u); u.Facing = Dir.Down; PlaySfx(Sound.UiBank, Sound.Rest); }   // 안 걸었으면 쉬어 회복 — 쉬는 사람은 앞을 본다
@@ -1734,6 +1780,8 @@ internal sealed partial class GameWindow
             foreach (var t in _freeAttack) FillTile(t, AttackColor);
             return;
         }
+        // 적 법사의 공격 마법 범위(한 번 더 누름, w-116) — 보라
+        if (_magicTiles != null && _rangeOf != null && _actor == null) { foreach (var t in _magicTiles) FillTile(t, MagicRangeColor); return; }
         // 처음 고르면 원작처럼 갈 수 있는 칸만 밝게(공격 범위는 대상 고를 때만)
         if (_reach != null && (_actor ?? _rangeOf) is { } who) foreach (var t in _scene.Stops(_reach, who)) FillTile(t, ReachLight);
         if (_bs != BattleState.Target) return;
@@ -1741,6 +1789,8 @@ internal sealed partial class GameWindow
         foreach (var t in _attackTiles) FillTile(t, target);
         foreach (var t in AimArea()) FillTile(t, AimColor);
     }
+
+    private const uint MagicRangeColor = 0x80B040E0;
 
     /// <summary>겨눈 칸에 걸면 실제로 맞는 칸 — 진하게 칠한다(제보: 어디까지 맞는지 알 수 없었다).</summary>
     private const uint AimColor = 0xB0FFC030;

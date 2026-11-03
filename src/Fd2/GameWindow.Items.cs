@@ -103,6 +103,13 @@ internal sealed partial class GameWindow
     {
         var list = new List<(Unit, int)>();
         if (!_settings.SharedBag || _tables == null || !InBattle) return list;
+        // 공통 가방(w-114) — 물건마다 한 줄: 「사용」엔 쓸 수 있는 것, 「장비」엔 이 사람이 입을 수 있는 무기 · 옷
+        RefreshPoolUnit();
+        for (int k = 0; k < _poolUnit.Bag.Count; k++)
+        {
+            var pit = _tables.Items[_poolUnit.Bag[k].Item];
+            if (mode == ItemMode.Use ? UsableItem(pit) : pit.Kind < 32 && CanEquip(u, pit)) list.Add((_poolUnit, k));
+        }
         foreach (var o in _scene.Units.Where(o => o != u && o.Team == 2 && o.Hp > 0).OrderBy(o => o.Slot))
             for (int k = 0; k < o.Bag.Count; k++)
             {
@@ -189,6 +196,13 @@ internal sealed partial class GameWindow
             {
                 if (!SharedRowEnabled(u, r)) return;
                 var item = r.Owner.Bag[r.Slot].Item;
+                if (r.Owner == _poolUnit)   // 공통 가방에서 하나
+                {
+                    int at = TakeFromPool(u, item);
+                    if (mode == ItemMode.Equip) { _poolBorrow = null; Equip(u, at); OpenItemPick(u, mode); }   // 벗은 것은 고르는 중으로 돌아가면 공통 가방에
+                    else BeginItemTarget(u, at, _itemFrom);
+                    return;
+                }
                 r.Owner.Bag.RemoveAt(r.Slot);
                 u.Bag.Add((item, false));
                 _battle.Recompute(r.Owner);
@@ -392,7 +406,8 @@ internal sealed partial class GameWindow
             string eff = id < 128 && it.Kind < 32 && it.Atk > 0 ? $"+AP {it.Atk:000}" : id >= 128 && it.Kind < 32 && it.Def > 0 ? $"+DP {it.Def:000}"
                        : it.Use is 5 or 13 ? $"+HP {it.UseValue:000}" : it.Use == 11 ? $"+MP {it.UseValue:000}" : "";
             if (eff.Length > 0) { var e = T(eff, on ? 0xFFC8F0B0 : 0xFF607060); DrawText(e, Math.Max(x0 + W * 2 / 5, ix + nm.W + 8), ry + (lineH - 4 - e.H) / 2); }   // 이름이 길면(세로 화면) 그 뒤에
-            var who = NameImage(Battle.NameLine(owner), Math.Max(1, g * 3 / 4), 0xFF9098B8) ?? T(CharacterNames.Of(owner.Icon).Split('-')[0], 0xFF9098B8);
+            var who = owner == _poolUnit ? T($"× {Pool.Count(x => x == id)}", 0xFF9098B8)   // 공통 가방은 개수
+                      : NameImage(Battle.NameLine(owner), Math.Max(1, g * 3 / 4), 0xFF9098B8) ?? T(CharacterNames.Of(owner.Icon).Split('-')[0], 0xFF9098B8);
             DrawText(who, x0 + W - who.W - 24, ry + (lineH - 4 - who.H) / 2);
             _menu[i] = (_menu[i].Label, _menu[i].Do, rect);
         }

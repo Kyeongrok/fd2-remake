@@ -80,8 +80,7 @@ internal sealed partial class GameWindow
                 _settings.Save();
                 break;
             case MenuSharedBag:
-                _settings.SharedBag = !_settings.SharedBag;
-                _settings.Save();
+                ToggleSharedBag();   // 켜면 동료 가방의 물건을 모으고, 끄면 나눠 넣는다(w-114)
                 break;
             case MenuShowUnitInfo:
                 _settings.ShowUnitInfo = !_settings.ShowUnitInfo;

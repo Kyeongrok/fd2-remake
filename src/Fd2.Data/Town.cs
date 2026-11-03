@@ -77,6 +77,22 @@ public sealed class Town(Campaign campaign, Battle battle)
         return TownResult.Ok;
     }
 
+    /// <summary>값 없이 가방에 넣는다(공통 가방에서 꺼내 입기) — 장비면 같은 자리 것을 벗긴다.</summary>
+    public TownResult Put(int member, int item, bool equip)
+    {
+        var r = campaign.Party[member];
+        if (equip && !CanTake(r, item)) return TownResult.CantEquip;
+        var u = ToUnit(r);
+        if (u.Bag.Count >= 8) return TownResult.BagFull;
+        bool on = equip && T.Items[item].Kind < 32;
+        if (on)
+            for (int k = 0; k < u.Bag.Count; k++)
+                if (u.Bag[k].Equipped && u.Bag[k].Item < 128 == item < 128) u.Bag[k] = (u.Bag[k].Item, false);
+        u.Bag.Add((item, on));
+        Store(member, u);
+        return TownResult.Ok;
+    }
+
     /// <summary>판다(sub_28CBD) — 장비 중인 것도 팔린다. 값 × 3 ÷ 4 를 받고 가방에서 뺀다(sub_1B8E7, 뒤는 당긴다).</summary>
     public TownResult Sell(int member, int slot)
     {

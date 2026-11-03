@@ -78,6 +78,7 @@ internal sealed partial class GameWindow
         {
             lost.Party.Clear();
             lost.Party.AddRange(_partyAtStart.Select(r => (byte[])r.Clone()));
+            if (_poolAtStart != null) { lost.Shared.Clear(); lost.Shared.AddRange(_poolAtStart); }
         }
         if (outcome != 2 || _campaign is not { } c) return;
         c.AfterVictory(_scene.Units, addNew: !UseEvents);
@@ -243,6 +244,7 @@ internal sealed partial class GameWindow
         var bySlot = _scene.Units.Where(u => u.Slot >= 0).ToDictionary(u => u.Slot);
         for (int i = 0; i < _scene.SlotCount; i++) b.Units.Add(bySlot.TryGetValue(i, out var u) ? HeroRecord.From(u) : null);
         b.Chests.UnionWith(_battle.OpenedChests);
+        b.Shared.AddRange(Pool);   // 공통 가방(세이브 옆 파일)
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -273,7 +275,9 @@ internal sealed partial class GameWindow
         _continueOpen = false;
         _campaign = new Campaign { NextScene = b.Scene, Gold = b.Gold };
         _campaign.Party.AddRange(b.Party);
-        _partyAtStart = b.Party.Select(r => (byte[])r.Clone()).ToList();
+        _campaign.Shared.AddRange(b.Shared);
+        SweepRecords();   // 옛 기록이면 동료 가방의 소모품을 공통 가방으로
+        _partyAtStart = _campaign.Party.Select(r => (byte[])r.Clone()).ToList();
         _screen = Screen.Game;
         LoadScene(b.Scene, new List<byte[]>());
         var units = b.Units.Select((r, i) => (r, i))
@@ -299,6 +303,8 @@ internal sealed partial class GameWindow
         _cursor = (b.CursorX, b.CursorY);
         _centerCursor = true;
         _bs = BattleState.Select;
+        SweepUnits();
+        _poolAtStart = Pool.ToList();
         PlayBegin("load");   // 플레이 통계 — 불러온 판(w-93)
     }
 
@@ -365,7 +371,12 @@ internal sealed partial class GameWindow
     }
 
     /// <summary>싸움 중 기록을 이어하기 목록에 넣는 꼴 — <see cref="Campaign.Battle"/> 이 있으면 그 싸움부터.</summary>
-    private static Campaign BattleCampaign(BattleRecord b) => new() { NextScene = b.Scene, Gold = b.Gold, Battle = b };
+    private static Campaign BattleCampaign(BattleRecord b)
+    {
+        var c = new Campaign { NextScene = b.Scene, Gold = b.Gold, Battle = b };
+        c.Shared.AddRange(b.Shared);
+        return c;
+    }
 
     private void ContinueFrom(Campaign c)
     {

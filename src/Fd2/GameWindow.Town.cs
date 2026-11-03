@@ -68,6 +68,7 @@ internal sealed partial class GameWindow
 
     private void TownBanner(string text, Action after, int name = -1)
     {
+        SweepRecords();   // 사거나 벗은 물건을 공통 가방으로(w-114) — 알림 뒤 목록은 새로 읽는다
         _menuGlyphs.Clear(); _menuIcons.Clear();
         ShowBanner(text, after, 1.0);
         _bannerName = name;
@@ -82,6 +83,7 @@ internal sealed partial class GameWindow
     {
         if (_campaign is not { } c || _tables?.ShopFor(c.NextScene) is not { } shop) { OpenOverMenu(); return; }
         c.DropEarlyJoiners();
+        SweepRecords();
         _town = new Town(c, _battle);
         _townGreeting = -1;   // 건물에 새로 들어가면 들어오는 말부터
         SetMusic(MusicTown);
@@ -206,18 +208,12 @@ internal sealed partial class GameWindow
         if (c.Gold < price) { PlaySfx(Sound.UiBank, 7); TownBanner("돈이 모자랍니다", Back); return; }
         var takers = t.Takers(item);
         if (takers.Count == 0) { PlaySfx(Sound.UiBank, 7); TownBanner("현재 대원 중 장비 가능자 없음", Back); return; }
-        // 공통 가방이면 소모품은 받을 사람을 묻지 않는다(사용자 요청) — 쓰러지지 않은 사람 가운데 가방이 가장 빈 사람 가방에, 같으면 앞사람
-        if (_settings.SharedBag && _tables!.Items[item].Kind >= 32)
-        {
-            var room = takers.Where(i => !Town.Down(c.Party[i]) && Town.Bag(c.Party[i]).Count < 8).ToList();
-            if (room.Count == 0) { PlaySfx(Sound.UiBank, 7); TownBanner("가방이 모두 찼습니다", Back); return; }
-            int to = room.MinBy(i => Town.Bag(c.Party[i]).Count);
-            Bought(t.Buy(to, item, false), to, Back);
-            return;
-        }
+        // 공통 가방이면 소모품은 받을 사람을 묻지 않고 공통 가방으로(w-114, 칸 제한 없음)
+        if (_settings.SharedBag && _tables!.Items[item].Kind >= 32 && PoolItem(item)) { BuyToPool(item, price, Back); return; }
         BeginTownMenu(Back);
         _menuGlyphs[0] = 181 + item;
         _menu.Add(($"{price}원 — 누가 받나  ", () => { }, default));
+        if (_settings.SharedBag && PoolItem(item)) _menu.Add(("공통 가방에 넣는다", () => BuyToPool(item, price, Back), default));   // 장비는 나중에 아무나
         foreach (int i in takers.Skip(page * TownPage).Take(TownPage))
         {
             var r = c.Party[i];
@@ -252,6 +248,95 @@ internal sealed partial class GameWindow
         if (eva != 0) parts.Add($"회피{eva:+0;-0}");
         string head = now.Count == 0 ? "장비 없음 → " : "";
         return parts.Count == 0 ? "지금과 같음" : head + string.Join(" ", parts);
+    }
+
+    /// <summary>사서 공통 가방에(w-114).</summary>
+    private void BuyToPool(int item, int price, Action back)
+    {
+        if (_campaign is not { } c) return;
+        if (c.Gold < price) { PlaySfx(Sound.UiBank, 7); TownBanner("돈이 모자랍니다", back); return; }
+        c.Gold -= price;
+        Pool.Add(item);
+        _battle.Gold = c.Gold;
+        PlaySfx(Sound.UiBank, 5);
+        StartDeal();
+        TownBanner($" 공통 가방에 넣었습니다 — 돈 {c.Gold}원", back);
+    }
+
+    /// <summary>공통 가방 물건을 판다 — 물건마다 한 줄(개수).</summary>
+    private void OpenSellPool(ShopInfo shop, int page)
+    {
+        if (_town is not { } t) return;
+        void Back() => OpenSellWho(shop, page);
+        if (Pool.Count == 0) { PlaySfx(Sound.UiBank, 7); TownBanner(" 공통 가방이 비었습니다", Back); return; }
+        BeginTownMenu(Back);
+        _menu.Add((GoldLine("공통 가방 — 팔 물건"), () => { }, default));
+        foreach (int item in Pool.Distinct().ToList())
+        {
+            int id = item;
+            _menuIcons[_menu.Count] = ItemIcon(id);
+            _menuGlyphs[_menu.Count] = 181 + id;
+            _menu.Add(($"{t.SellPrice(id)}원	× {Pool.Count(x => x == id)}  {ItemEffect(id)}", () =>
+            {
+                if (_campaign is not { } c || !Pool.Remove(id)) return;
+                c.Gold += t.SellPrice(id);
+                _battle.Gold = c.Gold;
+                PlaySfx(Sound.UiBank, 5);
+                StartDeal();
+                TownBanner($" 팔았습니다 — 돈 {c.Gold}원", () => OpenSellPool(shop, page));
+            }, default));
+        }
+        _menu.Add(("돌아가기", Back, default));
+        EndTownMenu(1);
+    }
+
+    /// <summary>공통 가방 물건 보기 — 무기 · 옷은 골라서 입을 사람에게(w-114).</summary>
+    private void OpenPoolItems(int page)
+    {
+        if (_tables == null) return;
+        void Back() => OpenGiveFrom(page);
+        if (Pool.Count == 0) { PlaySfx(Sound.UiBank, 7); TownBanner(" 공통 가방이 비었습니다", Back); return; }
+        BeginTownMenu(Back);
+        _menu.Add((GoldLine($"공통 가방 — {Pool.Count}개"), () => { }, default));
+        foreach (int item in Pool.Distinct().ToList())
+        {
+            int id = item;
+            _menuIcons[_menu.Count] = ItemIcon(id);
+            _menuGlyphs[_menu.Count] = 181 + id;
+            bool gear = _tables.Items[id].Kind < 32;
+            _menu.Add(($"× {Pool.Count(x => x == id)}	{ItemEffect(id)}", () => { if (gear) OpenPoolWear(page, id, 0); }, default));
+        }
+        _menu.Add(("돌아가기", Back, default));
+        EndTownMenu(1);
+    }
+
+    /// <summary>공통 가방의 무기 · 옷을 입을 사람 고르기.</summary>
+    private void OpenPoolWear(int page, int item, int sub)
+    {
+        if (_town is not { } t || _campaign is not { } c) return;
+        void Back() => OpenPoolItems(page);
+        var takers = t.Takers(item);
+        if (takers.Count == 0) { PlaySfx(Sound.UiBank, 7); TownBanner("현재 대원 중 장비 가능자 없음", Back); return; }
+        BeginTownMenu(Back);
+        _menuGlyphs[0] = 181 + item;
+        _menu.Add(("누가 입나 — ", () => { }, default));
+        foreach (int i in takers.Skip(sub * TownPage).Take(TownPage))
+        {
+            var r = c.Party[i];
+            int who = i;
+            _menuGlyphs[_menu.Count] = HeroRecord.Id(r) + 1;
+            _menu.Add(($"Lv{Town.Level(r),-3} 가방 {Town.Bag(r).Count}/8	{GearDiff(r, item)}", () =>
+            {
+                if (!Pool.Contains(item)) return;
+                var res = t.Put(who, item, true);
+                if (res == TownResult.Ok) Pool.Remove(item);
+                PlaySfx(Sound.UiBank, res == TownResult.Ok ? 5 : 7);
+                TownBanner(res == TownResult.Ok ? " 장비했습니다" : res == TownResult.BagFull ? " 가방이 가득 찼습니다" : " 장비할 수 없습니다", Back, HeroRecord.Id(c.Party[who]) + 1);
+            }, default));
+        }
+        AddPager(takers.Count, sub, p => OpenPoolWear(page, item, p));
+        _menu.Add(("돌아가기", Back, default));
+        EndTownMenu(1);
     }
 
     /// <summary>산 장비를 바로 장비하나(원작 「장비합니까?」).</summary>
@@ -289,6 +374,7 @@ internal sealed partial class GameWindow
         BeginTownMenu(Back);
         (_shopTab, _tabShop) = (1, shop);
         _menu.Add((GoldLine("누구 물건을 파나"), () => { }, default));
+        if (_settings.SharedBag && Pool.Count > 0) _menu.Add(($"공통 가방  {Pool.Count}개", () => OpenSellPool(shop, page), default));
         foreach (int i in Enumerable.Range(0, c.Party.Count).Skip(page * TownPage).Take(TownPage))
         {
             var r = c.Party[i];
@@ -359,6 +445,7 @@ internal sealed partial class GameWindow
         if (_campaign is not { } c) return;
         BeginTownMenu(ViewBack);
         _menu.Add((GoldLine("누구의 장비 · 물건을 보나"), () => { }, default));
+        if (_settings.SharedBag && Pool.Count > 0) _menu.Add(($"공통 가방  {Pool.Count}개", () => OpenPoolItems(page), default));
         foreach (int i in Enumerable.Range(0, c.Party.Count).Skip(page * TownPage).Take(TownPage))
         {
             var r = c.Party[i];

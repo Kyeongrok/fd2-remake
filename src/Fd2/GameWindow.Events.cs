@@ -372,6 +372,7 @@ internal sealed partial class GameWindow
         {
             for (int i = int.Parse(m.Groups[1].Value); i <= int.Parse(m.Groups[2].Value); i++)
                 if (_scene.Units.FirstOrDefault(u => u.Alive && u.Team == 2 && u.Bag.Any(b => b.Item == i)) is { } owner) DropItem(owner, i);
+                else Pool.Remove(i);   // 공통 가방에 있으면 거기서(w-114)
             return;
         }
         // 물건 주기 — sub_1BB8C(arg0, i): 일으킨 사람 가방에
@@ -495,7 +496,7 @@ internal sealed partial class GameWindow
         }
         IEnumerable<int> Slots() { var (a, b) = Range(); return Enumerable.Range(a, Math.Max(0, b - a + 1)); }
         IEnumerable<Unit> Team2() => _scene.Units.Where(u => u.Alive && u.Side == Side.Player && !u.Ai);
-        bool HasItem(int i) => Team2().Any(u => u.Bag.Any(b => b.Item == i));
+        bool HasItem(int i) => Team2().Any(u => u.Bag.Any(b => b.Item == i)) || Pool.Contains(i);   // 공통 가방도(w-114)
         switch (name)
         {
             case "dead": return BySlot(Arg(args)) == null;

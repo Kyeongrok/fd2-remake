@@ -454,8 +454,7 @@ internal sealed partial class GameWindow
                 }, default));
                 _menu.Add(($"공통 가방  [{(_settings.SharedBag ? "켬" : "끔")}]", () =>
                 {
-                    _settings.SharedBag = !_settings.SharedBag;
-                    _settings.Save();
+                    ToggleSharedBag();
                     OpenTouchMenu(_menuIndex, 2);
                 }, default));
                 _menu.Add(($"NPC 아군 내가 움직이기  [{(_settings.ControlAllies ? "켬" : "끔")}]", () =>
@@ -499,6 +498,13 @@ internal sealed partial class GameWindow
                 {
                     int at = Array.IndexOf(SpellSpeeds, _settings.SpellSpeed);
                     _settings.SpellSpeed = SpellSpeeds[(at + 1) % SpellSpeeds.Length];   // 누를 때마다 다음 배율
+                    _settings.Save();
+                    OpenTouchMenu(_menuIndex, 2);
+                }, default));
+                _menu.Add(($"알림 글 속도  [{SpellSpeedName(_settings.NoticeSpeed)}]", () =>
+                {
+                    int at = Array.IndexOf(EnemySpeeds, _settings.NoticeSpeed);
+                    _settings.NoticeSpeed = EnemySpeeds[(at + 1) % EnemySpeeds.Length];
                     _settings.Save();
                     OpenTouchMenu(_menuIndex, 2);
                 }, default));

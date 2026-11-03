@@ -89,6 +89,9 @@ internal sealed class Settings
     /// <summary>우리 편이 걷는 속도 % — 100 이 원작(내가 움직일 때 · 행군, 사용자 요청 w-113).</summary>
     public int AllySpeed { get; set; } = 100;
 
+    /// <summary>가운데 알림 글(속도술 · 공격력 증가 결과, 상자 · 떨굼 …)이 지나가는 속도 % — 100 이 원작(제보 w-115).</summary>
+    public int NoticeSpeed { get; set; } = 100;
+
     /// <summary>폰 화면 방향 — 0 폰 설정 따름, 1 세로 고정, 2 가로 고정(제보).</summary>
     public int ScreenLock { get; set; }
 

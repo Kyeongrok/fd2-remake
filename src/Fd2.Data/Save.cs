@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Text.Json;
 
 namespace Fd2.Data;
 
@@ -22,6 +23,14 @@ public sealed class SaveFile
     /// <summary>풀린 자료 22987 바이트.</summary>
     public byte[] Data { get; }
 
+    /// <summary>
+    /// 공통 가방(리메이크 모드, w-114) — 원작 꼴은 크기가 정해져 있어 세이브 옆 파일(이름 + 「.공통가방.json」)에 둔다.
+    /// 「0」~「3」 마을 슬롯, 「battle」 싸움 중 기록. 원작 폴더 세이브처럼 옆 파일이 없으면 비어 있다.
+    /// </summary>
+    private Dictionary<string, List<int>> _shared = new();
+
+    private static string SharedPath(string path) => path + ".공통가방.json";
+
     private SaveFile(byte[] plain) => Data = plain;
 
     /// <summary>빈 세이브 — 원작처럼 0xFF 로 채운다(슬롯 4개 · 싸움 중 기록 모두 빔).</summary>
@@ -40,7 +49,14 @@ public sealed class SaveFile
             var raw = File.ReadAllBytes(path);
             if (raw.Length != Size) return New();
             Crypt(raw);
-            return new SaveFile(raw);
+            var f = new SaveFile(raw);
+            try
+            {
+                if (File.Exists(SharedPath(path)))
+                    f._shared = JsonSerializer.Deserialize<Dictionary<string, List<int>>>(File.ReadAllText(SharedPath(path))) ?? new();
+            }
+            catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException) { }
+            return f;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return New(); }
     }
@@ -55,6 +71,9 @@ public sealed class SaveFile
         string tmp = path + ".tmp";
         File.WriteAllBytes(tmp, raw);
         File.Move(tmp, path, overwrite: true);
+        var keep = _shared.Where(kv => kv.Value.Count > 0).ToDictionary(kv => kv.Key, kv => kv.Value);
+        if (keep.Count > 0) File.WriteAllText(SharedPath(path), JsonSerializer.Serialize(keep));
+        else if (File.Exists(SharedPath(path))) File.Delete(SharedPath(path));
     }
 
     /// <summary>XOR — 열쇠 165 에서 바이트마다 k = rol16(k − 28652, 3), b ^= k &amp; 0xFF. 걸기 = 풀기.</summary>
@@ -94,6 +113,7 @@ public sealed class SaveFile
         var c = new Campaign { NextScene = scene, Gold = BinaryPrimitives.ReadInt32LittleEndian(Data.AsSpan(at + 2562)) };
         for (int i = 0; i < n; i++) c.Party.Add(Data.AsSpan(at + HeroRecord.Size * i, HeroRecord.Size).ToArray());
         (c.TerrainWindow, c.Option3, c.Music, c.Sound) = (Data[at + 2566], Data[at + 2567], Data[at + 2568], Data[at + 2569]);
+        if (_shared.TryGetValue(k.ToString(), out var pool)) c.Shared.AddRange(pool);
         return c;
     }
 
@@ -107,6 +127,7 @@ public sealed class SaveFile
         BinaryPrimitives.WriteInt32LittleEndian(Data.AsSpan(at + 2562), c.Gold);
         (Data[at + 2566], Data[at + 2567], Data[at + 2568], Data[at + 2569]) = (c.TerrainWindow, c.Option3, c.Music, c.Sound);
         Array.Clear(Data, at + 2570, 30);
+        _shared[k.ToString()] = c.Shared.ToList();
     }
 
     // ── 싸움 중 기록 ────────────────────────────────────────────────────────
@@ -138,6 +159,7 @@ public sealed class SaveFile
         Data[BattlePartyCount] = (byte)Math.Min(b.Party.Count, Campaign.MaxParty);
         BinaryPrimitives.WriteInt32LittleEndian(Data.AsSpan(BattleGold), b.Gold);
         (Data[12497], Data[12498], Data[12499], Data[12500]) = (b.Option3, b.TerrainWindow, b.Music, b.Sound);
+        _shared["battle"] = b.Shared.ToList();
     }
 
     /// <summary>싸움 중 기록을 읽는다(sub_10010) — 없거나 검사합이 틀리면 null(원작은 글 436 「전황기록훼손됨」).</summary>
@@ -156,6 +178,7 @@ public sealed class SaveFile
         int n = Math.Min(BattleUnitMax, (int)Data[BattleUnitCount]);
         for (int i = 0; i < n; i++) b.Units.Add(Data.AsSpan(BattleUnits + HeroRecord.Size * i, HeroRecord.Size).ToArray());
         for (int k = 0; k < 32; k++) if (Data[BattleChests + k] == 1) b.Chests.Add(k);
+        if (_shared.TryGetValue("battle", out var pool)) b.Shared.AddRange(pool);
         return b;
     }
 }
@@ -175,6 +198,9 @@ public sealed class BattleRecord
 
     public readonly HashSet<int> Chests = new();
     public byte TerrainWindow = 1, Option3 = 1, Music = 1, Sound = 1;
+
+    /// <summary>공통 가방(물건 번호들) — 세이브 옆 파일에.</summary>
+    public readonly List<int> Shared = new();
 }
 
 /// <summary>장 사이에 이어지는 것 — 동료 표(80바이트 × 32), 돈, 다음에 할 장면, 설정 네 바이트.</summary>
@@ -191,6 +217,9 @@ public sealed class Campaign
     public readonly List<byte[]> Party = new();
     public int Gold;
     public int NextScene;
+
+    /// <summary>공통 가방(리메이크 모드, w-114) — 소모품 물건 번호들, 칸 제한 없음.</summary>
+    public readonly List<int> Shared = new();
     public byte TerrainWindow = 1, Option3 = 1, Music = 1, Sound = 1;
 
     /// <summary>싸움 중 기록에서 왔으면 그 기록(이어하기가 장면 처음이 아니라 그 차례부터 연다).</summary>
