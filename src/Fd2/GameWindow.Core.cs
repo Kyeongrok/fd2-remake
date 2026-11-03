@@ -499,7 +499,7 @@ internal sealed partial class GameWindow
             if (u.Moving)
             {
                 int before = (int)(u.Step * 6);
-                u.Step = Math.Min(1, u.Step + dt * StepsPerSecond * (_bs == BattleState.Enemy ? EnemyRate : 1));
+                u.Step = Math.Min(1, u.Step + dt * StepsPerSecond * (_bs == BattleState.Enemy ? EnemyRate : _bs is BattleState.Moving or BattleState.March ? AllyRate : 1));
                 if ((lead ??= u) == u)
                     for (int k = before; k < (int)(u.Step * 6); k++) StepSound(u);
                 if (u.Moving) continue;

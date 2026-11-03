@@ -502,6 +502,13 @@ internal sealed partial class GameWindow
                     _settings.Save();
                     OpenTouchMenu(_menuIndex, 2);
                 }, default));
+                _menu.Add(($"아군 이동 속도  [{SpellSpeedName(_settings.AllySpeed)}]", () =>
+                {
+                    int at = Array.IndexOf(EnemySpeeds, _settings.AllySpeed);
+                    _settings.AllySpeed = EnemySpeeds[(at + 1) % EnemySpeeds.Length];
+                    _settings.Save();
+                    OpenTouchMenu(_menuIndex, 2);
+                }, default));
                 _menu.Add(($"적 이동 속도  [{SpellSpeedName(_settings.EnemySpeed)}]", () =>
                 {
                     int at = Array.IndexOf(EnemySpeeds, _settings.EnemySpeed);

@@ -16,8 +16,16 @@ internal sealed partial class GameWindow
     private (int X, int Y, int W, int H) _partyBox;
     private readonly List<(int X, int Y, int W, int H)> _partyRects = new();
 
-    /// <summary>끌어 넘기는 중이면 누른 y 와 그때 맨 위 줄.</summary>
-    private (int Y, int Top)? _partyDrag;
+    /// <summary>끌어 넘기는 중이면 누른 y 와 그때 넘긴 점 수.</summary>
+    private (int Y, double Scroll)? _partyDrag;
+
+    /// <summary>목록을 점 단위로 넘긴 만큼 · 손을 뗀 뒤 미끄러지는 빠르기(점/초) — 예전에는 카드 한 장씩 뚝뚝 넘어가 폰에서 불편했다(w-111).</summary>
+    private double _partyScroll, _partyVel, _partyLastT;
+    private (int Y, double T) _partyLastMove;
+    private int _partyMaxScroll;
+
+    /// <summary>그린 카드마다 몇 번째 사람인가(_partyRects 와 같은 차례).</summary>
+    private readonly List<int> _partyRectIdx = new();
 
     /// <summary>파티 창을 연다 — 보일 사람이 없으면 안 연다.</summary>
     private void OpenParty()
@@ -26,6 +34,7 @@ internal sealed partial class GameWindow
         if (_party.Count == 0) return;
         PlaySfx(Sound.UiBank, Sound.Menu);
         (_partyOpen, _partyIndex, _partyTop, _partyDrag) = (true, 0, 0, null);
+        (_partyScroll, _partyVel) = (0, 0);
     }
 
     private void CloseParty() => (_partyOpen, _partyDrag, _partyDetail) = (false, null, false);
@@ -136,6 +145,11 @@ internal sealed partial class GameWindow
         _partyIndex = Math.Clamp(i, 0, Math.Max(0, _party.Count - 1));
         if (_partyIndex < _partyTop) _partyTop = _partyIndex;
         if (_partyIndex >= _partyTop + _partyVisible) _partyTop = _partyIndex - _partyVisible + 1;
+        // 고른 카드가 다 보이게 점 단위로 맞춘다
+        _partyVel = 0;
+        double top = _partyIndex * _partyCardH, bottom = top + _partyCardH, view = _partyVisible * (double)_partyCardH;
+        if (top < _partyScroll) _partyScroll = top;
+        else if (bottom > _partyScroll + view) _partyScroll = bottom - view;
     }
 
     private static bool InRect((int X, int Y, int W, int H) r, int x, int y) => r.W > 0 && x >= r.X && y >= r.Y && x < r.X + r.W && y < r.Y + r.H;
@@ -147,9 +161,12 @@ internal sealed partial class GameWindow
         if (_partyDetail) { _partyDetail = false; _partyTap = -1; return true; }   // 자세히 창은 누르면 목록으로
         if (!InRect(_partyBox, x, y)) { CloseParty(); return true; }
         int hit = _partyRects.FindIndex(r => InRect(r, x, y));
-        if (hit >= 0) _partyIndex = _partyTop + hit;
-        _partyTap = hit >= 0 ? _partyTop + hit : -1;
-        _partyDrag = (y, _partyTop);
+        bool flinging = Math.Abs(_partyVel) > 60;   // 미끄러지는 중에 누르면 멈추기만
+        _partyVel = 0;
+        if (hit >= 0 && !flinging) _partyIndex = _partyRectIdx[hit];
+        _partyTap = hit >= 0 && !flinging ? _partyRectIdx[hit] : -1;
+        _partyDrag = (y, _partyScroll);
+        _partyLastMove = (y, _time);
         return true;
     }
 
@@ -158,8 +175,11 @@ internal sealed partial class GameWindow
         if (!_partyOpen) return false;
         if (_partyDrag is { } d)
         {
-            if (Math.Abs(y - d.Y) > _partyCardH / 4) _partyTap = -1;   // 끌면 누르기가 아니다
-            _partyTop = Math.Clamp(d.Top - (y - d.Y) / Math.Max(1, _partyCardH), 0, Math.Max(0, _party.Count - _partyVisible));
+            if (Math.Abs(y - d.Y) > DragSlop * 2) _partyTap = -1;   // 끌면 누르기가 아니다
+            _partyScroll = Math.Clamp(d.Scroll - (y - d.Y), 0, _partyMaxScroll);   // 손가락을 따라 점 단위로
+            double dt = _time - _partyLastMove.T;
+            if (dt > 0.001) _partyVel = _partyVel * 0.3 + 0.7 * -(y - _partyLastMove.Y) / dt;
+            _partyLastMove = (y, _time);
         }
         return true;
     }
@@ -167,6 +187,7 @@ internal sealed partial class GameWindow
     private bool PartyRelease()
     {
         if (!_partyOpen) return false;
+        if (_partyTap >= 0 || _time - _partyLastMove.T > 0.08) _partyVel = 0;   // 누르기였거나 멈췄다 뗐으면 미끄러지지 않는다
         _partyDrag = null;
         if (_partyTap >= 0) { if (PartyGearOn) PartyGear(_partyTap); else PartyDetail(_partyTap); }
         _partyTap = -1;
@@ -251,8 +272,22 @@ internal sealed partial class GameWindow
         int w = Math.Min(_clientW - 20, Math.Max(Math.Max(title.W, hint.W) + 40, faceCol + textW + 56));
         int headH = title.H + hint.H + 22;
         _partyVisible = Math.Max(1, Math.Min(_party.Count, (_clientH - 20 - headH - 10) / _partyCardH));
-        _partyTop = Math.Clamp(_partyTop, 0, Math.Max(0, _party.Count - _partyVisible));
-        int h = headH + _partyVisible * _partyCardH + 10;
+        // 목록 높이 — 다 들어가면 딱 맞게, 넘치면 화면 높이까지(카드가 반쯤 걸쳐도 된다)
+        int listH = Math.Min(_party.Count * _partyCardH, Math.Max(_partyCardH, _clientH - 20 - headH - 10));
+        _partyMaxScroll = Math.Max(0, _party.Count * _partyCardH - listH);
+        // 손을 뗀 뒤 미끄러짐 — 점점 느려진다
+        double now = _time, dts = Math.Clamp(now - _partyLastT, 0, 0.1);
+        _partyLastT = now;
+        if (_partyDrag == null && Math.Abs(_partyVel) > 20)
+        {
+            _partyScroll += _partyVel * dts;
+            _partyVel *= Math.Exp(-3.5 * dts);
+            if (_partyScroll <= 0 || _partyScroll >= _partyMaxScroll) _partyVel = 0;
+        }
+        else if (_partyDrag == null) _partyVel = 0;
+        _partyScroll = Math.Clamp(_partyScroll, 0, _partyMaxScroll);
+        _partyTop = Math.Clamp((int)(_partyScroll / _partyCardH), 0, Math.Max(0, _party.Count - 1));
+        int h = headH + listH + 10;
         int x = (_clientW - w) / 2, y = Math.Max(10, (_clientH - h) / 2);
         _partyBox = (x, y, w, h);
 
@@ -260,16 +295,21 @@ internal sealed partial class GameWindow
         FillRect(x, y, w, h, 0xF0181828);
         DrawText(title, x + 20, y + 8);
         DrawText(hint, x + 20, y + 12 + title.H);
-        if (_partyTop > 0) { var up = Text.Render("▲", small, 0xFFFFE070); DrawText(up, x + w - up.W - 16, y + 8); }
-        if (_partyTop + _partyVisible < _party.Count) { var dn = Text.Render("▼", small, 0xFFFFE070); DrawText(dn, x + w - dn.W - 16, y + h - dn.H - 4); }
+        if (_partyScroll > 0) { var up = Text.Render("▲", small, 0xFFFFE070); DrawText(up, x + w - up.W - 16, y + 8); }
+        bool more = _partyScroll < _partyMaxScroll;
 
-        var clip = (x, y, x + w, y + h);
-        int cy = y + headH;
-        for (int i = _partyTop; i < Math.Min(_party.Count, _partyTop + _partyVisible); i++)
+        int listY = y + headH;
+        var clip = (x, listY, x + w, listY + listH);
+        (_clipTop, _clipBottom) = (listY, listY + listH);   // 반쯤 걸친 카드는 목록 칸 안에만
+        _partyRectIdx.Clear();
+        int first = (int)(_partyScroll / _partyCardH);
+        int cy = listY - (int)_partyScroll + first * _partyCardH;
+        for (int i = first; i < _party.Count && cy < listY + listH; i++)
         {
             var u = _party[i];
             var c = cards[i];
-            _partyRects.Add((x + 8, cy, w - 16, _partyCardH - 4));
+            int ry0 = Math.Max(cy, listY), ry1 = Math.Min(cy + _partyCardH - 4, listY + listH);
+            if (ry1 > ry0) { _partyRects.Add((x + 8, ry0, w - 16, ry1 - ry0)); _partyRectIdx.Add(i); }
             FillRect(x + 8, cy, w - 16, _partyCardH - 4, i == _partyIndex ? 0xC0405090 : 0x60283048);
             if (faceOf[i] is { } f)
                 BlitFrame(f.Px, f.W, f.H, x + 16 + (faceCol - f.W * faceS) / 2, cy + (_partyCardH - 4 - f.H * faceS) / 2, faceS, false, 0, 0, clip);
@@ -308,6 +348,8 @@ internal sealed partial class GameWindow
             }
             cy += _partyCardH;
         }
+        (_clipTop, _clipBottom) = (0, int.MaxValue);
+        if (more) { var dn = Text.Render("▼", small, 0xFFFFE070); DrawText(dn, x + w - dn.W - 16, y + h - dn.H - 4); }
     }
 
     /// <summary>

@@ -114,12 +114,31 @@ internal sealed partial class GameWindow
         return list;
     }
 
+    /// <summary>남의 소모품을 쓰려고 잠시 옮겨 온 것 — 대상 고르기를 물리면 임자 가방 그 자리로 되돌린다.</summary>
+    private (Unit Owner, int Slot, Unit User)? _sharedBorrow;
+
+    /// <summary>빌려 온 소모품을 임자에게 되돌린다(물렸을 때).</summary>
+    private void ReturnSharedBorrow()
+    {
+        if (_sharedBorrow is not { } b) return;
+        _sharedBorrow = null;
+        if (b.User.Bag.Count == 0) return;
+        var last = b.User.Bag[^1];
+        b.User.Bag.RemoveAt(b.User.Bag.Count - 1);
+        b.Owner.Bag.Insert(Math.Min(b.Slot, b.Owner.Bag.Count), last);
+        _battle.Recompute(b.Owner);
+        _battle.Recompute(b.User);
+    }
+
     /// <summary>「사용」 목록의 공통 가방 줄들(제 가방 줄 뒤에 그 차례로).</summary>
     private List<(Unit Owner, int Slot)> _sharedRows = new();
 
-    /// <summary>공통 가방 줄을 지금 쓸 수 있나 — 쓰는 사람 가방에 자리가 있고 범위 안에 대상이 있어야.</summary>
+    /// <summary>
+    /// 공통 가방 줄을 지금 쓸 수 있나 — 범위 안에 대상이 있어야. 장비는 입을 사람 가방에 자리가 있어야 하지만,
+    /// 소모품은 쓰면 없어지므로 가방이 가득(8)이어도 쓴다(예전에는 가득 차면 남의 소모품이 모두 어두웠다, 제보 w-112).
+    /// </summary>
     private bool SharedRowEnabled(Unit u, (Unit Owner, int Slot) row) =>
-        _tables != null && u.Bag.Count < 8 && row.Slot < row.Owner.Bag.Count
+        _tables != null && (u.Bag.Count < 8 || _itemMode == ItemMode.Use) && row.Slot < row.Owner.Bag.Count
         && (_itemMode == ItemMode.Equip || ItemCenters(u, _tables.Items[row.Owner.Bag[row.Slot].Item]).Count > 0);
 
     private void OpenItemPick(Unit u, ItemMode mode)
@@ -175,7 +194,7 @@ internal sealed partial class GameWindow
                 _battle.Recompute(r.Owner);
                 _battle.Recompute(u);
                 if (mode == ItemMode.Equip) { Equip(u, u.Bag.Count - 1); OpenItemPick(u, mode); }
-                else BeginItemTarget(u, u.Bag.Count - 1, _itemFrom);
+                else { _sharedBorrow = (r.Owner, r.Slot, u); BeginItemTarget(u, u.Bag.Count - 1, _itemFrom); }
             }, default));
         }
         int first = Enumerable.Range(0, u.Bag.Count).Where(i => ItemRowEnabled(u, i, mode)).DefaultIfEmpty(-1).First();

@@ -86,6 +86,9 @@ internal sealed class Settings
     /// <summary>적 · 컴퓨터 아군 차례의 이동 속도 % — 100 이 원작(제보 — 뒤쪽 장은 적이 많아 기다림이 길다).</summary>
     public int EnemySpeed { get; set; } = 100;
 
+    /// <summary>우리 편이 걷는 속도 % — 100 이 원작(내가 움직일 때 · 행군, 사용자 요청 w-113).</summary>
+    public int AllySpeed { get; set; } = 100;
+
     /// <summary>폰 화면 방향 — 0 폰 설정 따름, 1 세로 고정, 2 가로 고정(제보).</summary>
     public int ScreenLock { get; set; }
 

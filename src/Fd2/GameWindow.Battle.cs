@@ -475,6 +475,7 @@ internal sealed partial class GameWindow
                 {
                     int slot = _pendingItem;
                     _pendingItem = -1;
+                    _sharedBorrow = null;   // 빌려 온 소모품은 쓰면 없어진다
                     Commit(a);
                     ClearSelection();
                     UsePlayerItem(a, slot, (tx, ty), AfterPlayerAction);
@@ -734,6 +735,7 @@ internal sealed partial class GameWindow
             case BattleState.Target:
                 _pendingSpell = -1;
                 _pendingItem = -1;
+                ReturnSharedBorrow();   // 남의 소모품을 고르고 물렸으면 임자에게
                 _teleportWho = null;
                 _teleportByItem = false;
                 BackTo(_targetFrom);
@@ -1615,6 +1617,9 @@ internal sealed partial class GameWindow
 
     /// <summary>컴퓨터 차례 빠르기 — 걷기와 사람 사이 기다림에 곱한다(1 이 원작).</summary>
     private double EnemyRate => Math.Clamp(_settings.EnemySpeed, 100, 400) / 100.0;
+
+    /// <summary>우리 편 걷기 빠르기 — 내가 움직일 때 · 행군(1 이 원작).</summary>
+    private double AllyRate => Math.Clamp(_settings.AllySpeed, 100, 400) / 100.0;
 
     private void EnemyTick(double dt)
     {
@@ -2881,9 +2886,12 @@ internal sealed partial class GameWindow
 
     // ── 사람 층에 칠하기(알파 섞기) ────────────────────────────────────────────
 
+    /// <summary>칠하기 · 글을 이 줄 사이에만(파티 목록처럼 반쯤 걸친 카드) — 보통은 화면 전체.</summary>
+    private int _clipTop, _clipBottom = int.MaxValue;
+
     private void FillRect(int x, int y, int w, int h, uint argb)
     {
-        int x0 = Math.Max(0, x), y0 = Math.Max(0, y), x1 = Math.Min(_fbW, x + w), y1 = Math.Min(_fbH, y + h);
+        int x0 = Math.Max(0, x), y0 = Math.Max(_clipTop, Math.Max(0, y)), x1 = Math.Min(_fbW, x + w), y1 = Math.Min(Math.Min(_fbH, _clipBottom), y + h);
         for (int yy = y0; yy < y1; yy++)
             for (int xx = x0; xx < x1; xx++) Over(ref _fb[yy * _fbW + xx], argb);
     }
@@ -2893,7 +2901,7 @@ internal sealed partial class GameWindow
         for (int yy = 0; yy < img.H; yy++)
         {
             int sy = y + yy;
-            if ((uint)sy >= (uint)_fbH) continue;
+            if ((uint)sy >= (uint)_fbH || sy < _clipTop || sy >= _clipBottom) continue;
             for (int xx = 0; xx < img.W; xx++)
             {
                 int sx = x + xx;
