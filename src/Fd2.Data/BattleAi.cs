@@ -296,20 +296,31 @@ public sealed class BattleAi(Battle battle)
     }
 
     /// <summary>
-    /// 목표 칸 쪽으로(sub_14B78) — 상대를 피한 길을 내고, 안 되면 피하지 않는 길(28걸음)을 낸 뒤
-    /// 이번 이동력으로 멈출 수 있는 칸 가운데 그 길 위에서 가장 먼 칸까지 간다. 한 칸도 못 나아가면 null.
+    /// 목표 칸 쪽으로(sub_14B78) — 원작 그대로:
+    /// ① 상대를 피해 목표까지 갈 길이 없으면, 피하지 않는 길(28걸음)을 따라가며 실제로 걸어 닿을 수 있는 마지막 칸을 목표로 바꾼다.
+    /// ② 이번 이동력으로 멈출 수 있는 칸(sub_14B16 — 위 줄부터 왼쪽부터) 가운데 목표와 맨해튼 거리가 가장 짧은 칸,
+    ///    같으면 |dx − dy| 가 작은(대각선 쪽) 칸, 그래도 같으면 먼저 센 칸으로 간다.
+    /// 예전에는 길 위에서 가장 먼 칸으로 가서, 목표 칸에 먼저 간 사람이 있으면 뒷사람이 길 위에 줄지어 섰다(곡우 버전과 다르다는 제보 w-108).
+    /// 제자리가 가장 가까우면 null.
     /// </summary>
     private AiPlan? WalkToward(Unit u, (int X, int Y) target)
     {
         if ((u.X, u.Y) == target) return null;
-        var path = FindPath(u, c => c == target, block: true, 99) ?? FindPath(u, c => c == target, block: false, MaxSteps);
-        if (path == null) return null;
+        var goal = target;
+        if (FindPath(u, c => c == target, block: true, 99) == null
+            && FindPath(u, c => c == target, block: false, MaxSteps) is { } loose)
+            foreach (var c in loose)
+                if (FindPath(u, x => x == c, block: true, 99) != null) goal = c;
         var reach = battle.Reach(u);
-        var stops = Scene.Stops(reach, u).ToHashSet();
-        for (int i = path.Count - 1; i >= 0; i--)
-            if (stops.Contains(path[i]) && path[i] != (u.X, u.Y))
-                return new AiPlan { Path = Scene.PathTo(reach, path[i]), Goal = target };
-        return null;
+        (int X, int Y)? best = null;
+        int bestD = 255, bestB = 255;
+        foreach (var c in Scene.Stops(reach, u).OrderBy(c => c.Y).ThenBy(c => c.X))
+        {
+            int dx = Math.Abs(c.X - goal.X), dy = Math.Abs(c.Y - goal.Y), d = dx + dy, b = Math.Abs(dx - dy);
+            if (d < bestD || d == bestD && b < bestB) (best, bestD, bestB) = (c, d, b);
+        }
+        if (best is not { } stop || stop == (u.X, u.Y)) return null;
+        return new AiPlan { Path = Scene.PathTo(reach, stop), Goal = target };
     }
 
     /// <summary>행군(sub_16F55 → sub_14B78) — 우리 편이 목표 칸 쪽으로 이번 이동력만큼 걸을 길. 못 나아가면 빈 목록.</summary>

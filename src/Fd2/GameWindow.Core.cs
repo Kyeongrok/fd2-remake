@@ -743,11 +743,11 @@ internal sealed partial class GameWindow
         {
             int sy = (yy - _offY) * 192 / Math.Max(1, _boardH * _zoom);
             int dx = b.Wave ? _wave[(step + sy) % 16] : 0;
-            int row = Math.Min(b.H - 1, sy + oy) * b.W, drow = yy * _fbW;
+            int row = Math.Clamp(sy + oy, 0, b.H - 1) * b.W, drow = yy * _fbW;   // 판이 지도보다 크면(배율 100%) 카메라가 음수 — 밑그림 밖을 읽어 튕겼다(w-109)
             for (int xx = Math.Max(0, _offX); xx < x1; xx++)
             {
                 int sx = (xx - _offX) * 312 / Math.Max(1, _boardW * _zoom) + dx + ox;
-                _fb[drow + xx] = b.Px[row + Math.Min(b.W - 1, sx)] | 0xFF000000;
+                _fb[drow + xx] = b.Px[row + Math.Clamp(sx, 0, b.W - 1)] | 0xFF000000;
             }
         }
     }

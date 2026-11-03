@@ -1052,7 +1052,7 @@ internal sealed partial class GameWindow
         if (!_enemyPhase) _menu.Add(("행군", () => AskSys(TxtAskMarch, () => SysBanner(TxtMarch, "전원 행군합니다.", StartMarch)), default));
         _menu.Add(("설정", () => { if (TouchUi) OpenTouchMenu(0, 2); else { _menu.Clear(); _bs = BattleState.Select; OpenVolume(); } }, default));   // 폰은 설정 쪽(소리 · 단축키)
         _menu.Add(("턴 끝", () => AskSys(TxtAskEnd, () => SysBanner(TxtEnd, "예. 이번 차례 끝냅니다.", EndPlayerTurn)), default));
-        _menuIndex = _menu.Count - 1;
+        _menuIndex = 0;   // 원작 sub_16F55 처럼 처음 고른 것은 위 「기록」(저장 · 불러오기로 곧바로, 카페 제보 w-110)
         _bs = BattleState.Menu;
     }
 

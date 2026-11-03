@@ -6,6 +6,32 @@ namespace Fd2.Check;
 /// <summary>컴퓨터의 생각 · 마법 — 분석-AI 4~8절 · 분석-마법 3~5절 식이 그대로 나오는지.</summary>
 internal static class AiCheck
 {
+    /// <summary>행군(sub_14B78) — 1장 첫 장면, 사울 왼쪽 9칸으로 모두. 멈출 칸 중 목표와 맨해튼 거리가 가장 짧은 칸(w-108).</summary>
+    public static void March(string dir, GameTables t)
+    {
+        var pal = GameFolder.Palette(dir);
+        var icons = new IconBank(Path.Combine(dir, "FDICON.B24"), pal);
+        foreach (var (dx, dy) in new[] { (9, 0), (0, -9), (5, -5), (-6, 0) })
+        {
+            var scene = new Scene(dir, 0, pal, icons);
+            var b = new Battle(scene, t, seed: 77);
+            foreach (var u in scene.Units) b.Setup(u);
+            var ai = new BattleAi(b);
+            var saul = scene.Units.First(u => u.Slot == 0);
+            var goal = (saul.X + dx, saul.Y + dy);
+            Console.WriteLine($"\n[행군 — 1장 사울 ({saul.X},{saul.Y}) 에서 {goal} 로]");
+            foreach (var u in scene.Units.Where(u => u.Team == 2 && u.Hp > 0).OrderBy(u => u.Slot))
+            {
+                var from = (u.X, u.Y);
+                var path = ai.MarchPath(u, goal);
+                if (path.Count > 0) (u.X, u.Y) = path[^1];
+                Console.WriteLine($"  {CharacterNames.Of(u.Icon).Split('-')[0]}  {from} → ({u.X},{u.Y})  거리 {Math.Abs(u.X - goal.Item1) + Math.Abs(u.Y - goal.Item2)}");
+            }
+            var mine = scene.Units.Where(u => u.Team == 2 && u.Hp > 0).ToList();
+            Same("행군 뒤 두 사람이 한 칸에 서지 않음", mine.Select(u => (u.X, u.Y)).Distinct().Count(), mine.Count);
+        }
+    }
+
     public static void Run(string dir, GameTables t)
     {
         var pal = GameFolder.Palette(dir);

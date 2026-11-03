@@ -28,6 +28,7 @@ internal static class Program
         Scripts(t);
         Rules.Run(dir, t);
         AiCheck.Run(dir, t);
+        AiCheck.March(dir, t);
 
         Console.WriteLine();
         Console.WriteLine(_fail == 0 ? $"모두 맞음 ({_pass})" : $"틀림 {_fail} / {_pass + _fail}");
