@@ -1,9 +1,9 @@
-name = "fd2-bugs"
+name = "fd2-remake"
 main = "src/index.js"
 compatibility_date = "2026-10-01"
 
-# 용의기사2 리메이크 버그 리포트 — `wrangler d1 create fd2-bugs` 가 찍어 준 database_id.
+# 용의기사2 리메이크 버그 리포트 — `wrangler d1 create fd2-remake` 가 찍어 준 database_id.
 [[d1_databases]]
 binding = "DB"
-database_name = "fd2-bugs"
-database_id = "547b23af-673c-4b9e-850c-685d8a0e25ea"
+database_name = "fd2-remake"
+database_id = "9640048b-c93d-4108-9ce1-d38fb4722c08"

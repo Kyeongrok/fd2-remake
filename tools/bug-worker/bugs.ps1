@@ -10,7 +10,7 @@
   ./bugs.ps1 -Url http://127.0.0.1:8833 -KeyFile .\test-key.txt   # 로컬 wrangler dev 에 대고
 
   관리자 열쇠는 -KeyFile(기본 ~\.fd2-bug-admin-key) 의 첫 줄 — worker 비밀 BUG_ADMIN_KEY 와 같은 값.
-  받는 곳 주소는 -Url, 없으면 https://fd2-bugs.oceanfog1.workers.dev.
+  받는 곳 주소는 -Url, 없으면 https://fd2-remake.oceanfog1.workers.dev.
 #>
 param(
   [int]$Mark = 0,
@@ -30,7 +30,7 @@ $ErrorActionPreference = 'Stop'
 if (-not (Test-Path $KeyFile)) { throw "관리자 열쇠 파일이 없습니다: $KeyFile (worker 비밀 BUG_ADMIN_KEY 와 같은 값을 한 줄로)" }
 $key = (Get-Content -Raw $KeyFile).Trim()
 
-if (-not $Url) { $Url = 'https://fd2-bugs.oceanfog1.workers.dev' }
+if (-not $Url) { $Url = 'https://fd2-remake.oceanfog1.workers.dev' }
 $Url = $Url.TrimEnd('/')
 $headers = @{ Authorization = "Bearer $key" }
 

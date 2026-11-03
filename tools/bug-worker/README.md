@@ -3,7 +3,7 @@
 게임 메뉴의 「버그 리포트」(PC 햄버거 메뉴 · 폰 「메뉴」)가 글 쓰는 창을 띄우고, 쓴 글을 여기로 보낸다(`src/Fd2/GameWindow.BugReport.cs`).
 못 보내면 `%LOCALAPPDATA%\Fd2\bug-queue`(폰은 앱 데이터)에 두었다가 다음에 켤 때 다시 보낸다. 창세기전3(`the-war-of-genesis-clicker/tools/stats-worker`)의 `/v1/bug` 와 같은 꼴이다.
 
-- 주소: `https://fd2-bugs.oceanfog1.workers.dev`
+- 주소: `https://fd2-remake.oceanfog1.workers.dev`
 - `POST /v1/bug` — `{ v: 1, install, version, text, context }`. 글 8000자 · context 32KB · 몸 48KB 까지. 설치 하나가 한 시간에 10 건(모두 합쳐 300 건)을 넘으면 429. `{ ok, id }`.
 - `GET /v1/bugs?since=<id>&status=new&limit=100` — 관리자만(`Authorization: Bearer <BUG_ADMIN_KEY>`). `status=all` 이면 모두.
 - `POST /v1/bugs/<id>/status` `{ status, note }` — 관리자만. status 는 new · seen · fixed · wontfix · dup …
@@ -30,23 +30,23 @@
 못 보내면 `%LOCALAPPDATA%\Fd2\play-queue` 에 두고, 하던 판은 우리 차례마다 `play-open.json` 에 적어 두어 앱이 꺼지면 다음에 켤 때 그만둔 판으로 보낸다.
 시간은 전투 화면에서 손을 댄 지 3분 안인 동안만 센다.
 
-- 대시보드: `https://fd2-bugs.oceanfog1.workers.dev/dashboard` — PC · 폰 판 수 · 턴 · 시간 · 설치 수, 날마다 판 수, 장별(PC · 폰 나눠), 버전별. 누구나 볼 수 있다(모아 센 수만).
+- 대시보드: `https://fd2-remake.oceanfog1.workers.dev/dashboard` — PC · 폰 판 수 · 턴 · 시간 · 설치 수, 날마다 판 수, 장별(PC · 폰 나눠), 버전별. 누구나 볼 수 있다(모아 센 수만).
 - `POST /v1/play` — `{ v: 1, install, plays: [{ scene, chapter, how, result, startTurn, endTurn, seconds, started, ended, version, platform, mobileView }] }`. 한 번에 50 판, 설치마다 한 시간에 300 판.
 - `GET /v1/stats?days=30` — 대시보드가 읽는 집계(days 를 안 주면 처음부터).
 - 표: `plays`(`migrations/0002_plays.sql`).
 
 ```
-npx wrangler d1 execute fd2-bugs --remote --command "SELECT chapter, platform, COUNT(*) plays, SUM(turns) turns, SUM(seconds)/60 minutes FROM plays GROUP BY chapter, platform"
+npx wrangler d1 execute fd2-remake --remote --command "SELECT chapter, platform, COUNT(*) plays, SUM(turns) turns, SUM(seconds)/60 minutes FROM plays GROUP BY chapter, platform"
 ```
 
 ## 올리기(처음 한 번 — 이미 했음)
 
 ```
 cd tools/bug-worker
-npx wrangler d1 create fd2-bugs                                   # 찍힌 database_id 를 wrangler.toml 에
-npx wrangler d1 execute fd2-bugs --remote --file=schema.sql
+npx wrangler d1 create fd2-remake                                   # 찍힌 database_id 를 wrangler.toml 에
+npx wrangler d1 execute fd2-remake --remote --file=schema.sql
 npx wrangler secret put BUG_ADMIN_KEY                             # ~\.fd2-bug-admin-key 와 같은 값
 npx wrangler deploy
 ```
 
-고친 뒤에는 `npx wrangler deploy` 만 다시. 플레이 통계 표는 한 번 `npx wrangler d1 execute fd2-bugs --remote --file=migrations/0002_plays.sql`.
+고친 뒤에는 `npx wrangler deploy` 만 다시. 플레이 통계 표는 한 번 `npx wrangler d1 execute fd2-remake --remote --file=migrations/0002_plays.sql`.

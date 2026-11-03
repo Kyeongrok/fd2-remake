@@ -1,5 +1,5 @@
 -- 플레이 통계(w-93) — 전투 한 판에 한 줄. 다시 돌려도 괜찮다(IF NOT EXISTS).
---   npx wrangler d1 execute fd2-bugs --remote --file=migrations/0002_plays.sql
+--   npx wrangler d1 execute fd2-remake --remote --file=migrations/0002_plays.sql
 CREATE TABLE IF NOT EXISTS plays (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   received_at TEXT NOT NULL,              -- 받은 때(ISO, UTC)

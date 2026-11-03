@@ -15,7 +15,7 @@ namespace Fd2;
 /// </remarks>
 internal sealed partial class GameWindow
 {
-    private const string BugUrlDefault = "https://fd2-bugs.oceanfog1.workers.dev";
+    private const string BugUrlDefault = "https://fd2-remake.oceanfog1.workers.dev";
     private const int BugMaxText = 8000;
 
     private static string BugUrl

@@ -1,5 +1,5 @@
 -- 버그 리포트 표(게임 메뉴의 「버그 리포트」가 보낸 글). 다시 돌려도 괜찮다(IF NOT EXISTS).
---   npx wrangler d1 execute fd2-bugs --remote --file=schema.sql
+--   npx wrangler d1 execute fd2-remake --remote --file=schema.sql
 CREATE TABLE IF NOT EXISTS bug_reports (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   created_at TEXT NOT NULL,              -- 받은 때(ISO, UTC)

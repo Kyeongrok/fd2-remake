@@ -158,7 +158,7 @@ export default {
         if (request.method === 'POST' && m) return await setBugStatus(Number(m[1]), request, env);
         return json({ error: 'not found' }, 404);
       }
-      if (request.method === 'GET' && pathname === '/') return json({ ok: true, service: 'fd2-bugs' });
+      if (request.method === 'GET' && pathname === '/') return json({ ok: true, service: 'fd2-remake' });
       return json({ error: 'not found' }, 404);
     } catch (e) {
       return json({ error: 'server error' }, 500);
