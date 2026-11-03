@@ -20,6 +20,9 @@ internal sealed class Settings
     /// <summary>설치할 때 만든 무작위 번호 — 버그 리포트에 붙는다(누구인지는 모른다).</summary>
     public string InstallId { get; set; } = "";
 
+    /// <summary>익명 플레이 통계(전투마다 장 · 승패 · 턴 수 · 논 시간) 보내기 — 기본 켬, 설정에서 끈다(w-93).</summary>
+    public bool SendStats { get; set; } = true;
+
     /// <summary>모드 > 고해상도 — 기본 켬. 처음에는 이 PC 에서 차례로 만들어 다 된 것부터 갈아 끼운다.</summary>
     public bool HiRes { get; set; } = true;
 

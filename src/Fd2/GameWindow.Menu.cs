@@ -16,7 +16,7 @@ internal sealed partial class GameWindow
 
     private const int MenuScenePrev = 1001, MenuSceneNext = 1002, MenuSceneBase = 1100;
     private const int MenuResBase = 1300, MenuZoomBase = 1400, MenuFullscreen = 1500, MenuResetView = 1501, MenuKeys = 1502, MenuVolume = 1503;
-    private const int MenuEditor = 1600, MenuExit = 1601, MenuHiRes = 1700, MenuShowRange = 1701, MenuMusic = 1702, MenuSound = 1703, MenuShowHelp = 1704, MenuShowGoals = 1705, MenuControlAllies = 1706, MenuMobileView = 1707, MenuBugReport = 1708, MenuSettingsDialog = 1709, MenuModeDialog = 1710, MenuShowUnitInfo = 1711, MenuSharedBag = 1712, MenuSkipEnemyFights = 1713, MenuMiniChests = 1714, MenuCloud = 1715;
+    private const int MenuEditor = 1600, MenuExit = 1601, MenuHiRes = 1700, MenuShowRange = 1701, MenuMusic = 1702, MenuSound = 1703, MenuShowHelp = 1704, MenuShowGoals = 1705, MenuControlAllies = 1706, MenuMobileView = 1707, MenuBugReport = 1708, MenuSettingsDialog = 1709, MenuModeDialog = 1710, MenuShowUnitInfo = 1711, MenuSharedBag = 1712, MenuSkipEnemyFights = 1713, MenuMiniChests = 1714, MenuCloud = 1715, MenuSendStats = 1716;
     private const int MenuBattle = 1003, MenuBattleStop = 1004, MenuVersions = 1005;
 
     private static readonly (int W, int H)[] ResChoices =
@@ -72,6 +72,11 @@ internal sealed partial class GameWindow
                 break;
             case MenuSkipEnemyFights:
                 _settings.SkipEnemyFights = !_settings.SkipEnemyFights;
+                _settings.Save();
+                break;
+            case MenuSendStats:
+                _settings.SendStats = !_settings.SendStats;
+                if (!_settings.SendStats) _play = null;
                 _settings.Save();
                 break;
             case MenuSharedBag:

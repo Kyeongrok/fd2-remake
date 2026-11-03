@@ -160,6 +160,7 @@ internal sealed partial class GameWindow
     internal void Background(bool away)
     {
         _away = away;
+        if (away) PlaySaveOpen();   // 뒤로 간 앱은 꺼질 수 있다 — 하던 판을 적어 둔다(플레이 통계)
         MusicJob(away ? "음악 쉬기" : "음악 잇기", () =>
         {
             try

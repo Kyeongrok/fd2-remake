@@ -24,6 +24,21 @@
 
 관리자 열쇠는 `~\.fd2-bug-admin-key` 의 첫 줄(worker 비밀 `BUG_ADMIN_KEY` 와 같은 값). 저장소에는 넣지 않는다.
 
+## 플레이 통계 · 대시보드
+
+게임이 전투 한 판(새로 시작 · 전황 불러오기부터 이김 · 짐 · 그만둠까지)마다 보낸다(`src/Fd2/GameWindow.PlayStats.cs`, 설정 「익명 플레이 통계 보내기」 — 기본 켬).
+못 보내면 `%LOCALAPPDATA%\Fd2\play-queue` 에 두고, 하던 판은 우리 차례마다 `play-open.json` 에 적어 두어 앱이 꺼지면 다음에 켤 때 그만둔 판으로 보낸다.
+시간은 전투 화면에서 손을 댄 지 3분 안인 동안만 센다.
+
+- 대시보드: `https://fd2-bugs.oceanfog1.workers.dev/dashboard` — PC · 폰 판 수 · 턴 · 시간 · 설치 수, 날마다 판 수, 장별(PC · 폰 나눠), 버전별. 누구나 볼 수 있다(모아 센 수만).
+- `POST /v1/play` — `{ v: 1, install, plays: [{ scene, chapter, how, result, startTurn, endTurn, seconds, started, ended, version, platform, mobileView }] }`. 한 번에 50 판, 설치마다 한 시간에 300 판.
+- `GET /v1/stats?days=30` — 대시보드가 읽는 집계(days 를 안 주면 처음부터).
+- 표: `plays`(`migrations/0002_plays.sql`).
+
+```
+npx wrangler d1 execute fd2-bugs --remote --command "SELECT chapter, platform, COUNT(*) plays, SUM(turns) turns, SUM(seconds)/60 minutes FROM plays GROUP BY chapter, platform"
+```
+
 ## 올리기(처음 한 번 — 이미 했음)
 
 ```
@@ -34,4 +49,4 @@ npx wrangler secret put BUG_ADMIN_KEY                             # ~\.fd2-bug-a
 npx wrangler deploy
 ```
 
-고친 뒤에는 `npx wrangler deploy` 만 다시.
+고친 뒤에는 `npx wrangler deploy` 만 다시. 플레이 통계 표는 한 번 `npx wrangler d1 execute fd2-bugs --remote --file=migrations/0002_plays.sql`.

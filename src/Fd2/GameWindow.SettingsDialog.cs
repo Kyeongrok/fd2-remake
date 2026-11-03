@@ -155,6 +155,8 @@ internal sealed partial class GameWindow
             f.Controls.Add(Slider("효과음", _settings.SoundVolume, v => { _settings.SoundVolume = v; ApplyVolume(); _settings.Save(); }));
             f.Controls.Add(Heading("조작"));
             f.Controls.Add(ActionButton("단축키 · 패드 설정...", () => OnMenuCommand(MenuKeys)));
+            f.Controls.Add(Heading("통계"));
+            f.Controls.Add(Toggle("익명 플레이 통계 보내기(전투마다 장 · 승패 · 턴 수 · 시간)", _settings.SendStats, MenuSendStats));
         }));
 
     /// <summary>햄버거 「모드」 — 고해상도 · 범위 보기 · 배경음악 · 효과음 켜고 끄기.</summary>

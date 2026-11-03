@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>용의기사2 플레이 통계</title>
+<style>
+  :root {
+    --page: #f9f9f7; --surface: #fcfcfb; --line: #e4e3df; --ink: #0b0b0b; --ink2: #52514e; --ink3: #8a8984;
+    --pc: #2a78d6; --phone: #eb6834; --accent: #28458a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --page: #0d0d0d; --surface: #1a1a19; --line: #2e2e2c; --ink: #f0efec; --ink2: #c3c2b7; --ink3: #8a8984;
+            --pc: #3987e5; --phone: #d95926; --accent: #8090c0; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.5 system-ui, "Malgun Gothic", sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+  h1 { margin: 0; font-size: 22px; }
+  h1 small { display: block; font-size: 13px; font-weight: 400; color: var(--ink2); }
+  h2 { font-size: 15px; margin: 0 0 12px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: var(--surface); color: var(--ink2); padding: 8px 14px; font: inherit; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .tile b { display: block; font-size: 26px; font-variant-numeric: tabular-nums; }
+  .tile span { color: var(--ink2); font-size: 13px; }
+  .tile i { display: block; font-style: normal; color: var(--ink3); font-size: 12px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .legend { display: flex; gap: 16px; color: var(--ink2); font-size: 13px; margin-bottom: 8px; }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; background: var(--c); }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--ink2); font-weight: 600; font-size: 12px; }
+  th.grp { text-align: center; border-bottom: 2px solid var(--c); }
+  td.bar { width: 22%; min-width: 120px; }
+  .barbox { display: flex; gap: 2px; height: 10px; }
+  .barbox div { border-radius: 0 3px 3px 0; min-width: 0; }
+  svg text { fill: var(--ink3); font-size: 11px; }
+  .tip { position: fixed; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 8px;
+         padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.15); display: none; z-index: 9; }
+  .muted { color: var(--ink3); }
+  .empty { color: var(--ink2); padding: 24px 0; text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>용의기사2 리메이크 — 플레이 통계<small>전투 한 판(새로 시작 · 불러오기부터 이김 · 짐 · 그만둠까지)마다 게임이 보낸 익명 기록</small></h1>
+    <div class="seg" role="group" aria-label="기간">
+      <button data-days="7">7일</button><button data-days="30">30일</button><button data-days="0" aria-pressed="true">전체</button>
+    </div>
+  </header>
+  <div class="tiles" id="tiles"></div>
+  <section class="card">
+    <h2>날마다 판 수</h2>
+    <div class="legend"><span style="--c:var(--pc)">PC</span><span style="--c:var(--phone)">폰</span></div>
+    <div id="daily"></div>
+  </section>
+  <section class="card">
+    <h2>전투(장)별</h2>
+    <div class="scroll"><table id="chapters"></table></div>
+  </section>
+  <section class="card">
+    <h2>버전별</h2>
+    <div class="scroll"><table id="versions"></table></div>
+  </section>
+  <p class="muted">시간은 전투 화면에서 손을 댄 지 3분 안인 동안만 셉니다. 「폰」은 안드로이드 앱, 「PC」는 윈도우 게임입니다.</p>
+</main>
+<div class="tip" id="tip"></div>
+<script>
+const P = { windows: 'PC', android: '폰' }, PLATS = ['windows', 'android'];
+const num = (n) => (n ?? 0).toLocaleString('ko-KR');
+const mins = (s) => Math.round((s ?? 0) / 60);
+const hm = (s) => { const m = mins(s); return m >= 60 ? `${Math.floor(m / 60)}시간 ${m % 60}분` : `${m}분`; };
+const chap = (c) => (c === 0 ? '프롤로그' : `${c}장`);
+const esc = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+const tip = document.getElementById('tip');
+function showTip(e, html) { tip.innerHTML = html; tip.style.display = 'block';
+  const x = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8), y = Math.max(8, e.clientY - tip.offsetHeight - 10);
+  tip.style.left = x + 'px'; tip.style.top = y + 'px'; }
+const hideTip = () => { tip.style.display = 'none'; };
+
+function tiles(d) {
+  const t = d.total || {}, by = Object.fromEntries((d.platform || []).map((r) => [r.platform, r]));
+  const split = (k, f = num) => PLATS.map((p) => `${P[p]} ${f(by[p]?.[k])}`).join(' · ');
+  const winRate = t.plays ? Math.round((t.wins / t.plays) * 100) : 0;
+  document.getElementById('tiles').innerHTML = [
+    ['판', num(t.plays), split('plays')],
+    ['턴', num(t.turns), split('turns')],
+    ['논 시간', hm(t.seconds), split('seconds', hm)],
+    ['설치', num(t.installs), split('installs')],
+    ['이긴 판', `${winRate}%`, `이김 ${num(t.wins)} · 짐 ${num(t.loses)} · 그만둠 ${num(t.quits)}`],
+  ].map(([k, v, s]) => `<div class="tile"><span>${k}</span><b>${v}</b><i>${s}</i></div>`).join('');
+}
+
+function daily(d) {
+  const box = document.getElementById('daily'), rows = d.daily || [];
+  if (!rows.length) { box.innerHTML = '<div class="empty">아직 받은 판이 없습니다</div>'; return; }
+  const days = [...new Set(rows.map((r) => r.day))].sort();
+  const at = Object.fromEntries(rows.map((r) => [r.day + r.platform, r]));
+  const max = Math.max(1, ...days.map((day) => PLATS.reduce((s, p) => s + (at[day + p]?.plays || 0), 0)));
+  const W = Math.max(box.clientWidth, 320), H = 180, L = 32, B = 22, bw = Math.max(2, Math.min(28, (W - L) / days.length - 2));
+  const step = (W - L) / days.length, y = (v) => H - B - (v / max) * (H - B - 8);
+  let s = `<svg width="${W}" height="${H}" role="img" aria-label="날마다 판 수">`;
+  for (const g of [0, 0.5, 1]) { const v = Math.round(max * g), yy = y(v);
+    s += `<line x1="${L}" x2="${W}" y1="${yy}" y2="${yy}" stroke="var(--line)"/><text x="${L - 6}" y="${yy + 4}" text-anchor="end">${v}</text>`; }
+  days.forEach((day, i) => {
+    const x = L + i * step + (step - bw) / 2; let base = 0;
+    PLATS.forEach((p, k) => { const v = at[day + p]?.plays || 0; if (!v) return;
+      const top = y(base + v), bot = y(base) - (base ? 2 : 0), r = k === PLATS.length - 1 || !at[day + PLATS[k + 1]]?.plays ? 3 : 0;
+      s += `<path d="M${x},${bot}V${top + r}q0,-${r} ${r},-${r}h${bw - 2 * r}q${r},0 ${r},${r}V${bot}Z" fill="var(--${p === 'windows' ? 'pc' : 'phone'})"/>`;
+      base += v; });
+    s += `<rect class="hit" data-day="${day}" x="${L + i * step}" y="0" width="${step}" height="${H - B}" fill="transparent"/>`;
+    if (days.length <= 14 || i % Math.ceil(days.length / 10) === 0) s += `<text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle">${day.slice(5)}</text>`;
+  });
+  box.innerHTML = s + '</svg>';
+  box.querySelectorAll('.hit').forEach((h) => {
+    h.addEventListener('mousemove', (e) => { const day = h.dataset.day;
+      showTip(e, `<b>${day}</b><br>` + PLATS.map((p) => { const r = at[day + p];
+        return `${P[p]}: ${num(r?.plays)}판 · ${hm(r?.seconds)} · 설치 ${num(r?.installs)}`; }).join('<br>')); });
+    h.addEventListener('mouseleave', hideTip);
+  });
+}
+
+function chapters(d) {
+  const rows = d.chapter || [], table = document.getElementById('chapters');
+  if (!rows.length) { table.innerHTML = '<tr><td class="empty">아직 받은 판이 없습니다</td></tr>'; return; }
+  const by = {};
+  for (const r of rows) (by[r.chapter] ||= {})[r.platform] = r;
+  const maxS = Math.max(1, ...Object.values(by).map((g) => PLATS.reduce((s, p) => s + (g[p]?.seconds || 0), 0)));
+  const head = `<tr><th rowspan="2">전투</th>` + PLATS.map((p) => `<th colspan="4" class="grp" style="--c:var(--${p === 'windows' ? 'pc' : 'phone'})">${P[p]}</th>`).join('')
+    + `<th rowspan="2">시간(분)</th></tr><tr>` + PLATS.map(() => '<th>판</th><th>이김</th><th>턴</th><th>분</th>').join('') + '</tr>';
+  const body = Object.keys(by).map(Number).sort((a, b) => a - b).map((c) => {
+    const g = by[c];
+    const cells = PLATS.map((p) => { const r = g[p] || {}; return `<td>${num(r.plays)}</td><td>${num(r.wins)}</td><td>${num(r.turns)}</td><td>${num(mins(r.seconds))}</td>`; }).join('');
+    const bars = PLATS.map((p) => `<div style="width:${((g[p]?.seconds || 0) / maxS) * 100}%;background:var(--${p === 'windows' ? 'pc' : 'phone'})"></div>`).join('');
+    return `<tr><td>${chap(c)}</td>${cells}<td class="bar"><div class="barbox">${bars}</div></td></tr>`;
+  }).join('');
+  table.innerHTML = head + body;
+}
+
+function versions(d) {
+  const rows = d.version || [], table = document.getElementById('versions');
+  if (!rows.length) { table.innerHTML = '<tr><td class="empty">아직 받은 판이 없습니다</td></tr>'; return; }
+  table.innerHTML = '<tr><th>버전</th><th>판</th><th>이김</th><th>짐</th><th>그만둠</th><th>턴</th><th>시간</th><th>설치</th></tr>'
+    + rows.map((r) => `<tr><td>${esc(r.version || '?')}</td><td>${num(r.plays)}</td><td>${num(r.wins)}</td><td>${num(r.loses)}</td><td>${num(r.quits)}</td><td>${num(r.turns)}</td><td>${hm(r.seconds)}</td><td>${num(r.installs)}</td></tr>`).join('');
+}
+
+let last = null;
+async function load(days) {
+  document.querySelectorAll('.seg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.days === String(days))));
+  try {
+    const r = await fetch(`/v1/stats?days=${days}`);
+    last = await r.json();
+    tiles(last); daily(last); chapters(last); versions(last);
+  } catch (e) {
+    document.getElementById('tiles').innerHTML = '<div class="empty">통계를 못 읽었습니다</div>';
+  }
+}
+document.querySelectorAll('.seg button').forEach((b) => b.addEventListener('click', () => load(Number(b.dataset.days))));
+addEventListener('resize', () => last && daily(last));
+load(0);
+</script>
+</body>
+</html>

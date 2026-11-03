@@ -73,6 +73,7 @@ internal sealed partial class GameWindow
     private void OnOutcome(int outcome)
     {
         _outcome = outcome;
+        PlayEnd(outcome == 2 ? "win" : "lose");
         if (outcome == 1 && _campaign is { } lost && _partyAtStart != null)
         {
             lost.Party.Clear();
@@ -217,6 +218,7 @@ internal sealed partial class GameWindow
     private void AutoSaveBattle()
     {
         if (!InBattle || _outcome != 0) return;
+        PlaySaveOpen();
         SaveBattleRecord(BattleSlotPath(true, Turn % AutoSlots), quiet: true);
     }
 
@@ -264,6 +266,7 @@ internal sealed partial class GameWindow
     /// <summary>싸움 중 기록을 불러온다(sub_10010) — 그 장면을 띄우고 사람들을 기록대로, 우리 차례부터.</summary>
     private void LoadBattleRecord(BattleRecord b)
     {
+        PlayEnd("quit");   // 하던 판이 있으면 장면을 바꾸기 전에 닫는다
         _continueOpen = false;
         _campaign = new Campaign { NextScene = b.Scene, Gold = b.Gold };
         _campaign.Party.AddRange(b.Party);
@@ -293,6 +296,7 @@ internal sealed partial class GameWindow
         _cursor = (b.CursorX, b.CursorY);
         _centerCursor = true;
         _bs = BattleState.Select;
+        PlayBegin("load");   // 플레이 통계 — 불러온 판(w-93)
     }
 
     /// <summary>이어 할 수 있는 슬롯 — 리메이크 기록 넷, 그다음 원작 폴더의 기록 넷(있는 것만).</summary>

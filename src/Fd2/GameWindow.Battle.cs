@@ -121,6 +121,7 @@ internal sealed partial class GameWindow
 
     private void StartBattle(int scene)
     {
+        PlayEnd("quit");   // 하던 판이 있으면 장면을 바꾸기 전에 닫는다
         LoadScene(scene, BattleParty);
         if (!UseEvents || _tables == null) _scene.SpreadPlayers();   // 원작은 겹쳐 세우고 시작 대본으로 편다 — 대본을 못 돌리면 여기서 벌린다
         _partyAtStart = _campaign?.Party.Select(r => (byte[])r.Clone()).ToList();   // 지면 되돌릴 동료 표(싸움 중 합류가 겹치지 않게)
@@ -135,11 +136,13 @@ internal sealed partial class GameWindow
         _bs = BattleState.Talk;
         if (Controlled.OrderBy(u => u.Slot).FirstOrDefault() is { } lead) { _cursor = (lead.X, lead.Y); _centerCursor = true; }
         _forcedOutcome = 0;
+        PlayBegin("new");   // 플레이 통계 — 한 판(w-93)
         RunStart(NextTurn);   // 장면 시작 함수(대본이 없으면 대사 묶음 0)
     }
 
     private void StopBattle()
     {
+        PlayEnd("quit");
         _bs = BattleState.None;
         SetMusic(-1);
         LoadScene(_scene.Index);

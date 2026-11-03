@@ -32,14 +32,16 @@ internal sealed partial class GameWindow
 
     private static string BugQueue => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fd2", "bug-queue");
 
-    /// <summary>게임 버전(「0.14.6-dev+01ac97e」) — 빌드 때 넣은 버전에서 긴 커밋 꼬리를 뗀다.</summary>
+    /// <summary>게임 버전(「0.14.6-dev+01ac97e」) — 빌드 때 넣은 버전에서 커밋 꼬리를 7 자리로 줄인다(받는 곳에서 어느 커밋인지 보려고).</summary>
     private static string AppVersion
     {
         get
         {
             string v = typeof(GameWindow).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "?";
-            int dot = v.IndexOf('+') is int plus and >= 0 ? v.IndexOf('.', plus) : -1;
-            return dot > 0 ? v[..dot] : v;
+            int plus = v.IndexOf('+');
+            if (plus < 0) return v;
+            string tail = v[(plus + 1)..].Split('.')[0];
+            return tail.Length == 0 ? v[..plus] : $"{v[..plus]}+{tail[..Math.Min(7, tail.Length)]}";
         }
     }
 
@@ -209,7 +211,7 @@ internal sealed partial class GameWindow
 
     /// <summary>창 아래에 보일 요약 — 무엇이 함께 가는지.</summary>
     private static string BugSummary(Dictionary<string, object?> c) =>
-        $"함께 보내는 것: 버전 {c["game"]} · {c["platform"]} · 화면 {c["frame"]} · 자료 {c["data"]}" +
+        $"함께 보내는 것: {TitleVersion} ·{c["platform"]} · 화면 {c["frame"]} · 자료 {c["data"]}" +
         (c["chapter"] is int ch ? $" · {ch}장" : "") + (c["turn"] is int t ? $" {t}턴" : "") + " · 음악 상태" + (c.ContainsKey("musicLog") ? " · 음악 기록" : "") + (c.ContainsKey("crashLog") ? " · 오류 기록 끝" : "") +
         "\n이름 · 계정 · IP 는 보내지 않습니다.";
 

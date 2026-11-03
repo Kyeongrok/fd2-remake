@@ -73,6 +73,7 @@ internal sealed partial class GameWindow
         _ani = _scroll = null;
         _film = null;
         _filmFrame = _oHeld = _img74 = _img75 = _img100 = null;
+        PlayEnd("quit");
         if (InBattle) { _bs = BattleState.None; ClearSelection(); SetMusic(-1); }   // 전투 곡을 끈다
         _screen = Screen.Title;
         _titleIndex = 0;

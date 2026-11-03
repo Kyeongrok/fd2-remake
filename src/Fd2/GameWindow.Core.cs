@@ -122,6 +122,7 @@ internal sealed partial class GameWindow
     {
         _running = true;
         UploadBugs();   // 지난번에 못 보낸 버그 리포트가 있으면 뒤에서 보낸다
+        PlayStartup();   // 지난번 끝내지 못한 판 · 못 보낸 플레이 통계
         LoadScene(0);
         if (PickVersionFirst && !Offscreen && OpenVersions(StartOpening, min: 2)) return;
         StartOpening();
@@ -162,6 +163,7 @@ internal sealed partial class GameWindow
 
     internal void PointerDown(int x, int y)
     {
+        PlayTouched();
         (_mouseX, _mouseY) = (x, y);
         _mouseMoved = true;
         if (TutorialInput(back: false)) return;   // 폰 조작법 안내 — 누르면 다음 장
@@ -321,6 +323,7 @@ internal sealed partial class GameWindow
     private void OnKeyDown(int vk)
     {
         _keyRepeat = !_keys.Add(vk);
+        PlayTouched();
         if (vk == Win32.VK_F12) { RequestShot(); return; }
         if (vk == Win32.VK_F11) { ToggleFullscreen(); return; }
         if (!_keyRepeat && TutorialInput(back: vk == Win32.VK_ESCAPE)) return;   // 안내 — ESC(두 손가락 탭) 닫기, 다른 키는 다음
@@ -457,6 +460,7 @@ internal sealed partial class GameWindow
             return;
         }
 
+        PlayTick(dt);
         if (InBattle) BattleTick(dt);
         else if (!_partyOpen && !_volumeOpen && _selected is { Moving: false } sel && sel.Path.Count == 0)
         {

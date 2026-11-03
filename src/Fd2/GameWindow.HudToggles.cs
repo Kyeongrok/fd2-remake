@@ -525,6 +525,13 @@ internal sealed partial class GameWindow
                         OpenTouchMenu(_menuIndex, 2);
                     }, default));
                 _menu.Add(("조작법 보기", () => { Close(); OpenTutorial(); }, default));
+                _menu.Add(($"익명 플레이 통계 보내기  [{(_settings.SendStats ? "켬" : "끔")}]", () =>
+                {
+                    _settings.SendStats = !_settings.SendStats;
+                    if (!_settings.SendStats) _play = null;
+                    _settings.Save();
+                    OpenTouchMenu(_menuIndex, 2);
+                }, default));
                 _menu.Add(("소리 크기", () => { Close(); OpenVolume(); }, default));
                 _menu.Add(("단축키 · 패드 설정", () => { Close(); _keysOpen = true; _keysRow = 0; _keysCapture = -1; }, default));
                 break;
