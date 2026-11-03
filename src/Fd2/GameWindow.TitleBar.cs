@@ -119,7 +119,7 @@ internal sealed unsafe partial class GameWindow
             }
             case 0x0112 when ((long)wParam & 0xFFF0) == 0xF100 && lParam != (IntPtr)' ':   // WM_SYSCOMMAND · SC_KEYMENU
                 // 메뉴 막대가 없으니 Alt 만 눌렀다 떼면 햄버거 메뉴를 내리고, Alt+글자는 삑 소리 없이 넘긴다(Alt+Space 는 시스템 메뉴)
-                if (lParam == IntPtr.Zero && _barH > 0) OpenBarMenu();
+                if (lParam == IntPtr.Zero) OpenBarMenu();   // 전체화면(제목 줄 없음)에서도 Alt 로 메뉴(제보 w-97 — 설정이 안 보여 창으로 못 돌아갔다)
                 return true;
             case Win32.WM_LBUTTONDOWN when _barH > 0 && Win32.HighWord(lParam) < _barH:
             {

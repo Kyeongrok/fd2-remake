@@ -86,6 +86,10 @@ internal sealed partial class GameWindow
     {
         _endingKind = 0;
         _endingOps = null;
+        // 고친 EXE 의 승리 보상(차례 한도 안이면 물건) — 대사 앞에 붙은 것은 지금, 뒤에 붙은 것은 대본이 끝날 때(엔딩으로 빠지는 길 포함)
+        _battle.GiveVictoryRewards(late: false);
+        var done = after;
+        after = () => { _battle.GiveVictoryRewards(late: true); done(); };
         _victoryAfter = after;
         if (UseEvents && Events!.Victory(_scene.Index) is { } ops) RunOps(ops, 0, () => { _victoryAfter = null; after(); });
         else

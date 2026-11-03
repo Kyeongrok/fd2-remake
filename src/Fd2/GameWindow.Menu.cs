@@ -131,6 +131,7 @@ internal sealed partial class GameWindow
                 _settings.Fullscreen = !_settings.Fullscreen;
                 _settings.Save();
                 ApplyWindow();
+                if (_settings.Fullscreen) Toast(FullscreenHint);
                 break;
             case MenuResetView:
             {
@@ -163,6 +164,9 @@ internal sealed partial class GameWindow
         }
         UpdateMenuChecks();
     }
+
+    /// <summary>전체화면에는 제목 줄(햄버거)이 없다 — 돌아가는 길을 알린다(w-97).</summary>
+    private const string FullscreenHint = "전체화면 — F11 · Alt+Enter 는 창으로, Alt 는 메뉴";
 
     partial void UpdateMenuChecks()
     {

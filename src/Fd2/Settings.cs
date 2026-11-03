@@ -100,6 +100,12 @@ internal sealed class Settings
     /// <summary>폰 조작법 안내를 다 봤나(닫았나) — 처음 시작할 때 한 번만 저절로 연다.</summary>
     public bool TouchTutorialSeen { get; set; }
 
+    /// <summary>이번이 완전 처음 실행인가 — 설정 파일이 없었다(저장하지 않는다). 조작법 안내는 이때만 저절로(fb-85).</summary>
+    [System.Text.Json.Serialization.JsonIgnore] public bool FirstRun { get; private set; }
+
+    /// <summary>릴리즈 노트를 보인 게임 버전(「v0.14.33」) — 다르면 업데이트한 것이라 타이틀에서 노트를 띄운다(w-101).</summary>
+    public string NotesSeenVersion { get; set; } = "";
+
     public bool TouchChests { get; set; }
     public bool TouchGoals { get; set; }
     public bool TouchHelp { get; set; }
@@ -118,7 +124,9 @@ internal sealed class Settings
     {
         try
         {
-            if (!GameWindow.Offscreen && File.Exists(FilePath)) return JsonSerializer.Deserialize<Settings>(File.ReadAllText(FilePath)) ?? new();
+            if (GameWindow.Offscreen) return new();
+            if (File.Exists(FilePath)) return JsonSerializer.Deserialize<Settings>(File.ReadAllText(FilePath)) ?? new();
+            return new() { FirstRun = true };
         }
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException) { }
         return new();

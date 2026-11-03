@@ -1824,7 +1824,7 @@ internal sealed partial class GameWindow
             if (eh > 0)
             {
                 FillRect(sx + 2, hy + bh, cell - 4, eh, 0xC0000000);
-                FillRect(sx + 2, hy + bh, (cell - 4) * Math.Clamp(u.Exp, 0, 100) / 100, eh, 0xFF50A8FF);
+                FillRect(sx + 2, hy + bh, (cell - 4) * Math.Clamp(u.Exp, 0, _battle.LevelUpExp) / Math.Max(1, _battle.LevelUpExp), eh, 0xFF50A8FF);
             }
         }
 

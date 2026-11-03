@@ -4,11 +4,11 @@ using Fd2.Native;
 namespace Fd2;
 
 /// <summary>단축키로 바꿀 수 있는 동작.</summary>
-internal enum KeyAction { MoveUp, MoveDown, MoveLeft, MoveRight, Attack, Wait, System, NextUnit, Gauges, KeyHelp, Minimap, Chests, Party }
+internal enum KeyAction { MoveUp, MoveDown, MoveLeft, MoveRight, Attack, Wait, System, NextUnit, Gauges, KeyHelp, Minimap, Chests, Party, Cancel }
 
 /// <summary>
 /// 동작 ↔ 가상 키 표(창세기전3 의 KeyBindings 와 같은 꼴). %LOCALAPPDATA%\Fd2\keys.json 에 저장한다.
-/// 방향키(커서) · Enter/Space(결정) · Esc(취소)는 늘 고정.
+/// 방향키(커서) · Enter/Space(결정) · Esc(취소)는 늘 고정 — 취소는 Esc 말고 한 키를 더 줄 수 있다(<see cref="KeyAction.Cancel"/>).
 /// </summary>
 internal sealed class KeyBindings
 {
@@ -27,6 +27,7 @@ internal sealed class KeyBindings
         (KeyAction.Minimap, "미니맵 켜기·끄기", 'M'),
         (KeyAction.Chests, "보물 목록 켜기·끄기", 'T'),
         (KeyAction.Party, "파티 정보", 'P'),
+        (KeyAction.Cancel, "취소(Esc 와 같음 — Esc 도 그대로)", 0),   // 한 손 조작(제보 w-96) — 기본은 없음
     ];
 
     private readonly Dictionary<KeyAction, int> _keys = [];
@@ -79,7 +80,12 @@ internal sealed class KeyBindings
     public static string KeyName(int vk) => vk switch
     {
         >= 'A' and <= 'Z' or >= '0' and <= '9' => ((char)vk).ToString(),
+        0 => "없음",
         Win32.VK_SPACE => "Space",
+        0x1B => "Esc", 0x14 => "CapsLock", 0x12 => "Alt",
+        0x21 => "PageUp", 0x22 => "PageDown", 0x23 => "End", 0x24 => "Home", 0x2D => "Insert", 0x2E => "Delete",
+        0x25 => "←", 0x26 => "↑", 0x27 => "→", 0x28 => "↓",
+        0x6A => "Num *", 0x6B => "Num +", 0x6D => "Num -", 0x6E => "Num .", 0x6F => "Num /",
         Win32.VK_TAB => "Tab",
         Win32.VK_RETURN => "Enter",
         0x10 => "Shift",

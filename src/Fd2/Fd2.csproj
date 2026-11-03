@@ -40,6 +40,7 @@
     </Target>
 
     <ItemGroup>
+        <EmbeddedResource Include="릴리즈노트.md" LogicalName="Fd2.ReleaseNotes.md" />   <!-- 타이틀 「릴리즈 노트」(w-101) -->
         <EmbeddedResource Include="google-client.txt" LogicalName="Fd2.google-client.txt" Condition="Exists('google-client.txt')" />
     </ItemGroup>
 </Project>

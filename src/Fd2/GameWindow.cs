@@ -59,6 +59,7 @@ internal sealed unsafe partial class GameWindow : IDisposable
         CreateSwapChain();
         Start();
         ApplyWindow();
+        if (_settings.Fullscreen && !Offscreen) Toast(FullscreenHint);
 
         Win32.ShowWindow(_hwnd, Offscreen ? 4 : 5);   // 화면 밖 시험이면 포커스를 안 뺏는다(SW_SHOWNOACTIVATE)
         Win32.UpdateWindow(_hwnd);
@@ -147,6 +148,11 @@ internal sealed unsafe partial class GameWindow : IDisposable
                 return IntPtr.Zero;
             case Win32.WM_SYSKEYDOWN:
                 // Alt 와 F10 은 시스템 키로 온다 — 마을 비밀상점 열쇠(Alt+F · Shift+F10)를 받게 넘기고, Alt+F4 · 메뉴는 윈도우에
+                if ((int)wParam == Win32.VK_RETURN && ((long)lParam & 0x20000000) != 0)   // Alt+Enter — 전체화면 ↔ 창(w-97)
+                {
+                    if (((long)lParam & 0x40000000) == 0) ToggleFullscreen();   // 누르고 있어 되풀이되는 것은 한 번만
+                    return IntPtr.Zero;
+                }
                 if ((int)wParam == Win32.VK_MENU) KeyDown(Win32.VK_MENU);
                 else if ((int)wParam is >= 0x70 and <= 0x79 && (int)wParam != 0x73)
                 {

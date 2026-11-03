@@ -153,6 +153,7 @@ internal sealed partial class GameWindow
         (_mouseX, _mouseY) = (x, y);
         _mouseMoved = true;
         if (HudHoldMove(x, y)) return;
+        if (NotesDrag(y)) return;   // 릴리즈 노트를 끌어 넘긴다
         if (LoadDrag(y)) return;   // 불러오기 목록을 끌어 넘긴다
         if (PartyMove(x, y) || VolumeMove(x, y) || MenuMove(y)) return;
         if (DragMap(x, y)) return;
@@ -167,6 +168,7 @@ internal sealed partial class GameWindow
         (_mouseX, _mouseY) = (x, y);
         _mouseMoved = true;
         if (TutorialInput(back: false)) return;   // 폰 조작법 안내 — 누르면 다음 장
+        if (_notesOpen) { CloseNotes(); return; }   // 릴리즈 노트 — 끌지 않고 누르면 닫기
         if (_keysOpen || _helpOpen) { KeysWindowKey(Win32.VK_ESCAPE); return; }
         if (VersionsClick(x, y)) return;
         if (TalkMenuClick(x, y)) return;   // 폰 — 대화 · 프롤로그 위 「메뉴」 단추와 그 메뉴
@@ -201,7 +203,7 @@ internal sealed partial class GameWindow
     /// </summary>
     internal void PointerPress(int x, int y, bool defer = false)
     {
-        if (_tutorOpen) { (_press, _pressCam, _dragging) = ((x, y), (_camX, _camY), false); return; }   // 안내 — 뗄 때 다음 장
+        if (_tutorOpen || _notesOpen) { (_press, _pressCam, _dragging) = ((x, y), (_camX, _camY), false); return; }   // 안내 — 뗄 때 다음 장 · 노트 — 끌면 넘기고 뗄 때 닫기
         if (HudHoldPress(x, y)) return;
         if (PartyPress(x, y) || VolumePress(x, y) || MenuPress(x, y)) return;
         if (!defer && (!CanDragMap || InBattle && HudHit(x, y))) { PointerDown(x, y); return; }
@@ -241,6 +243,7 @@ internal sealed partial class GameWindow
     {
         if (HudHolding) return;   // 단추를 누르고 있다 — 길게 누르기는 단추 옮기기다
         if (TutorialInput(back: true)) return;   // 안내 — 길게 누르면 건너뛰기
+        if (_notesOpen) { CloseNotes(); return; }
         if (_partyOpen) { CloseParty(); return; }
         if (_volumeOpen) { CloseVolume(); return; }
         if (InBattle) BattleCancel();
@@ -326,8 +329,11 @@ internal sealed partial class GameWindow
         PlayTouched();
         if (vk == Win32.VK_F12) { RequestShot(); return; }
         if (vk == Win32.VK_F11) { ToggleFullscreen(); return; }
+        // 설정에서 준 취소 키는 Esc 로(한 손 조작, 제보 w-96) — 단축키 설정 창이 키를 기다리는 동안은 그대로 받게
+        if (vk != 0 && vk == _keyMap[KeyAction.Cancel] && !(_keysOpen && _keysCapture >= 0)) vk = Win32.VK_ESCAPE;
         if (!_keyRepeat && TutorialInput(back: vk == Win32.VK_ESCAPE)) return;   // 안내 — ESC(두 손가락 탭) 닫기, 다른 키는 다음
         if (_tutorOpen) return;
+        if (NotesKey(vk)) return;   // 릴리즈 노트 — 넘기기 · 닫기(w-101)
         if (KeysWindowKey(vk)) return;
         if (PartyKey(vk) || VolumeKey(vk)) return;
         if (VersionsKey(vk)) return;
@@ -597,6 +603,7 @@ internal sealed partial class GameWindow
         DrawTalkMenu();
         DrawToast();
         DrawVersionLabel();
+        DrawNotes();
         DrawTutorial();
     }
 

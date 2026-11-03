@@ -100,9 +100,16 @@ public sealed class GameTables
     /// <summary>마을 상점 — 기록 번호 1 부터(원본 sub_4E809), [0] 은 기록 1.</summary>
     public IReadOnlyList<ShopInfo> Shops { get; internal set; }
 
+    /// <summary>코드 안 숫자로 버전마다 다른 규칙(레벨업 경험 · 경험 나눔 덧값 · 적 레벨 올리기) — <see cref="ExeRules"/>.</summary>
+    public ExeRules Rules { get; private set; }
+
+    /// <summary>EXE 코드에서 읽은 그대로의 규칙 — <see cref="Rules"/> 는 tables/rules.json 으로 덮은 것(편집기 「계산식」).</summary>
+    public ExeRules ExeRules { get; }
+
     private GameTables(byte[] exe)
     {
         _exe = exe;
+        Rules = ExeRules = ExeRules.Read(exe);
         Heroes = Enumerable.Range(0, Forms).Select(ReadHero).ToList();
         Growths = Enumerable.Range(0, Forms).Select(f =>
         {
@@ -163,6 +170,7 @@ public sealed class GameTables
         if (!File.Exists(path) || new FileInfo(path).Length != ExeSize) return null;
         var t = new GameTables(File.ReadAllBytes(path));
         if (json) t.FromJson = TablesJson.Apply(t, dir);
+        if (json && RuleParams.Load(dir) is { Count: > 0 } over) t.Rules = RuleParams.Apply(t.ExeRules, over);   // 편집기 「계산식」(tables/rules.json)
         return t;
     }
 

@@ -283,6 +283,7 @@ public partial class MainWindow : Window
         _unitMapBase = null;
         if (_tableEditors.Count == 0) BuildTableEditors();
         foreach (var t in _tableEditors) t.Refresh();
+        LoadRules();
     }
 
     private static TextBlock Label(string text) => new() { Text = text, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) };

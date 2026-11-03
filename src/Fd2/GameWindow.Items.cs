@@ -400,7 +400,7 @@ internal sealed partial class GameWindow
         int rx = inner + boxS + m, rw = x + w - m - rx;
         var name = NameImage(Battle.NameLine(u), Math.Max(1, U(18) / Font16.Size), 0xFFE8C870) ?? Text.Render(CharacterNames.Of(u.Icon).Split('-')[0], U(18), 0xFFE8C870);
         DrawText(name, rx, y + m);
-        var cls = Text.Render($"{GameNames.Class(u.Class)}  Lv {u.Level}  경험 {u.Exp}/100", U(12), 0xFFC4CAE6, bold: false);
+        var cls = Text.Render($"{GameNames.Class(u.Class)}  Lv {u.Level}  경험 {u.Exp}/{_battle.LevelUpExp}", U(12), 0xFFC4CAE6, bold: false);
         DrawText(cls, rx, y + m + name.H + U(2));
         void Bar(string label, int now, int max, uint color, int by)
         {

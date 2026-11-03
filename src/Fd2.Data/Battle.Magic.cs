@@ -179,6 +179,7 @@ public sealed partial class Battle
     /// <summary>HP 를 p 의 90 ~ 99.9% 채운다(sub_1C916, 늘 듦). 물건 회복도 이 길.</summary>
     public SpellResult HealBy(Unit target, int p)
     {
+        if (HealByCode(target, p) is { } coded) return coded;   // 회복 코드를 고친 EXE — Battle.Code.cs
         int before = target.Hp;
         target.Hp = Math.Min(target.MaxHp, target.Hp + MagicRoll(p));
         return new SpellResult(target, true, target.Hp - before, true);
@@ -188,7 +189,7 @@ public sealed partial class Battle
     private SpellResult Raise(Unit target, int k)
     {
         if (target.Status[k] > 0) return new SpellResult(target, false, 0, false);
-        target.Status[k] = Rng.Next(4) + 2;
+        target.Status[k] = BuffTurns(target, k, Rng.Next(4) + 2);   // 버전마다 차례 코드(Battle.Code.cs)
         Recompute(target);
         return new SpellResult(target, true, 0, false, $" {StatusNames[k]}");
     }
@@ -196,15 +197,16 @@ public sealed partial class Battle
     /// <summary>걸기(sub_22D1B) — 이미 걸렸거나 직업 25 · 26 이면 빗나감, 아니면 50% 로 맞아 피해 10 굴림 · 2~5 차례. 표의 명중은 이 길에서 안 쓴다.</summary>
     private SpellResult Inflict(Unit target, int k)
     {
-        if (target.Status[k] > 0 || target.Class is 25 or 26 || Rng.Next(100) >= 50) return new SpellResult(target, false, 0, false);
+        if (target.Status[k] > 0 || target.Class is 25 or 26 || Rng.Next(100) >= Rules.HexHit) return new SpellResult(target, false, 0, false);
         int dmg = MagicRoll(10);
         target.Hp = Math.Max(0, target.Hp - dmg);
-        target.Status[k] = Rng.Next(4) + 2;
+        target.Status[k] = HexTurns(target, k, Rng.Next());   // 원본 난수 % 4 + 2, 버전마다 차례 코드(Battle.Code.cs)
         return new SpellResult(target, true, dmg, false, $" {StatusNames[k]}에 걸림");
     }
 
     /// <summary>
-    /// 마법 경험(sub_18D8C 마법 길) — 우리 편(편 2)이 쓸 때만. 대상마다 더한 뒤 <c>쓰는 사람 Lv + (직업 &gt; 8 이면 30)</c> 으로 나눈다.
+    /// 마법 경험(sub_18D8C 마법 길) — 우리 편(편 2)이 쓸 때만. 대상마다 더한 뒤 <c>쓰는 사람 Lv + (직업 &gt; 8 이면 30)</c> 으로 나눈다
+    /// (곱 · 덧값 30 들은 버전마다 EXE 코드에서 읽는다 — <see cref="ExeRules"/>).
     /// 공격 · 기술: 몬스터(68~)만 <c>대상 Lv × 몬스터 경험</c>(살았으면 × 피해 / 최대 HP), 회복: <c>채운 양 × 40 × 대상 Lv′ / 최대 HP</c>(대상 꼴 &lt; 75),
     /// 올리기 2 × Lv′, 걸기 8 × Lv, 풀기 4 × Lv′, 행동술 8 × Lv′. Lv′ = 레벨 + (직업 9~24 면 30).
     /// </summary>
@@ -215,21 +217,22 @@ public sealed partial class Battle
         foreach (var r in results.Where(r => r.Hit))
         {
             var t = r.Target;
-            int lv = t.Level + (t.Class is >= 9 and <= 24 ? 30 : 0);
+            var x = Rules;
+            int Lv(int add) => t.Level + (t.Class is >= 9 and <= 24 ? add : 0);
             sum += spell switch
             {
                 <= 12 or 32 or 24 or >= 28 and <= 31 when t.FormId >= GameTables.MonsterBase && t.FormId - GameTables.MonsterBase < Tables.Monsters.Count
                     => t.Hp > 0 ? r.Amount * (t.Level * Tables.Monsters[t.FormId - GameTables.MonsterBase].Exp) / Math.Max(1, t.MaxHp)
                                 : t.Level * Tables.Monsters[t.FormId - GameTables.MonsterBase].Exp,
-                >= 13 and <= 16 or 33 when t.FormId < 75 => r.Amount * 40 * lv / Math.Max(1, t.MaxHp),
-                >= 17 and <= 19 or 34 => 2 * lv,
-                22 or 26 or 27 or 35 => 8 * t.Level,
-                20 or 21 => 4 * lv,
-                25 => 8 * lv,
-                23 => 10 * lv,   // 전송술 — 대상 레벨' × 10(sub_2218A)
+                >= 13 and <= 16 or 33 when t.FormId < 75 => r.Amount * x.HealMul * Lv(x.HealPromoted) / Math.Max(1, t.MaxHp),
+                >= 17 and <= 19 or 34 => x.RaiseMul * Lv(x.SpellTargetPromoted),
+                22 or 26 or 27 or 35 => x.HexMul * t.Level,
+                20 or 21 => x.CureMul * Lv(x.CurePromoted),
+                25 => x.ActMul * Lv(x.ActPromoted),
+                23 => x.TeleportMul * Lv(x.TeleportPromoted),   // 전송술 — 대상 레벨' × 10(sub_2218A)
                 _ => 0,
             };
         }
-        return sum / Math.Max(1, caster.Level + (caster.Class > 8 ? 30 : 0));
+        return sum / Math.Max(1, caster.Level + (caster.Class > 8 ? Rules.SpellExpPromoted : 0));
     }
 }

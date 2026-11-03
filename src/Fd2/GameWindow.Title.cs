@@ -48,10 +48,14 @@ internal sealed partial class GameWindow
         ("Load", () => { OpenContinue(); _titleIndex = 0; }),
         ("Exit", () => _running = false),
         ($"버전: {VersionName}  ▼", OpenVersions),   // 맨 끝 줄이지만 화면 맨 위(제목 그림의 파란 띠)에 그린다 — Start 에서 ↑ 하면 여기로
+        ("릴리즈 노트", () => OpenNotes()),          // 버전 단추 옆(w-101)
     ];
 
     /// <summary>타이틀의 버전 줄 번호 — 메뉴 셋 뒤(이어하기 목록에는 없다).</summary>
     private int TitleVersionRow => _continueOpen ? -1 : 3;
+
+    /// <summary>타이틀의 릴리즈 노트 단추 — 버전 단추 옆.</summary>
+    private int TitleNotesRow => _continueOpen ? -1 : 4;
 
     private void StartOpening()
     {
@@ -515,7 +519,8 @@ internal sealed partial class GameWindow
         int lw = (int)(AfmPlayer.Width * ls), lh = (int)(AfmPlayer.Height * ls);
         int lx = (_clientW - lw) / 2, ly = (_clientH - lh) / 2;
         if (_titleBack != null) BlitFit(_titleBack, AfmPlayer.Width, AfmPlayer.Height, lx, ly, lw, lh);
-        MaybeOpenTutorial();   // 폰 — 처음 시작이면 조작법 안내(w-91)
+        MaybeOpenTutorial();   // 폰 — 완전 처음 시작이면 조작법 안내(w-91 · fb-85)
+        MaybeOpenNotes();      // 게임 버전이 바뀌었으면 릴리즈 노트(w-101)
         if (_continueOpen) { DrawLoadScreen(fs); return; }
         if (TouchUi)
         {
@@ -525,8 +530,8 @@ internal sealed partial class GameWindow
         }
 
         var items = TitleItems;
-        int vrow = TitleVersionRow;
-        var menuRows = Enumerable.Range(0, items.Length).Where(i => i != vrow).ToList();
+        int vrow = TitleVersionRow, nrow = TitleNotesRow;
+        var menuRows = Enumerable.Range(0, items.Length).Where(i => i != vrow && i != nrow).ToList();
         // 긴 줄(전황 불러오기의 「원작 기록 1 — 27장 앞 · 동료 31명 · 돈 …」)이 화면 폭에 안 들면 글을 줄인다 — 고른 줄의 ▶ 가 첫 글자를 덮었다(사용자 요청)
         int big = fs * 3 / 2;
         var arrow = Text.Render("▶", big, 0xFFFFE070);
@@ -536,7 +541,7 @@ internal sealed partial class GameWindow
             big = Math.Max(12, big * (_clientW - 8) / need);
             arrow = Text.Render("▶", big, 0xFFFFE070);
         }
-        var imgs = items.Select((it, i) => Text.Render(it.Label, i == vrow ? fs : big, i == _titleIndex ? 0xFFFFE070 : 0xFFFFFFFF)).ToList();
+        var imgs = items.Select((it, i) => Text.Render(it.Label, i == vrow || i == nrow ? fs : big, i == _titleIndex ? 0xFFFFE070 : 0xFFFFFFFF)).ToList();
         int rowH = menuRows.Max(i => imgs[i].H) + 14, w = Math.Min(_clientW - 8, menuRows.Max(i => imgs[i].W) + 2 * (arrow.W + 24));
         // 팬메이드 알림 — 화면 폭에 안 들면(휴대폰 세로) 문장마다 줄을 나눈다.
         int noticeSize = Math.Max(12, fs * 3 / 4);
@@ -565,11 +570,22 @@ internal sealed partial class GameWindow
         if (vrow >= 0)
         {
             // 버전 고르기 — 맨 위 가운데 작은 단추
+            // 버전 고르기 · 릴리즈 노트 — 맨 위 가운데 작은 단추 둘(w-101)
             var v = imgs[vrow];
-            int vw = v.W + 40, vh = v.H + 12, vx = (_clientW - vw) / 2, vy = Math.Max(4, ly + (int)(2 * ls));
+            var nimg = nrow >= 0 ? imgs[nrow] : null;
+            int vw = v.W + 40, vh = v.H + 12, nw = nimg != null ? nimg.W + 32 : 0, sep = nimg != null ? 8 : 0;
+            if (vw + sep + nw > _clientW - 8) { nw = nimg != null ? Math.Min(nw, (_clientW - 8) / 3) : 0; vw = Math.Min(vw, _clientW - 8 - sep - nw); }
+            int vx = (_clientW - vw - sep - nw) / 2, vy = Math.Max(4, ly + (int)(2 * ls));
             _titleRects[vrow] = (vx, vy, vw, vh);
             FillRect(vx, vy, vw, vh, vrow == _titleIndex ? 0xD0405090 : 0xA0101020);
             DrawText(v, vx + 20, vy + 6);
+            if (nimg != null)
+            {
+                int nx = vx + vw + sep;
+                _titleRects[nrow] = (nx, vy, nw, vh);
+                FillRect(nx, vy, nw, vh, nrow == _titleIndex ? 0xD0405090 : 0xA0101020);
+                DrawText(nimg, nx + (nw - nimg.W) / 2, vy + 6);
+            }
         }
 
         // 맨 아래 — 팬메이드 알림

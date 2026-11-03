@@ -27,7 +27,8 @@ internal sealed partial class GameWindow
     /// <summary>처음 시작이면 안내를 연다 — 타이틀을 그릴 때 부른다.</summary>
     private void MaybeOpenTutorial()
     {
-        if (TouchUi && !_settings.TouchTutorialSeen && !_tutorOpen) OpenTutorial();
+        // 완전 처음 실행일 때만(fb-85 — 업데이트한 사람에게는 안 뜬다). 설정 › 「조작법 보기」로는 언제나
+        if (TouchUi && _settings.FirstRun && !_settings.TouchTutorialSeen && !_tutorOpen) OpenTutorial();
     }
 
     private void OpenTutorial() => (_tutorOpen, _tutorPage) = (true, 0);

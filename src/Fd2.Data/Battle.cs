@@ -89,6 +89,7 @@ public sealed partial class Battle
         else if (f - GameTables.MonsterBase < t.Monsters.Count)
         {
             var m = t.Monsters[f - GameTables.MonsterBase];
+            if (e != null && t.Rules.EnemyLevel is { } rule) u.Level = Math.Max(1, e.Level + rule.Bonus(e.Level, Scene.Index, PartySlots()));
             int l = u.Level;
             (u.MaxHp, u.MaxMp, u.BaseAtk, u.BaseDef, u.Speed) = (m.Hp * l, m.Mp * l, m.Str * l, m.Def * l, m.Spd * l);
             (u.Race, u.Class, u.Move) = (m.Race, m.Class, m.Move);
@@ -107,6 +108,22 @@ public sealed partial class Battle
         u.Hp = u.MaxHp;
         u.Mp = u.MaxMp;
         Recompute(u);
+    }
+
+    /// <summary>
+    /// 우리 편 자리(배열 0 ~ P−1, P = 장면 정보 [1])의 (역량, 내력, 속도, 최대 HP) — 적 레벨 올리기(<see cref="EnemyLevelRule"/>)가 본다.
+    /// 원작은 쓰러진 사람의 칸도 그대로 읽는다. 빈 자리는 0.
+    /// </summary>
+    private List<(int Str, int Def, int Spd, int MaxHp)> PartySlots()
+    {
+        int p = Scene.Info.Length > 1 ? Scene.Info[1] : 0;
+        var list = new List<(int, int, int, int)>(p);
+        for (int i = 0; i < p; i++)
+        {
+            var u = Scene.Units.Find(x => x.Slot == i) ?? Scene.Hidden.Find(x => x.Slot == i);
+            list.Add(u == null ? (0, 0, 0, 0) : (u.BaseAtk, u.BaseDef, u.Speed, u.MaxHp));
+        }
+        return list;
     }
 
     /// <summary>
@@ -147,9 +164,9 @@ public sealed partial class Battle
             hit += it.Hit;
             eva += it.Evade;
         }
-        if (u.Status[0] > 0) atk = (int)(atk * 1.15);   // dbl_5018D
-        if (u.Status[1] > 0) def = (int)(def * 1.15);
-        if (u.Status[2] > 0) { hit += 15; eva += 15; }
+        if (u.Status[0] > 0) atk = BuffValue(u, atk, defense: false);   // dbl_5018D × 1.15 — 고친 EXE 는 그 코드로(Battle.Code.cs)
+        if (u.Status[1] > 0) def = BuffValue(u, def, defense: true);
+        if (u.Status[2] > 0) { int s = SpeedBuff(u); hit += s; eva += s; }
         (u.Atk, u.Def, u.Hit, u.Evade) = (atk, def, hit, eva);
         var w = Weapon(u);
         (u.RangeMin, u.RangeMax) = w == null ? (0, 0) : (w.RangeMin, w.RangeMax);
@@ -212,7 +229,7 @@ public sealed partial class Battle
     public int StrikeCount(Unit a)
     {
         int n = Rng.Next(100) < 3 ? 2 : 1;
-        if (Weapon(a) is { Special: 3 }) n++;
+        if (Weapon(a) is { } w && w.Special < Rules.ExtraStrikes.Count) n += Rules.ExtraStrikes[w.Special];   // 원본 특수 3 → 1(곡우 · 파워 특수 5 → 2)
         return n;
     }
 
@@ -244,6 +261,7 @@ public sealed partial class Battle
         if (!IsFlyer(a)) atk += atk * TerrainPercent(a).Atk / 100;
         if (!IsFlyer(d)) def += def * TerrainPercent(d).Def / 100;
         var w = Weapon(a);
+        if (StrikeByCode(a, d, atk, def, w) is { } coded) return coded;   // 치기 코드를 고친 EXE(곡우 · 파워 …) — Battle.Code.cs
         int crit = ClassOf(a)?.Crit ?? 0;
         if (w is { Special: 4 }) crit += w.SpecialValue;
         bool poisoned = false;
@@ -264,8 +282,14 @@ public sealed partial class Battle
 
     // ── 경험치 · 레벨업 ──────────────────────────────────────────────────────
 
-    /// <summary>나눔 레벨 — 내 레벨 + (전직 직업 9~24 이거나 이름 28(다커스)이면 30).</summary>
-    public static int ExpLevel(Unit u) => u.Level + (u.Class is >= 9 and <= 24 || u.NameId == 28 ? 30 : 0);
+    /// <summary>나눔 레벨 — 내 레벨 + (전직 직업 9~24 이거나 이름 28(다커스)이면 EXE 의 덧값 — 원본 30, 곡우 · 파워 50). 원작은 바이트 덧셈이다.</summary>
+    public int ExpLevel(Unit u) => u.Level + (u.Class is >= 9 and <= 24 || u.NameId == 28 ? Rules.AttackExpPromoted : 0) & 0xFF;
+
+    /// <summary>EXE 의 코드 숫자 규칙 — EXE 가 없으면 원본 값.</summary>
+    public ExeRules Rules => Tables?.Rules ?? ExeRules.Original;
+
+    /// <summary>레벨업에 드는 경험 — EXE 의 값(원본 100, 곡우 60).</summary>
+    public int LevelUpExp => Rules.LevelUpExp;
 
     /// <summary>
     /// 한 번 쳐서 얻는 경험(sub_1ECC7 끝) — 우리 편(편 2)이 몬스터 표 캐릭터(68~)를 칠 때만.
@@ -283,20 +307,20 @@ public sealed partial class Battle
     public static int MaxLevel(Unit u) => u.FormId is 30 or 31 ? 110 : 99;
 
     /// <summary>
-    /// 경험 e 를 받는다(sub_1E292) — 합이 100 이 넘는 동안 레벨 +1 · 성장 · 100 빼기(최대 레벨에 닿으면 합 0).
+    /// 경험 e 를 받는다(sub_1E292) — 합이 <see cref="LevelUpExp"/>(원본 100) 넘는 동안 레벨 +1 · 성장 · 그만큼 빼기(최대 레벨에 닿으면 합 0).
     /// 쓰러졌거나 이미 최대 레벨이거나 e 가 0 이면 받지 않는다. 오른 것을 알림으로.
     /// </summary>
     public List<Notice> GainExp(Unit u, int e)
     {
         var notes = new List<Notice>();
         if (Tables == null || e <= 0 || u.Hp <= 0 || u.Team != 2 || u.Level >= MaxLevel(u)) return notes;
-        int sum = u.Exp + e;
-        while (sum >= 100)
+        int sum = u.Exp + e, need = Math.Max(1, LevelUpExp);
+        while (sum >= need)
         {
             u.Level++;
             notes.Add(new Notice($" 등급상승! Lv {u.Level}", NameLine(u)));
             notes.AddRange(LevelUp(u));
-            sum -= 100;
+            sum -= need;
             if (u.Level >= MaxLevel(u)) { sum = 0; break; }
         }
         u.Exp = sum;

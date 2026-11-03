@@ -211,7 +211,7 @@ internal sealed partial class GameWindow
 
     /// <summary>창 아래에 보일 요약 — 무엇이 함께 가는지.</summary>
     private static string BugSummary(Dictionary<string, object?> c) =>
-        $"함께 보내는 것: {TitleVersion} ·{c["platform"]} · 화면 {c["frame"]} · 자료 {c["data"]}" +
+        $"함께 보내는 것: {TitleVersion} · {c["platform"]} · 화면 {c["frame"]} · 자료 {c["data"]}" +
         (c["chapter"] is int ch ? $" · {ch}장" : "") + (c["turn"] is int t ? $" {t}턴" : "") + " · 음악 상태" + (c.ContainsKey("musicLog") ? " · 음악 기록" : "") + (c.ContainsKey("crashLog") ? " · 오류 기록 끝" : "") +
         "\n이름 · 계정 · IP 는 보내지 않습니다.";
 

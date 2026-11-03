@@ -28,7 +28,18 @@ internal sealed partial class GameWindow
         (_partyOpen, _partyIndex, _partyTop, _partyDrag) = (true, 0, 0, null);
     }
 
-    private void CloseParty() => (_partyOpen, _partyDrag) = (false, null);
+    private void CloseParty() => (_partyOpen, _partyDrag, _partyDetail) = (false, null, false);
+
+    /// <summary>자세히 창(원작 인물 정보 창처럼 — 능력 · 가방 물건 · 아는 마법, 제보 w-95)이 열려 있나.</summary>
+    private bool _partyDetail;
+
+    private void PartyDetail(int i)
+    {
+        if (i < 0 || i >= _party.Count) return;
+        PlaySfx(Sound.UiBank, Sound.Menu);
+        _partyIndex = i;
+        _partyDetail = true;
+    }
 
     /// <summary>파티 창에서 동료를 눌러 장비로 가나 — 건물 안, 폰이면 마을 첫 화면과 우리 차례 전투에서도(사용자 요청).</summary>
     private bool PartyGearOn => _town != null && _campaign != null && (!_townTop || TouchUi) || PartyBattleGear;
@@ -94,6 +105,17 @@ internal sealed partial class GameWindow
         if (action == KeyAction.MoveUp) vk = Win32.VK_UP;
         else if (action == KeyAction.MoveDown) vk = Win32.VK_DOWN;
         int n = _party.Count;
+        if (_partyDetail)
+        {
+            switch (vk)
+            {
+                case Win32.VK_UP or Win32.VK_LEFT: PartySelect(_partyIndex == 0 ? n - 1 : _partyIndex - 1); PlaySfx(Sound.UiBank, Sound.Cursor); break;
+                case Win32.VK_DOWN or Win32.VK_RIGHT: PartySelect(_partyIndex == n - 1 ? 0 : _partyIndex + 1); PlaySfx(Sound.UiBank, Sound.Cursor); break;
+                case Win32.VK_ESCAPE or Win32.VK_RETURN or Win32.VK_SPACE: _partyDetail = false; break;
+                default: if (action == KeyAction.Party) CloseParty(); break;
+            }
+            return true;
+        }
         switch (vk)
         {
             case Win32.VK_UP: PartySelect(_partyIndex == 0 ? n - 1 : _partyIndex - 1); break;
@@ -101,7 +123,8 @@ internal sealed partial class GameWindow
             case Win32.VK_PRIOR: PartySelect(Math.Max(0, _partyIndex - _partyVisible)); break;
             case Win32.VK_NEXT: PartySelect(Math.Min(n - 1, _partyIndex + _partyVisible)); break;
             case Win32.VK_RETURN or Win32.VK_SPACE when PartyGearOn: PartyGear(_partyIndex); break;
-            case Win32.VK_ESCAPE or Win32.VK_RETURN or Win32.VK_SPACE: CloseParty(); break;
+            case Win32.VK_RETURN or Win32.VK_SPACE: PartyDetail(_partyIndex); break;   // 자세히(물건 · 마법, 제보 w-95)
+            case Win32.VK_ESCAPE: CloseParty(); break;
             default: if (action == KeyAction.Party) CloseParty(); break;
         }
         return true;
@@ -121,6 +144,7 @@ internal sealed partial class GameWindow
     private bool PartyPress(int x, int y)
     {
         if (!_partyOpen) return false;
+        if (_partyDetail) { _partyDetail = false; _partyTap = -1; return true; }   // 자세히 창은 누르면 목록으로
         if (!InRect(_partyBox, x, y)) { CloseParty(); return true; }
         int hit = _partyRects.FindIndex(r => InRect(r, x, y));
         if (hit >= 0) _partyIndex = _partyTop + hit;
@@ -144,7 +168,7 @@ internal sealed partial class GameWindow
     {
         if (!_partyOpen) return false;
         _partyDrag = null;
-        if (_partyTap >= 0) PartyGear(_partyTap);
+        if (_partyTap >= 0) { if (PartyGearOn) PartyGear(_partyTap); else PartyDetail(_partyTap); }
         _partyTap = -1;
         return true;
     }
@@ -152,7 +176,8 @@ internal sealed partial class GameWindow
     /// <summary>마우스 휠(+ 위로) — 열린 창이 받는다.</summary>
     internal void PointerWheel(int notches)
     {
-        if (_partyOpen) PartySelect(_partyIndex - notches);
+        if (_notesOpen) NotesScroll(-notches * _notesStep * 3);
+        else if (_partyOpen) PartySelect(_partyIndex - notches);
         else if (_volumeOpen) VolumeStep(notches * 5);
         else if (MenuWheel(notches)) { }
         else if (LoadWheel(notches)) { }
@@ -179,12 +204,13 @@ internal sealed partial class GameWindow
         _partyRects.Clear();
         if (!_partyOpen) return;
         if (_party.Count == 0) { CloseParty(); return; }
+        if (_partyDetail) { DrawPartyDetail(_party[Math.Clamp(_partyIndex, 0, _party.Count - 1)]); return; }
         int fs = Math.Max(14, 7 * HudZoom), small = Math.Max(12, fs * 5 / 6), g = Math.Max(1, fs / Font16.Size);
         int gold = InBattle ? _battle.Gold : _campaign?.Gold ?? 0;
         var title = Text.Render($"파티 정보 — {_party.Count}명 · 돈 {gold}", fs, 0xFFFFE070);
         bool narrow = _clientW < _clientH;   // 세로 화면 — 옆이 잘리지 않게 줄을 나눠 세로로 길게(사용자 요청)
-        var hint = Text.Render(PartyGearOn ? "동료를 누르면 장비를 바꿉니다 · 창 밖을 누르면 닫기" : narrow ? "끌어 넘기기 · 창 밖을 누르면 닫기" : TouchUi ? "줄을 눌러 고르기 · 끌어 넘기기 · 창 밖을 누르면 닫기"
-                                       : $"↑↓ · 휠 고르기 · {KeyBindings.KeyName(_keyMap[KeyAction.Party])} · Esc 닫기", small, 0xFF9098A8, bold: false);
+        var hint = Text.Render(PartyGearOn ? "동료를 누르면 장비를 바꿉니다 · 창 밖을 누르면 닫기" : narrow ? "눌러 자세히 · 끌어 넘기기 · 창 밖을 누르면 닫기" : TouchUi ? "줄을 누르면 자세히(물건 · 마법) · 끌어 넘기기 · 창 밖을 누르면 닫기"
+                                       : $"↑↓ · 휠 고르기 · 누르기 · Enter 자세히(물건 · 마법) · {KeyBindings.KeyName(_keyMap[KeyAction.Party])} · Esc 닫기", small, 0xFF9098A8, bold: false);
 
         // 한 사람의 글 줄 — 넷째 줄까지(이름 · 막대 · 능력 · 장비)
         Text.Image Line(string s, uint c = 0xFFFFFFFF) => Text.Render(s, small, c, bold: false);
@@ -203,11 +229,11 @@ internal sealed partial class GameWindow
             bool down = u.Hp <= 0;
             uint nameColor = down ? 0xFF808080 : u.Ai ? 0xFFA0F0A0 : 0xFF90E0FF;
             var name = NameImage(Battle.NameLine(u), g, nameColor) ?? Text.Render(CharacterNames.Of(u.Icon).Split('-')[0], fs, nameColor);
-            string head = $"  {GameNames.Class(u.Class)}  Lv {u.Level}" + (u.Team == 2 ? $"  경험 {u.Exp}/100" : "  (컴퓨터 아군)");
+            string head = $"  {GameNames.Class(u.Class)}  Lv {u.Level}" + (u.Team == 2 ? $"  경험 {u.Exp}/{_battle.LevelUpExp}" : "  (컴퓨터 아군)");
             string weapon = u.Bag.FirstOrDefault(b => b.Equipped && b.Item < 128) is { Equipped: true } w ? GameNames.Item(w.Item) : "-";
             string armor = u.Bag.FirstOrDefault(b => b.Equipped && b.Item >= 128) is { Equipped: true } a ? GameNames.Item(a.Item) : "-";
             string status = down ? "쓰러짐" : string.Join(" ", Enumerable.Range(0, 6).Where(k => u.Status[k] > 0).Select(k => $"{Battle.StatusNames[k]}({u.Status[k]})"));
-            string headShort = $"  {GameNames.Class(u.Class)}  Lv {u.Level}", exp = u.Team == 2 ? $"경험 {u.Exp}/100" : "(컴퓨터 아군)";
+            string headShort = $"  {GameNames.Class(u.Class)}  Lv {u.Level}", exp = u.Team == 2 ? $"경험 {u.Exp}/{_battle.LevelUpExp}" : "(컴퓨터 아군)";
             return (Head: HJoin(name, Line(narrow ? headShort : head)), Exp: Line(exp),
                     Stats1: Line($"공격 {u.Atk}  방어 {u.Def}  명중 {u.Hit}"), Stats2: Line($"회피 {u.Evade}  속도 {u.Speed}  이동 {u.Move}"),
                     Weapon: Line($"무기 {weapon}"), Armor: HJoin(Line($"옷 {armor}"), status.Length > 0 ? Line($"   {status}", down ? 0xFFFF9090 : 0xFFFFC060) : null),
@@ -278,5 +304,120 @@ internal sealed partial class GameWindow
             }
             cy += _partyCardH;
         }
+    }
+
+    /// <summary>
+    /// 자세히 창 — 원작 인물 정보 창처럼 위에 얼굴 · 이름 · 직업 · LV EX · HP MP · 능력, 아래 가방 물건(장비 표시 · 효과)과 아는 마법(MP)(제보 w-95).
+    /// ←→ · ↑↓ 다른 사람, Esc · Enter · 누르기는 목록으로.
+    /// </summary>
+    private void DrawPartyDetail(Unit u)
+    {
+        int g = Math.Max(1, Math.Min(HudZoom, (_clientH - 40) / (16 * 16)));
+        int fs = Math.Max(14, 7 * g), small = Math.Max(12, fs * 5 / 6), lineH = 16 * g + 4 * g;
+        int W = Math.Min(_clientW - 24, 16 * g * 30), x0 = (_clientW - W) / 2;
+        Text.Image T(string s, uint c = 0xFFFFFFFF, int size = 0) => Text.Render(s, size > 0 ? size : fs, c, bold: size == 0);
+        void Panel(int x, int y, int w, int h)
+        {
+            FillRect(x, y, w, h, 0xF028458A);
+            FillRect(x, y, w, 2, 0xFF8090C0); FillRect(x, y + h - 2, w, 2, 0xFF8090C0);
+            FillRect(x, y, 2, h, 0xFF8090C0); FillRect(x + w - 2, y, 2, h, 0xFF8090C0);
+        }
+
+        var items = u.Bag.Select(b => (b.Item, b.Equipped)).ToList();
+        var spells = _battle.KnownSpells(u).ToList();
+        bool narrow = _clientW < _clientH;
+        int rowsLeft = Math.Max(1, items.Count), rowsRight = Math.Max(1, spells.Count);
+        int listRows = narrow ? rowsLeft + rowsRight + 2 : Math.Max(rowsLeft, rowsRight) + 1;
+        var faces = Face(u.Icon);
+        int faceW = faces is { Count: > 0 } ? faces[0].W * g : 0, faceH = faces is { Count: > 0 } ? faces[0].H * g : 0;
+        if (faceW > W / 3) { faceH = faceH * (W / 3) / Math.Max(1, faceW); faceW = W / 3; }
+        int topH = Math.Max(faceH + 16, lineH * 5 + 16), listH = lineH * listRows + 24;
+        var hint = T(TouchUi ? "누르면 목록으로" : "←→ 다른 사람 · Esc · Enter 목록으로", 0xFF9098A8, small);
+        int y0 = Math.Max(8, (_clientH - topH - listH - hint.H - 16) / 2);
+        FillRect(0, 0, _clientW, _clientH, 0x90000000);
+
+        // 위 — 얼굴 · 이름 · 능력 · 막대
+        int faceBoxW = faceW > 0 ? faceW + 16 : 0;
+        if (faceBoxW > 0)
+        {
+            Panel(x0, y0, faceBoxW, topH);
+            var f = faces![0];
+            BlitFit(f.Px, f.W, f.H, x0 + 8, y0 + (topH - faceH) / 2, faceW, faceH);
+        }
+        int sx = x0 + faceBoxW + (faceBoxW > 0 ? 6 : 0), sw = W - (sx - x0);
+        Panel(sx, y0, sw, topH);
+        var name = NameImage(Battle.NameLine(u), g, 0xFFB8C8FF) ?? T(CharacterNames.Of(u.Icon).Split('-')[0], 0xFFB8C8FF);
+        DrawText(name, sx + 14, y0 + 8);
+        var cls = T(GameNames.Class(u.Class) + (u.Ai ? " (컴퓨터 아군)" : ""), 0xFFB8C8FF);
+        DrawText(cls, sx + sw - cls.W - 16, y0 + 8);
+        int cy = y0 + 8 + lineH;
+        var stats = new[] { ($"LV {u.Level}", u.Team == 2 ? $"EX {u.Exp}" : ""), ($"공격 {u.Atk}", $"방어 {u.Def}"),
+                            ($"명중 {u.Hit}", $"회피 {u.Evade}"), ($"속도 {u.Speed}", $"이동 {u.Move}") };
+        int colW = T("명중 000  ").W;
+        for (int r = 0; r < stats.Length; r++)
+        {
+            DrawText(T(stats[r].Item1, 0xFFC8F0B0), sx + 14, cy + r * lineH);
+            if (stats[r].Item2.Length > 0) DrawText(T(stats[r].Item2, 0xFFC8F0B0), sx + 14 + colW, cy + r * lineH);
+        }
+        int bw = Math.Min(sx + sw - 16 - (sx + 14 + colW * 2 + 8), fs * 16), bx = sx + sw - 16 - bw;   // 막대는 오른쪽에 알맞은 길이로
+        void Bar(string label, int now, int max, uint color, int y)
+        {
+            var l = T(label);
+            DrawText(l, bx, y);
+            int barX = bx + l.W + 6, barW = Math.Max(10, bw - l.W - 6), bh = Math.Max(6, g * 5);
+            FillRect(barX, y + (l.H - bh) / 2, barW, bh, 0xFF203060);
+            if (max > 0) FillRect(barX, y + (l.H - bh) / 2, barW * Math.Clamp(now, 0, max) / max, bh, color);
+            var n = T($"{Math.Max(0, now)} / {max}");
+            DrawText(n, sx + sw - n.W - 16, y + lineH);
+        }
+        if (bw > fs * 4)
+        {
+            Bar("HP", u.Hp, u.MaxHp, 0xFFF0D040, cy);
+            Bar("MP", u.Mp, u.MaxMp, 0xFFA01818, cy + lineH * 2);
+        }
+
+        // 아래 — 물건 | 마법
+        int ly = y0 + topH + 8;
+        Panel(x0, ly, W, listH);
+        int colX0 = x0 + 16, colX1 = narrow ? colX0 : x0 + W / 2 + 8, colW1 = narrow ? W - 32 : W / 2 - 24;
+        int iy = ly + 12;
+        DrawText(T($"물건 {items.Count}/8", 0xFFFFE070), colX0, iy);
+        for (int i = 0; i < items.Count; i++)
+        {
+            var (id, on) = items[i];
+            int ry = iy + (i + 1) * lineH;
+            var mark = T(on ? "E" : " ", 0xFFFF9070);
+            DrawText(mark, colX0, ry);
+            var nm = NameImage(181 + id, g, on ? 0xFFFFFFFF : 0xFFB8C8FF) ?? T(GameNames.Item(id), on ? 0xFFFFFFFF : 0xFFB8C8FF);
+            int nx = colX0 + T("E ").W;
+            DrawText(nm, nx, ry);
+            string eff = ItemEffect(id);
+            if (eff.Length > 0)
+            {
+                var e = T(eff, 0xFFC8F0B0, small);
+                int ex = Math.Max(nx + nm.W + 10, colX0 + colW1 - e.W);
+                DrawText(e, ex, ry + (nm.H - e.H) / 2);
+            }
+        }
+        if (items.Count == 0) DrawText(T("없음", 0xFF8090B0), colX0, iy + lineH);
+
+        int sy = narrow ? iy + (rowsLeft + 1) * lineH + lineH / 2 : iy;
+        DrawText(T($"마법 {spells.Count}", 0xFFFFE070), colX1, sy);
+        for (int i = 0; i < spells.Count; i++)
+        {
+            int m = spells[i], ry = sy + (i + 1) * lineH;
+            bool can = _battle.SpellOf(m) is { } s && u.Mp >= s.Mp;
+            DrawText(T(SpellNames.Of(m), can ? 0xFFB8C8FF : 0xFF6878A0), colX1, ry);
+            if (_battle.SpellOf(m) is { } si)
+            {
+                var mp = T($"MP {si.Mp}", can ? 0xFFC8F0B0 : 0xFF607060, small);
+                DrawText(mp, colX1 + colW1 - mp.W, ry);
+            }
+        }
+        if (spells.Count == 0) DrawText(T("없음", 0xFF8090B0), colX1, sy + lineH);
+
+        var who = T($"{_partyIndex + 1} / {_party.Count}", 0xFF9098A8, small);
+        DrawText(who, x0 + W - who.W - 8, ly + listH + 6);
+        DrawText(hint, x0 + 8, ly + listH + 6);
     }
 }

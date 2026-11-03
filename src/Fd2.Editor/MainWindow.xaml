@@ -215,6 +215,8 @@
             <TabItem Header="아이템"><ContentControl x:Name="ItemsHost" /></TabItem>
             <TabItem Header="마법"><ContentControl x:Name="SpellsHost" /></TabItem>
             <TabItem Header="상점"><ContentControl x:Name="ShopsHost" /></TabItem>
+            <!-- 계산식: 버전마다 FD2.EXE 코드 안 숫자(레벨업 경험 · 경험 나눔 · 적 레벨 올리기 …)를 고쳐 tables/rules.json 에(w-99) -->
+            <TabItem Header="계산식"><ContentControl x:Name="RulesHost" /></TabItem>
             <!-- 이벤트: 장마다 시작 연출 · 사건 줄 · 땅 칸 사건 · 사건 상자 · 승리 뒤 연출(SceneEvents.json 대본 + 장면 정보) -->
             <TabItem Header="이벤트">
                 <DockPanel Margin="8">
