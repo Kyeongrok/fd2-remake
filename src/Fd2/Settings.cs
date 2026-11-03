@@ -26,6 +26,9 @@ internal sealed class Settings
     /// <summary>모드 > 고해상도 — 기본 켬. 처음에는 이 PC 에서 차례로 만들어 다 된 것부터 갈아 끼운다.</summary>
     public bool HiRes { get; set; } = true;
 
+    /// <summary>폰의 고해상도 — 폰 CPU 로 만들어 느리고 배터리를 먹으므로 기본 끔(w-104).</summary>
+    public bool HiResPhone { get; set; }
+
     /// <summary>모드 > 배경음악 — 기본 켬.</summary>
     public bool Music { get; set; } = true;
 

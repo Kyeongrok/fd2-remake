@@ -517,6 +517,12 @@ internal sealed partial class GameWindow
                         ApplyScreenLock();
                         OpenTouchMenu(_menuIndex, 2);
                     }, default));
+                if (OperatingSystem.IsAndroid())
+                {
+                    string hi = $"고해상도(4배, 폰에서 차례로 만듦 · 느림)  [{(_settings.HiResPhone ? "켬" : "끔")}]";
+                    HiResInfo(ref hi);
+                    _menu.Add((hi, () => { HiResToggle(); OpenTouchMenu(_menuIndex, 2); }, default));
+                }
                 if (_settings.HudSpots.Count > 0)
                     _menu.Add(("단추 자리 처음대로(3초 눌러 옮긴 것)", () =>
                     {

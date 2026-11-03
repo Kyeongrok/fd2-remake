@@ -153,6 +153,8 @@ internal sealed partial class GameWindow
         }
     }
 
+    private static string SlotDetail(Campaign c) => $"동료 {c.Party.Count}명 · 돈 {c.Gold}";
+
     private string SlotLabel(SaveFile save, int k) => save.ReadSlot(k) is { } c
         ? $"{ChapterName(c.NextScene)} 앞 · 동료 {c.Party.Count}명 · 돈 {c.Gold}"
         : "빈 칸";
@@ -206,8 +208,9 @@ internal sealed partial class GameWindow
         }
         else
         {
-            foreach (var (label, rec) in BattleSaves())
-                _menu.Add((label, () => AskSys(TxtAskLoad, () => SysBanner(TxtWait, "기다리세요.", () => LoadBattleRecord(rec))), default));
+            // 전황 · 자동저장에 더해 마을 기록(기록 1~4)과 원작 기록도 — 타이틀 Load 와 같은 목록(사용자 요청)
+            foreach (var (label, camp) in ContinueSlots())
+                _menu.Add((label, () => AskSys(TxtAskLoad, () => SysBanner(TxtWait, "기다리세요.", () => ContinueFrom(camp))), default));
         }
         _menu.Add(("돌아가기", OpenRecordMenu, default));
         _menuIndex = 0;
@@ -303,16 +306,23 @@ internal sealed partial class GameWindow
     private List<(string Label, Campaign Campaign)> ContinueSlots()
     {
         var list = new List<(string, Campaign)>();
+        // 카드 큰 글은 장(전황은 「3장」, 기록은 「3장 앞」), 아랫줄에 어느 칸인지 · 턴 · 동료 · 돈(사용자 요청 w-105)
         var mine = SaveFile.Load(SavePath);
-        foreach (var (label, rec) in BattleSaves()) list.Add(($"{label}", BattleCampaign(rec)));   // 전황 칸들 · 자동저장
+        for (int k = 0; k < BattleSlots; k++)
+            if (ReadBattleAt(BattleSlotPath(false, k)) is { } b && b.Scene < _sceneCount)
+                list.Add(($"{ChapterName(b.Scene)} — 전황 {k + 1} · {b.Turn}턴 · {SavedAt(BattleSlotPath(false, k))}", BattleCampaign(b)));
+        var autos = Enumerable.Range(0, AutoSlots).Select(k => (k, b: ReadBattleAt(BattleSlotPath(true, k))))
+            .Where(x => x.b != null && x.b.Scene < _sceneCount).OrderByDescending(x => File.GetLastWriteTime(BattleSlotPath(true, x.k)));
+        foreach (var (k, b) in autos)
+            list.Add(($"{ChapterName(b!.Scene)} — 자동 · {b.Turn}턴 · {SavedAt(BattleSlotPath(true, k))}", BattleCampaign(b)));
         for (int k = 0; k < SaveFile.Slots; k++)
-            if (mine.ReadSlot(k) is { } c && c.NextScene < _sceneCount) list.Add(($"기록 {k + 1} — {SlotLabel(mine, k)}", c));
+            if (mine.ReadSlot(k) is { } c && c.NextScene < _sceneCount) list.Add(($"{ChapterName(c.NextScene)} 앞 — 기록 {k + 1} · {SlotDetail(c)}", c));
         if (File.Exists(OriginalSavePath))
         {
             var orig = SaveFile.Load(OriginalSavePath);
-            if (orig.ReadBattle() is { } ob && ob.Scene < _sceneCount) list.Add(($"원작 전황 — {ChapterName(ob.Scene)} {ob.Turn}턴", BattleCampaign(ob)));
+            if (orig.ReadBattle() is { } ob && ob.Scene < _sceneCount) list.Add(($"{ChapterName(ob.Scene)} — 원작 전황 · {ob.Turn}턴", BattleCampaign(ob)));
             for (int k = 0; k < SaveFile.Slots; k++)
-                if (orig.ReadSlot(k) is { } c && c.NextScene < _sceneCount) list.Add(($"원작 기록 {k + 1} — {SlotLabel(orig, k)}", c));
+                if (orig.ReadSlot(k) is { } c && c.NextScene < _sceneCount) list.Add(($"{ChapterName(c.NextScene)} 앞 — 원작 기록 {k + 1} · {SlotDetail(c)}", c));
         }
         return list;
     }
@@ -321,6 +331,29 @@ internal sealed partial class GameWindow
     private bool? _hasSaves;
     private int _continueRow;
     private List<(string Label, Campaign Campaign)> _continueList = new();
+
+    /// <summary>싸움 중 「전황 부르기」 — 타이틀 Load 와 똑같은 불러오기 화면(전황 · 자동 · 기록 · 원작, 사용자 요청 w-105). 돌아가기면 싸움으로.</summary>
+    private bool _loadFromGame;
+
+    private void OpenLoadFromGame()
+    {
+        PlaySfx(Sound.UiBank, Sound.Menu);
+        _menu.Clear();
+        _bs = BattleState.Select;
+        _titleBack ??= TitleImage();
+        _loadFromGame = true;
+        _screen = Screen.Title;
+        OpenContinue();
+        _titleIndex = 0;
+    }
+
+    /// <summary>불러오기 화면을 닫는다 — 싸움에서 왔으면 싸움으로, 아니면 타이틀 첫 메뉴로.</summary>
+    private void CloseContinue()
+    {
+        _continueOpen = false;
+        _titleIndex = 0;
+        if (_loadFromGame) { _loadFromGame = false; _screen = Screen.Game; }
+    }
 
     private void OpenContinue()
     {
@@ -336,7 +369,9 @@ internal sealed partial class GameWindow
 
     private void ContinueFrom(Campaign c)
     {
+        _loadFromGame = false;
         if (c.Battle is { } b) { LoadBattleRecord(b); return; }
+        PlayEnd("quit");   // 싸움 중에 마을 기록을 부르면 하던 판은 그만둔 판으로
         _continueOpen = false;
         _campaign = c;
         // 다음 장 앞에 마을이 있으면 마을에서 이어 간다(기록은 마을 주점에서 한다, 사용자 제보) — 전장은 출구로

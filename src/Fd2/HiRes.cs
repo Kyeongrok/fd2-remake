@@ -194,10 +194,15 @@ internal sealed class HiRes
         return frames;
     }
 
-    /// <summary>그래픽 카드(DirectML)로 열고, 안 되면 CPU 로.</summary>
+    /// <summary>그래픽 카드(DirectML)로 열고, 안 되면 CPU 로. 폰은 CPU — 게임이 돌 자리를 남기려고 코어 몇 개만.</summary>
     private static InferenceSession OpenSession(out bool gpu, out string why)
     {
         why = "";
+#if ANDROID
+        gpu = false;
+        var phone = new SessionOptions { IntraOpNumThreads = Math.Max(1, Environment.ProcessorCount / 2) };
+        return new InferenceSession(ModelPath, phone);
+#else
         try
         {
             PreloadDirectML();
@@ -212,6 +217,7 @@ internal sealed class HiRes
             why = ex.Message.Split('\n')[0];
             return new InferenceSession(ModelPath);
         }
+#endif
     }
 
     /// <summary>
@@ -220,6 +226,7 @@ internal sealed class HiRes
     /// </summary>
     private static void PreloadDirectML()
     {
+        if (OperatingSystem.IsAndroid()) return;
         // 단일 exe 는 네이티브 DLL 을 임시 폴더에 푼다 — 그 자리는 NATIVE_DLL_SEARCH_DIRECTORIES 에 있다(Assembly.Location 은 비어 있다).
         var native = (AppContext.GetData("NATIVE_DLL_SEARCH_DIRECTORIES") as string ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries);
         foreach (string? dir in native.Prepend(Path.GetDirectoryName(typeof(InferenceSession).Assembly.Location)).Append(AppContext.BaseDirectory))

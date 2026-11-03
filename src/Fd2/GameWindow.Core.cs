@@ -104,6 +104,13 @@ internal sealed partial class GameWindow
     /// <summary>고해상도 캐릭터 그림(96x96), 없으면 null — 안드로이드는 늘 null.</summary>
     private partial uint[]? HiIcon(int icon, int frame);
 
+    /// <summary>지도 전체 그림(<c>_mapAll</c>)을 새로 찍은 뒤 — 폰은 만들어 둔 고해상도 지도가 있으면 그것으로 덮는다(w-104).</summary>
+    partial void HiMapAll();
+
+    /// <summary>폰 고해상도 켜고 끄기 · 지금 상태 글(설정 메뉴 줄).</summary>
+    partial void HiResToggle();
+    partial void HiResInfo(ref string label);
+
     /// <summary>편집기 띄우기 — 안드로이드는 없다(타이틀 메뉴에서 뺀다).</summary>
     private partial void OpenEditor();
 
@@ -826,5 +833,6 @@ internal sealed partial class GameWindow
                 }
             }
         _mapAllKey = key;
+        HiMapAll();
     }
 }

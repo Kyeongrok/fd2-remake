@@ -42,7 +42,7 @@ internal sealed partial class GameWindow
     private readonly List<(int X, int Y, int W, int H)> _titleRects = new();
 
     private (string Label, Action Do)[] TitleItems => _continueOpen
-        ? [.. _continueList.Select(s => (s.Label, (Action)(() => ContinueFrom(s.Campaign)))), ("세이브 연동(구글 · 개발중)", OpenCloudDialog), ("돌아가기", () => { _continueOpen = false; _titleIndex = 0; })]
+        ? [.. _continueList.Select(s => (s.Label, (Action)(() => ContinueFrom(s.Campaign)))), ("세이브 연동(구글 · 개발중)", OpenCloudDialog), ("돌아가기", CloseContinue)]
         : [
         ("Start", StartGame),
         ("Load", () => { OpenContinue(); _titleIndex = 0; }),
@@ -89,7 +89,7 @@ internal sealed partial class GameWindow
         if (InBattle) { _bs = BattleState.None; ClearSelection(); SetMusic(-1); }   // 전투 곡을 끈다
         _screen = Screen.Title;
         _titleIndex = 0;
-        _continueOpen = _setupOpen = false;   // Setup 창은 GameWindow.Setup.cs
+        _continueOpen = _setupOpen = _loadFromGame = false;   // Setup 창은 GameWindow.Setup.cs
         _hasSaves = null;
         _titleBack ??= TitleImage();
     }
@@ -293,7 +293,7 @@ internal sealed partial class GameWindow
             case Win32.VK_UP: _titleIndex = (_titleIndex + items.Length - 1) % items.Length; _loadFollow = true; PlaySfx(77, 2); break;
             case Win32.VK_DOWN: _titleIndex = (_titleIndex + 1) % items.Length; _loadFollow = true; PlaySfx(77, 2); break;
             case Win32.VK_RETURN or Win32.VK_SPACE: PlaySfx(77, 1); items[_titleIndex].Do(); break;
-            case Win32.VK_ESCAPE when _continueOpen: _continueOpen = false; _titleIndex = 0; break;
+            case Win32.VK_ESCAPE when _continueOpen: CloseContinue(); break;
             case Win32.VK_ESCAPE: _running = false; break;
         }
     }
@@ -431,7 +431,7 @@ internal sealed partial class GameWindow
             int at = detail.LastIndexOf(" · ", StringComparison.Ordinal);
             if (at >= 0 && System.Text.RegularExpressions.Regex.IsMatch(detail[(at + 3)..], @"^\d\d-\d\d \d\d:\d\d$")) (detail, when) = (detail[..at], detail[(at + 3)..]);
             bool sel = i == _titleIndex;
-            uint kind = LoadKindColor(name);
+            uint kind = LoadKindColor(detail);   // 아랫줄이 「전황 1 · …」 「기록 2 · …」로 시작한다
             FillRect(cx, cy, cw, cardH, sel ? FdBlueLit : FdBlue);
             Frame(cx, cy, cw, cardH, sel ? FdYellow : FdEdge);
             FillRect(cx + 3, cy + 3, Math.Max(4, pad / 2), cardH - 6, kind);

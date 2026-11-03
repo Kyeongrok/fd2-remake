@@ -223,7 +223,8 @@ internal sealed partial class GameWindow
             var r = c.Party[i];
             int n = Town.Bag(r).Count;
             _menuGlyphs[_menu.Count] = HeroRecord.Id(r) + 1;
-            _menu.Add(($"Lv{Town.Level(r),-3} 가방 {n}/8  ", () =>
+            string label = _tables!.Items[item].Kind < 32 ? $"Lv{Town.Level(r),-3} 가방 {n}/8	{GearDiff(r, item)}" : $"Lv{Town.Level(r),-3} 가방 {n}/8  ";
+            _menu.Add((label, () =>
             {
                 if (Town.Bag(c.Party[i]).Count >= 8) { PlaySfx(Sound.UiBank, 7); TownBanner(" 가방이 가득 찼습니다", Back, HeroRecord.Id(r) + 1); return; }
                 if (_tables!.Items[item].Kind < 32) AskEquip(i, item, Back);
@@ -233,6 +234,24 @@ internal sealed partial class GameWindow
         AddPager(takers.Count, page, p => OpenBuyWho(shop, goods, row, item, p));
         _menu.Add(("돌아가기", Back, default));
         EndTownMenu(1);
+    }
+
+    /// <summary>살 장비가 지금 낀 같은 자리(무기 · 방어구) 것보다 얼마나 나은가 — 「공격+5 방어-2」(사용자 요청).</summary>
+    private string GearDiff(byte[] r, int item)
+    {
+        var items = _tables!.Items;
+        var now = Town.Bag(r).Where(b => b.Equipped && b.Item < 128 == item < 128).Select(b => b.Item).ToList();
+        if (now.Contains(item)) return "지금과 같음";
+        var a = items[item];
+        int atk = a.Atk, hit = a.Hit, def = a.Def, eva = a.Evade;
+        foreach (int o in now) { var b = items[o]; atk -= b.Atk; hit -= b.Hit; def -= b.Def; eva -= b.Evade; }
+        var parts = new List<string>();
+        if (atk != 0) parts.Add($"공격{atk:+0;-0}");
+        if (hit != 0) parts.Add($"명중{hit:+0;-0}");
+        if (def != 0) parts.Add($"방어{def:+0;-0}");
+        if (eva != 0) parts.Add($"회피{eva:+0;-0}");
+        string head = now.Count == 0 ? "장비 없음 → " : "";
+        return parts.Count == 0 ? "지금과 같음" : head + string.Join(" ", parts);
     }
 
     /// <summary>산 장비를 바로 장비하나(원작 「장비합니까?」).</summary>
@@ -367,7 +386,7 @@ internal sealed partial class GameWindow
             _menuIcons[_menu.Count] = ItemIcon(bag[k].Item);
             _menuGlyphs[_menu.Count] = 181 + bag[k].Item;
             bool gear = _tables!.Items[bag[k].Item].Kind < 32;
-            _menu.Add(($"{(bag[k].Equipped ? "(장비) " : "")} ", () => { if (gear) OpenGearChoice(page, member, slot); else OpenGiveTo(page, member, slot, 0); }, default));
+            _menu.Add(($" 	{(bag[k].Equipped ? "(장비) " : "")}{ItemEffect(bag[k].Item)}", () => { if (gear) OpenGearChoice(page, member, slot); else OpenGiveTo(page, member, slot, 0); }, default));
         }
         _menu.Add(("돌아가기", () => OpenGiveFrom(page), default));
         EndTownMenu(1);

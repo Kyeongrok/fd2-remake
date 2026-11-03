@@ -1065,7 +1065,7 @@ internal sealed partial class GameWindow
         _menu.Add(("지도 보기", () => { _settings.ShowMinimap = true; _settings.Save(); _menu.Clear(); _bs = BattleState.Select; }, default));
         // 전황은 여러 칸(사용자 요청 — 창세기전3 파트2 처럼): 기록 · 부르기 모두 칸을 고른다. 부르기에는 자동저장(최근 3턴)도
         if (!_enemyPhase) _menu.Add(("전황 기록", () => OpenBattleSlots(save: true), default));
-        if (!_enemyPhase && BattleSaves().Count > 0) _menu.Add(("전황 부르기", () => OpenBattleSlots(save: false), default));
+        if (!_enemyPhase && ContinueSlots().Count > 0) _menu.Add(("전황 부르기", OpenLoadFromGame, default));
         _menu.Add(("전장 이탈", () => AskSys(TxtAskQuit, () => SysBanner(TxtRest, "그럼 쉬세요.", ToTitle)), default));
         _menuIndex = 0;
         _bs = BattleState.Menu;

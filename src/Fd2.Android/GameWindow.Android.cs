@@ -33,9 +33,79 @@ internal sealed partial class GameWindow
     /// <summary>폴더 하나 더 가져오기 — MainActivity 가 채운다.</summary>
     internal static Action? VersionAdder;
 
-    partial void PlatformInit() => _cpuMap = true;
+    // ── 고해상도(w-104) — PC 와 같은 모델 · 같은 캐시 꼴을 폰 CPU 로 차례로 만든다. 지도는 CPU 로 찍으므로 지도 전체 그림에 덮는다 ──
 
-    private partial uint[]? HiIcon(int icon, int frame) => null;
+    private HiRes _hires = null!;
+
+    partial void PlatformInit()
+    {
+        _cpuMap = true;
+        _hires = new HiRes(_dir, _pal, _sceneCount, _icons.Characters, _settings.HiResPhone);
+    }
+
+    partial void OnSceneLoaded()
+    {
+        if (_hires.Enabled) _hires.Want(_scene.Index, _scene.Units.Select(u => u.Icon));
+    }
+
+    partial void PlatformTick()
+    {
+        // 다 된 조각 — 지금 장면이고 지도 전체 그림이 있으면 그 자리만 갈아 끼운다
+        while (_hires.MapChunks.TryDequeue(out var c))
+        {
+            if (!_hires.Enabled || _scene == null || c.Scene != _scene.Index || _mapAll == null || _mapAllKey.Item1 != _scene || _mapAllKey.Item2 != _zoom) continue;
+            PasteHi(c.Px, c.X, c.Y, c.W, c.H);
+            _mapPrevKey = default;   // 앞 배율 그림은 옛것 — 다시 찍게
+        }
+    }
+
+    private partial uint[]? HiIcon(int icon, int frame) => _hires.Enabled ? _hires.Icon(icon, frame) : null;
+
+    partial void HiMapAll()
+    {
+        _mapHi = false;
+        if (!_hires.Enabled || _mapAll == null) return;
+        int lw = _scene.Width * T, lh = _scene.Height * T;
+        try
+        {
+            if (HiRes.LoadMap(_scene.Index, lw, lh) is { } hi) PasteHi(hi, 0, 0, lw * HiRes.Scale, lh * HiRes.Scale);
+        }
+        catch (OutOfMemoryException) { }   // 큰 장면에서 메모리가 모자라면 원본 그대로
+    }
+
+    /// <summary>고해상도 그림 한 조각(4배 좌표 x, y, w x h)을 지금 배율의 지도 전체 그림에 — 가까운 점으로 줄이거나 늘려.</summary>
+    private void PasteHi(uint[] px, int x, int y, int w, int h)
+    {
+        int z = _zoom, s = HiRes.Scale;
+        int dx0 = (x * z + s - 1) / s, dx1 = Math.Min(_mapAllW, ((x + w) * z + s - 1) / s);
+        int dy0 = (y * z + s - 1) / s, dy1 = Math.Min(_mapAllH, ((y + h) * z + s - 1) / s);
+        for (int dy = dy0; dy < dy1; dy++)
+        {
+            int hy = dy * s / z - y;
+            if (hy < 0 || hy >= h) continue;
+            int src = hy * w, dst = dy * _mapAllW;
+            for (int dx = dx0; dx < dx1; dx++)
+            {
+                int hx = dx * s / z - x;
+                if (hx >= 0 && hx < w) _mapAll![dst + dx] = px[src + hx] | 0xFF000000;
+            }
+        }
+        _mapHi = true;   // 물결 · 번갈아 타일은 고해상도 위에 그리지 않는다(PC 와 같이)
+    }
+
+    partial void HiResToggle()
+    {
+        _settings.HiResPhone = _hires.Enabled = !_hires.Enabled;
+        _settings.Save();
+        _mapAllKey = _mapPrevKey = default;   // 지도 전체 그림을 다시 찍는다
+        _mapHi = false;
+        if (_hires.Enabled && _scene != null) _hires.Want(_scene.Index, _scene.Units.Select(u => u.Icon));
+    }
+
+    partial void HiResInfo(ref string label)
+    {
+        if (_hires.Enabled && _hires.Status is { Length: > 0 } st) label += $" — {st}";
+    }
 
     private partial void OpenEditor() { }
 
