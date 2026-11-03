@@ -46,16 +46,24 @@ internal sealed partial class GameWindow
         : [
         ("Start", StartGame),
         ("Load", () => { OpenContinue(); _titleIndex = 0; }),
+        ("Setup", OpenSetup),   // 오프닝 켜고 끄기 · 배경음악 · 효과음 크기 창(w-102, GameWindow.Setup.cs)
         ("Exit", () => _running = false),
         ($"버전: {VersionName}  ▼", OpenVersions),   // 맨 끝 줄이지만 화면 맨 위(제목 그림의 파란 띠)에 그린다 — Start 에서 ↑ 하면 여기로
         ("릴리즈 노트", () => OpenNotes()),          // 버전 단추 옆(w-101)
     ];
 
-    /// <summary>타이틀의 버전 줄 번호 — 메뉴 셋 뒤(이어하기 목록에는 없다).</summary>
-    private int TitleVersionRow => _continueOpen ? -1 : 3;
+    /// <summary>타이틀의 버전 줄 번호 — 메뉴 넷 뒤(이어하기 목록에는 없다).</summary>
+    private int TitleVersionRow => _continueOpen ? -1 : 4;
 
     /// <summary>타이틀의 릴리즈 노트 단추 — 버전 단추 옆.</summary>
-    private int TitleNotesRow => _continueOpen ? -1 : 4;
+    private int TitleNotesRow => _continueOpen ? -1 : 5;
+
+    /// <summary>켤 때 — Setup 에서 오프닝을 껐으면 바로 타이틀로(w-102).</summary>
+    private void StartOpeningOrTitle()
+    {
+        if (_settings.ShowOpening) StartOpening();
+        else ToTitle();
+    }
 
     private void StartOpening()
     {
@@ -81,7 +89,7 @@ internal sealed partial class GameWindow
         if (InBattle) { _bs = BattleState.None; ClearSelection(); SetMusic(-1); }   // 전투 곡을 끈다
         _screen = Screen.Title;
         _titleIndex = 0;
-        _continueOpen = false;
+        _continueOpen = _setupOpen = false;   // Setup 창은 GameWindow.Setup.cs
         _hasSaves = null;
         _titleBack ??= TitleImage();
     }

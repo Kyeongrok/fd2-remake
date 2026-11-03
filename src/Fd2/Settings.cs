@@ -106,6 +106,9 @@ internal sealed class Settings
     /// <summary>릴리즈 노트를 보인 게임 버전(「v0.14.33」) — 다르면 업데이트한 것이라 타이틀에서 노트를 띄운다(w-101).</summary>
     public string NotesSeenVersion { get; set; } = "";
 
+    /// <summary>켤 때 오프닝 — 타이틀 Setup 에서 끈다(w-102, 기본 켬).</summary>
+    public bool ShowOpening { get; set; } = true;
+
     public bool TouchChests { get; set; }
     public bool TouchGoals { get; set; }
     public bool TouchHelp { get; set; }

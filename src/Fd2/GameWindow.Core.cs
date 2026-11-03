@@ -124,8 +124,8 @@ internal sealed partial class GameWindow
         UploadBugs();   // 지난번에 못 보낸 버그 리포트가 있으면 뒤에서 보낸다
         PlayStartup();   // 지난번 끝내지 못한 판 · 못 보낸 플레이 통계
         LoadScene(0);
-        if (PickVersionFirst && !Offscreen && OpenVersions(StartOpening, min: 2)) return;
-        StartOpening();
+        if (PickVersionFirst && !Offscreen && OpenVersions(StartOpeningOrTitle, min: 2)) return;
+        StartOpeningOrTitle();
     }
 
     /// <summary>창(안드로이드는 그릴 판) 크기가 바뀌었다.</summary>
@@ -155,7 +155,7 @@ internal sealed partial class GameWindow
         if (HudHoldMove(x, y)) return;
         if (NotesDrag(y)) return;   // 릴리즈 노트를 끌어 넘긴다
         if (LoadDrag(y)) return;   // 불러오기 목록을 끌어 넘긴다
-        if (PartyMove(x, y) || VolumeMove(x, y) || MenuMove(y)) return;
+        if (PartyMove(x, y) || VolumeMove(x, y) || SetupMove(x, y) || MenuMove(y)) return;
         if (DragMap(x, y)) return;
         if (_versionsOpen) VersionsHover(_mouseX, _mouseY);
         else if (_screen == Screen.Title && !_keysOpen) TitleHover(_mouseX, _mouseY);
@@ -205,7 +205,7 @@ internal sealed partial class GameWindow
     {
         if (_tutorOpen || _notesOpen) { (_press, _pressCam, _dragging) = ((x, y), (_camX, _camY), false); return; }   // 안내 — 뗄 때 다음 장 · 노트 — 끌면 넘기고 뗄 때 닫기
         if (HudHoldPress(x, y)) return;
-        if (PartyPress(x, y) || VolumePress(x, y) || MenuPress(x, y)) return;
+        if (PartyPress(x, y) || VolumePress(x, y) || SetupPress(x, y) || MenuPress(x, y)) return;
         if (!defer && (!CanDragMap || InBattle && HudHit(x, y))) { PointerDown(x, y); return; }
         (_press, _pressCam, _dragging) = ((x, y), (_camX, _camY), false);
     }
@@ -217,7 +217,7 @@ internal sealed partial class GameWindow
     internal void PointerRelease(int x, int y)
     {
         if (HudHoldRelease()) return;
-        if (PartyRelease() || VolumeRelease()) { _press = null; return; }
+        if (PartyRelease() || VolumeRelease() || SetupRelease()) { _press = null; return; }
         if (MenuRelease(x, y)) return;
         if (_press is not { } p) return;
         bool dragged = _dragging;
@@ -246,6 +246,7 @@ internal sealed partial class GameWindow
         if (_notesOpen) { CloseNotes(); return; }
         if (_partyOpen) { CloseParty(); return; }
         if (_volumeOpen) { CloseVolume(); return; }
+        if (_setupOpen) { CloseSetup(); return; }
         if (InBattle) BattleCancel();
     }
 
@@ -335,7 +336,7 @@ internal sealed partial class GameWindow
         if (_tutorOpen) return;
         if (NotesKey(vk)) return;   // 릴리즈 노트 — 넘기기 · 닫기(w-101)
         if (KeysWindowKey(vk)) return;
-        if (PartyKey(vk) || VolumeKey(vk)) return;
+        if (PartyKey(vk) || VolumeKey(vk) || SetupKey(vk)) return;
         if (VersionsKey(vk)) return;
         if (EndingKey(vk)) return;
         if (_screen == Screen.Prologue)
@@ -600,6 +601,7 @@ internal sealed partial class GameWindow
         ComposeScreen();
         DrawParty();
         DrawVolume();
+        DrawSetup();
         DrawTalkMenu();
         DrawToast();
         DrawVersionLabel();
