@@ -447,6 +447,7 @@ internal sealed partial class GameWindow
                     }
                 if (_stage == MenuStage.System) BattleCancel();   // 십자 시스템 메뉴 밖을 누르면 닫는다
                 else if (_stage == MenuStage.Mobile) CloseTouchMenu();   // 모바일 메뉴 밖을 누르면 닫는다
+                else if (_stage is MenuStage.AfterMove or MenuStage.ItemCross) MoveRangeEmptyTap();   // 사람 둘레 명령 십자 — 지도를 두 번 누르면 Esc 처럼 닫는다(w-107)
                 return;
             case BattleState.Target:
             {

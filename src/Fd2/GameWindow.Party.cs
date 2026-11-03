@@ -238,13 +238,13 @@ internal sealed partial class GameWindow
             return (Head: HJoin(name, Line(narrow ? headShort : head)), Exp: Line(exp),
                     Stats1: Line($"공격 {u.Atk}  방어 {u.Def}  명중 {u.Hit}"), Stats2: Line($"회피 {u.Evade}  속도 {u.Speed}  이동 {u.Move}"),
                     Weapon: Line($"무기 {weapon}"), Armor: HJoin(Line($"옷 {armor}"), status.Length > 0 ? Line($"   {status}", down ? 0xFFFF9090 : 0xFFFFC060) : null),
-                    Hp: Line($"{Math.Max(0, u.Hp)} / {u.MaxHp}"), Mp: Line($"{u.Mp} / {u.MaxMp}"),
+                    Hp: Line($"{Math.Max(0, u.Hp)} / {u.MaxHp}"), Mp: Line($"{u.Mp} / {u.MaxMp}"), ExpNum: Line($"{u.Exp} / {_battle.LevelUpExp}"),
                     Stats: Line($"공격 {u.Atk}  방어 {u.Def}  명중 {u.Hit}  회피 {u.Evade}  속도 {u.Speed}  이동 {u.Move}"),
                     Gear: HJoin(Line($"무기 {weapon}   옷 {armor}"), status.Length > 0 ? Line($"   {status}", down ? 0xFFFF9090 : 0xFFFFC060) : null));
         }).ToList();
 
         var hpL = Line("HP");
-        int numW = cards.Max(c => Math.Max(c.Hp.W, c.Mp.W));
+        int numW = cards.Max(c => Math.Max(Math.Max(c.Hp.W, c.Mp.W), narrow ? c.ExpNum.W : 0));
         if (narrow) barW = Math.Max(small * 2, _clientW - 20 - faceCol - 56 - hpL.W - 6 - 8 - numW);
         int barsW = narrow ? hpL.W + 6 + barW + 8 + numW : 2 * (hpL.W + 6 + barW + 8 + numW) + small;
         int textW = narrow ? barsW : Math.Max(barsW, cards.Max(c => Math.Max(c.Head.W, Math.Max(c.Stats.W, c.Gear.W))));
@@ -276,14 +276,15 @@ internal sealed partial class GameWindow
             int tx = x + 16 + faceCol + 16, ty = cy + (_partyCardH - 4 - textH) / 2 + 2;
             DrawText(c.Head, tx, ty);
             int bx = tx, barRow = narrow ? 2 : 1;
-            void Bar(Text.Image label, Text.Image num, int now, int max, uint color)
+            void Bar(Text.Image label, Text.Image num, int now, int max, uint color, int row = -1)
             {
-                int by = ty + lineH * barRow;
+                int by = ty + lineH * (row >= 0 ? row : barRow);
                 DrawText(label, bx, by);
                 int barX = bx + hpL.W + 6, barY = by + (label.H - small / 2) / 2, bh = Math.Max(4, small / 2);
                 FillRect(barX, barY, barW, bh, 0xFF3A4670);
                 if (max > 0) FillRect(barX + 1, barY + 1, (barW - 2) * Math.Clamp(now, 0, max) / max, bh - 2, color);
                 DrawText(num, barX + barW + 8, by);
+                if (row >= 0) return;
                 if (narrow) barRow++;
                 else bx = barX + barW + 8 + numW + small;
             }
@@ -292,7 +293,9 @@ internal sealed partial class GameWindow
             if (narrow)
             {
                 // 이름 · 경험 · HP · MP · 능력 둘 · 무기 · 옷 — MP 가 없는 사람도 자리를 맞춘다
-                DrawText(c.Exp, tx, ty + lineH);
+                // 경험도 막대로(사용자 요청 w-106) — 컴퓨터 아군은 글 그대로
+                if (u.Team == 2) Bar(Line("EX"), c.ExpNum, u.Exp, _battle.LevelUpExp, 0xFF60A8F0, 1);
+                else DrawText(c.Exp, tx, ty + lineH);
                 DrawText(c.Stats1, tx, ty + lineH * 4);
                 DrawText(c.Stats2, tx, ty + lineH * 5);
                 DrawText(c.Weapon, tx, ty + lineH * 6);
