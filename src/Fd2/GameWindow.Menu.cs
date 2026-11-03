@@ -230,6 +230,7 @@ internal sealed partial class GameWindow
     private void UpdateTitleStatus()
     {
         string st = _hires.Enabled ? _hires.Status : "";
+        if (Updater.Status is { Length: > 0 } up) st = st.Length > 0 ? $"{up}  · {st}" : up;   // 설치판 자동 업데이트
         string text = $"용의기사2 {TitleVersion} — {VersionName}" + (st.Length > 0 ? $"  · {st}" : "");
         if (text == _titleStatus) return;
         _titleStatus = text;

@@ -8,6 +8,10 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        // 설치판(Setup.exe)의 메인 exe 가 이것이다 — Velopack 이 설치 · 업데이트 · 제거 때 특수 인자로 불러
+        // 곧바로 끝나기를 기다리므로 맨 앞에서 받아 준다. 그냥 켰으면 아무 일 없이 지나간다.
+        Velopack.VelopackApp.Build().Run();
+        Updater.CheckInBackground();
         // 인자 → FD2_DIR → 게임 > 판 고르기 · 폴더 고르기 창으로 고른 판 → 바탕화면의 원본 판 폴더 → 자동으로 찾기(원본 먼저) → 폴더 고르기 창
         var settings = Settings.Load();
         bool told = args.Length > 0 || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("FD2_DIR"));

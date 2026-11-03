@@ -2012,6 +2012,20 @@ internal sealed partial class GameWindow
             for (int r = 0; r < first.H; r++) Array.Copy(first.Px, r * first.W, px, r * w0 + glyphs.W, first.W);
             imgs[0] = new Text.Image(px, w0, h0);
         }
+        // 원작 정보 창(sub_17FC0)처럼 오른 능력은 숫자 색을 바꾼다 — 공격(+34) · 방어(+35) · 명중과 회피(+36)
+        if (u.Status[0] > 0 || u.Status[1] > 0 || u.Status[2] > 0)
+        {
+            const uint up = 0xFFFFD040;
+            imgs[2] = HJoin(
+                Text.Render("공격 ", fs, 0xFFFFFFFF), Text.Render($"{u.Atk}", fs, u.Status[0] > 0 ? up : 0xFFFFFFFF),
+                Text.Render("  방어 ", fs, 0xFFFFFFFF), Text.Render($"{u.Def}", fs, u.Status[1] > 0 ? up : 0xFFFFFFFF),
+                Text.Render("  명중 ", fs, 0xFFFFFFFF), Text.Render($"{u.Hit}", fs, u.Status[2] > 0 ? up : 0xFFFFFFFF),
+                Text.Render("  회피 ", fs, 0xFFFFFFFF), Text.Render($"{u.Evade}", fs, u.Status[2] > 0 ? up : 0xFFFFFFFF));
+        }
+        // 상태 줄 — 오른 것은 노랑, 독 · 마비 · 봉쇄는 빨강(괄호 = 남은 차례)
+        if (status.Length > 0)
+            imgs[^1] = HJoin(Enumerable.Range(0, 6).Where(k => u.Status[k] > 0)
+                .Select((k, i) => Text.Render($"{(i > 0 ? " " : "")}{Battle.StatusNames[k]}({u.Status[k]})", fs, k < 3 ? 0xFFFFD040 : 0xFFFF9090)).ToArray());
         int w = imgs.Max(i => i.W) + 24, h = imgs.Sum(i => i.H + 2) + 16;
         int x = 12, y = _clientH - h - 12 - below;
         FillRect(x, y, w, h, 0xC0101020);

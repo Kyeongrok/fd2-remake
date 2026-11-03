@@ -256,12 +256,20 @@ internal sealed partial class GameWindow
             string armor = u.Bag.FirstOrDefault(b => b.Equipped && b.Item >= 128) is { Equipped: true } a ? GameNames.Item(a.Item) : "-";
             string status = down ? "쓰러짐" : string.Join(" ", Enumerable.Range(0, 6).Where(k => u.Status[k] > 0).Select(k => $"{Battle.StatusNames[k]}({u.Status[k]})"));
             string headShort = $"  {GameNames.Class(u.Class)}  Lv {u.Level}", exp = u.Team == 2 ? $"경험 {u.Exp}/{_battle.LevelUpExp}" : "(컴퓨터 아군)";
+            // 원작 정보 창(sub_17FC0)처럼 오른 능력 숫자는 색을 바꾼다. 상태는 오른 것 노랑 · 독 · 마비 · 봉쇄 빨강
+            const uint upC = 0xFFFFD040, badC = 0xFFFF9090;
+            Text.Image Stat(string label, int v, bool up) => HJoin(Line(label), Line($"{v}", up && !down ? upC : 0xFFFFFFFF));
+            Text.Image? StatusImg() => status.Length == 0 ? null : down ? Line($"   {status}", badC)
+                : HJoin(Enumerable.Range(0, 6).Where(k => u.Status[k] > 0)
+                    .Select(k => Line($"   {Battle.StatusNames[k]}({u.Status[k]})", k < 3 ? upC : badC)).ToArray());
+            var atk = Stat("공격 ", u.Atk, u.Status[0] > 0); var def = Stat("  방어 ", u.Def, u.Status[1] > 0);
+            var hit = Stat("  명중 ", u.Hit, u.Status[2] > 0); var eva = Stat("  회피 ", u.Evade, u.Status[2] > 0);
             return (Head: HJoin(name, Line(narrow ? headShort : head)), Exp: Line(exp),
-                    Stats1: Line($"공격 {u.Atk}  방어 {u.Def}  명중 {u.Hit}"), Stats2: Line($"회피 {u.Evade}  속도 {u.Speed}  이동 {u.Move}"),
-                    Weapon: Line($"무기 {weapon}"), Armor: HJoin(Line($"옷 {armor}"), status.Length > 0 ? Line($"   {status}", down ? 0xFFFF9090 : 0xFFFFC060) : null),
+                    Stats1: HJoin(atk, def, hit), Stats2: HJoin(Stat("회피 ", u.Evade, u.Status[2] > 0), Line($"  속도 {u.Speed}  이동 {u.Move}")),
+                    Weapon: Line($"무기 {weapon}"), Armor: HJoin(Line($"옷 {armor}"), StatusImg()),
                     Hp: Line($"{Math.Max(0, u.Hp)} / {u.MaxHp}"), Mp: Line($"{u.Mp} / {u.MaxMp}"), ExpNum: Line($"{u.Exp} / {_battle.LevelUpExp}"),
-                    Stats: Line($"공격 {u.Atk}  방어 {u.Def}  명중 {u.Hit}  회피 {u.Evade}  속도 {u.Speed}  이동 {u.Move}"),
-                    Gear: HJoin(Line($"무기 {weapon}   옷 {armor}"), status.Length > 0 ? Line($"   {status}", down ? 0xFFFF9090 : 0xFFFFC060) : null));
+                    Stats: HJoin(atk, def, hit, eva, Line($"  속도 {u.Speed}  이동 {u.Move}")),
+                    Gear: HJoin(Line($"무기 {weapon}   옷 {armor}"), StatusImg()));
         }).ToList();
 
         var hpL = Line("HP");

@@ -673,6 +673,9 @@ internal sealed partial class GameWindow
             bool walking = u.Moving || u.Path.Count > 0;
             int f = walking ? WalkCycle[(int)(_time * WalkFps) % WalkCycle.Length]
                             : WalkCycle[(int)(_time * IdleFps) % WalkCycle.Length];
+            // 마비(원작 sub_127E0, +38): 걸음을 멈춘 첫 그림으로, BIOS 틱(1/18.2초)마다 한 점씩 좌우로 떤다
+            bool frozen = InBattle && u.Paralyzed && !u.Lying;
+            if (frozen) { f = 0; if (((int)(_time * 18.2) & 1) != 0) sx += Math.Max(1, _zoom); }
             int frame = (int)u.Facing * 3 + f;
             if (u.Lying) frame = (int)Dir.Left * 3 + 1;   // 누운 사람 — 왼옆 모습을 눕힌다
             var hi = HiIcon(u.Icon, frame);

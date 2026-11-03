@@ -25,6 +25,8 @@
         <!-- 모드 > 고해상도 — 지도 · 캐릭터를 업스케일 모델로 키운다(HiRes.cs). 그래픽 카드(DirectML), 안 되면 CPU. -->
         <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.17.3" />
         <PackageReference Include="Vortice.D3DCompiler" Version="3.8.3" />
+        <!-- 설치판 자동 업데이트(Updater.cs) — CI 의 vpk 와 같은 버전 -->
+        <PackageReference Include="Velopack" Version="0.0.1298" />
         <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
     </ItemGroup>
 

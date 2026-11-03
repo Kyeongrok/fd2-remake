@@ -60,6 +60,37 @@ jobs:
           Compress-Archive -Path publish/Fd2.exe, publish/Fd2.Editor.exe -DestinationPath "dist/Fd2-v$v.zip" -Force
           Get-ChildItem publish, dist | Select-Object Name, Length | Format-Table -AutoSize
 
+      # 설치판 — 창세기전3 파트2 · 대항해시대처럼 Velopack 으로 Setup.exe 와 자동 업데이트 꾸러미를 만든다.
+      # 게임과 편집기를 한 폴더(pack)에 나란히(단일 파일이 아니라 폴더 — 델타 업데이트가 바뀐 파일만 받는다). 태그로 돌 때만.
+      - name: Publish for installer
+        if: startsWith(github.ref, 'refs/tags/fd2-v')
+        shell: pwsh
+        run: |
+          $v = "${{ steps.version.outputs.version }}"
+          foreach ($proj in 'src/Fd2/Fd2.csproj', 'src/Fd2.Editor/Fd2.Editor.csproj') {
+            dotnet publish $proj -c Release -r win-x64 --self-contained true -o pack `
+              -p:DebugType=none `
+              -p:Version=$v -p:AssemblyVersion=$v -p:FileVersion=$v -p:InformationalVersion=$v
+            if ($LASTEXITCODE -ne 0) { throw "$proj publish(설치판) 실패" }
+          }
+          if (-not (Test-Path "pack/Fd2.exe")) { throw "pack 에 Fd2.exe 가 없습니다" }
+
+      - name: Install vpk
+        if: startsWith(github.ref, 'refs/tags/fd2-v')
+        # CLI 와 라이브러리(Velopack 0.0.1298, Fd2.csproj) 버전을 맞춘다.
+        run: dotnet tool install -g vpk --version 0.0.1298
+
+      - name: Download previous release for delta updates
+        if: startsWith(github.ref, 'refs/tags/fd2-v')
+        run: vpk download github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --outputDir releases
+        continue-on-error: true
+
+      - name: Pack with Velopack
+        if: startsWith(github.ref, 'refs/tags/fd2-v')
+        # --mainExe: 설치가 끝나면 띄우고 바로가기를 거는 exe — 그 exe 는 Main 맨 앞에서 VelopackApp.Build().Run() 을 부른다(Program.cs).
+        # --noPortable: 설치 없이 도는 판은 단일 파일 Fd2.exe 가 따로 있다.
+        run: vpk pack --packId Fd2Remake --packTitle "용의기사2" --packAuthors "Kyeongrok" --packVersion ${{ steps.version.outputs.version }} --packDir pack --mainExe Fd2.exe --outputDir releases --icon assets/icons/game.ico --noPortable
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -89,6 +120,11 @@ jobs:
           }
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Setup.exe · 업데이트 꾸러미(nupkg · releases.win.json)를 같은 릴리즈에 더한다(--merge — 위에서 올린 exe · zip 은 그대로).
+      - name: Upload installer (Velopack)
+        if: startsWith(github.ref, 'refs/tags/fd2-v')
+        run: vpk upload github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --tag ${{ github.ref_name }} --releaseName "용의기사2 ${{ github.ref_name }}" --outputDir releases --publish --merge
 
       # 릴리즈 본문은 src/Fd2/릴리즈노트.md 의 이 판 대목(「## fd2-v판번호」 아래)이다.
       # 대목이 없으면 본문을 안 건드린다.
