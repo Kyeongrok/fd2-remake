@@ -2498,7 +2498,8 @@ internal sealed partial class GameWindow
         }
         // ▶ 자리는 글 크기만큼 — 폰은 글이 커서 예전 16점 자리로는 ▶ 가 첫 글자를 덮었다(사용자 요청)
         var arrow = Text.Render("▶", fs, 0xFFFFE070);
-        int textX = arrow.W + 8;
+        bool noArrow = InTownView && !_townTop;   // 상점 · 건물 안 목록은 고른 줄 바탕색으로 보인다 — ▶ 는 뺀다(w-134)
+        int textX = noArrow ? 12 : arrow.W + 8;
         int w = imgs.Max(i => i.W) + textX + 16, rowH = imgs.Max(i => i.H) + pad;
         // 보이는 줄 수 — 다 안 들어가면 넘긴다(고른 줄이 보이게 따라가고, 끌거나 휠로 넘기면 그 자리에)
         int fit = Math.Max(1, (_clientH - top - bottom) / rowH);
@@ -2538,7 +2539,7 @@ internal sealed partial class GameWindow
             if (_mouseX >= rect.x && _mouseY >= rect.Item2 && _mouseX < x + w && _mouseY < rect.Item2 + rowH && _mouseMoved && !_menuDragging) _menuIndex = i;
             FillRect(rect.x, rect.Item2, w, rowH - 2, roomy ? (i == _menuIndex ? 0xFF34447Eu : 0xFF1A2140u) : i == _menuIndex ? 0xE0405090u : 0xD0202030u);
             int ty = rect.Item2 + (rowH - 2 - imgs[i].H) / 2;
-            if (i == _menuIndex) DrawText(arrow, x + 4, ty);
+            if (i == _menuIndex && !noArrow) DrawText(arrow, x + 4, ty);
             DrawText(imgs[i], x + textX, ty);
             _menu[i] = (_menu[i].Label, _menu[i].Do, rect);
         }

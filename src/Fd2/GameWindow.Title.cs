@@ -374,7 +374,7 @@ internal sealed partial class GameWindow
         (_loadUp, _loadDown) = (default, default);
 
         int pad = Math.Max(8, fs / 2), gap = Math.Max(6, fs / 3);
-        int cw = Math.Min(_clientW - 2 * pad, fs * 30), cx = (_clientW - cw) / 2;
+        int cw = Math.Min(_clientW - 2 * pad, fs * 40), cx = (_clientW - cw) / 2;   // 한 줄 카드라 넓게(w-132)
 
         // 머리 — 제목과 도움말
         var head = Text.Render("불러오기", fs * 3 / 2, 0xFFFFE070);
@@ -402,8 +402,9 @@ internal sealed partial class GameWindow
         }
 
         // 카드들
-        int mainFs = fs, subFs = Math.Max(12, fs * 4 / 5);
-        int cardH = Text.Render("가", mainFs, 0xFFFFFFFF).H + Text.Render("가", subFs, 0xFFFFFFFF).H + pad * 2 + 4;
+        // 한 줄 카드(w-132) — 「2장 로터촌  전황 1 · 3턴 … 11-02 17:58」, 두 줄이던 자리만큼 글을 키운다
+        int mainFs = fs * 3 / 2, subFs = Math.Max(12, mainFs * 4 / 5);
+        int cardH = Text.Render("가", mainFs, 0xFFFFFFFF).H + pad * 2;
         int listTop = y, listBottom = by - gap;
         int arrowH = Math.Max(fs, cardH / 2);
         int fit = Math.Max(1, (listBottom - listTop + gap) / (cardH + gap));
@@ -439,20 +440,26 @@ internal sealed partial class GameWindow
             var nameImg = Text.Render(name, mainFs, sel ? 0xFFFFE070 : 0xFFFFFFFF);
             DrawText(nameImg, tx, cy + pad);
             // 장 제목(원작 글 550 + 장면 — 「사라촌가는길」 …, 사용자 요청 w-117) — 원작 글꼴로 장 번호 옆에
+            int lx = tx + nameImg.W + pad;
             if (i < _continueList.Count && (_continueList[i].Campaign.Battle?.Scene ?? _continueList[i].Campaign.NextScene) is int sc and >= 0 and < 30
                 && NameImage(550 + sc, MenuNameScale(mainFs), sel ? 0xFFFFE070 : 0xFFE8E0C0) is { } title)
-                DrawText(title, tx + nameImg.W + pad, cy + pad + (nameImg.H - title.H) / 2);
+            {
+                DrawText(title, lx, cy + pad + (nameImg.H - title.H) / 2);
+                lx += title.W + pad;
+            }
+            int right = cx + cw - pad;
             if (when.Length > 0)
             {
                 var whenImg = Text.Render(when, subFs, FdEdgeLit, bold: false);
-                DrawText(whenImg, cx + cw - whenImg.W - pad, cy + pad + (nameImg.H - whenImg.H) / 2);
+                DrawText(whenImg, right - whenImg.W, cy + pad + (nameImg.H - whenImg.H) / 2);
+                right -= whenImg.W + pad;
             }
-            if (detail.Length > 0)
+            if (detail.Length > 0 && right - lx > 0)
             {
                 var d = Text.Render(detail, subFs, 0xFFFFFFFF, bold: false);
-                int room = cx + cw - pad - tx;
+                int room = right - lx;
                 if (d.W > room) d = Text.Render(detail, Math.Max(10, subFs * room / Math.Max(1, d.W)), 0xFFFFFFFF, bold: false);
-                DrawText(d, tx, cy + pad + nameImg.H + 4);
+                DrawText(d, lx, cy + pad + (nameImg.H - d.H) / 2);
             }
             _titleRects[i] = (cx, cy, cw, cardH);
             cy += cardH + gap;

@@ -291,9 +291,12 @@ public partial class MainWindow : Window
     private void BuildTableEditors()
     {
         var side = new ComboBox { Width = 260, ItemsSource = new[] { "아군 (동료 꼴 · 레벨업 성장)", "적군 (몬스터 — 능력은 레벨당 값)" }, SelectedIndex = 0 };
+        // 아군 표는 합류할 때의 처음 값 — 이미 합류한 동료는 세이브의 능력치 · 장비를 쓴다(w-135, 편집기 값과 게임 값이 달라 보인다는 제보)
+        var allyNote = Label("   ※ 합류할 때의 처음 값(능력치 · 성장 · 처음 장비)입니다. 이미 합류한 동료는 세이브(기록)에 남은 능력치 · 장비를 써서 바뀌지 않습니다 — 새로 시작하거나 아직 합류 전인 동료에 들어갑니다.");
+        allyNote.Foreground = Brushes.DarkRed;
         var stats = new TableEditor(this, () => side.SelectedIndex == 1 ? StatTables.Enemies() : StatTables.Allies(), () => _exe, "FD2.EXE 에 저장", SaveExe, LoadStats,
-            r => Face(side.SelectedIndex == 1 ? GameTables.MonsterBase + r : r), Label("표"), side);
-        side.SelectionChanged += (_, _) => stats.Refresh();
+            r => Face(side.SelectedIndex == 1 ? GameTables.MonsterBase + r : r), Label("표"), side, allyNote);
+        side.SelectionChanged += (_, _) => { allyNote.Visibility = side.SelectedIndex == 1 ? Visibility.Collapsed : Visibility.Visible; stats.Refresh(); };
         StatsHost.Content = stats;
 
         int scenes = _field == null ? 0 : ((Dat.U32(_field, 6) - 6) / 4 - 1) / 3;   // 장면 n = FDFIELD 3n · 3n+1 · 3n+2

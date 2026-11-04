@@ -16,6 +16,20 @@ internal sealed partial class GameWindow
     /// <summary>화면 방향 설정을 폰에 적용 — 안드로이드만.</summary>
     partial void ApplyScreenLock();
 
+    /// <summary>화면 방향을 잠시 바꾼다(0 폰 설정 · 1 세로 · 2 가로) — 안드로이드만.</summary>
+    partial void LockOrientation(int kind);
+
+    /// <summary>마을에서 「돌리기」로 화면을 돌렸나(w-133) — 마을을 나가면 설정대로 되돌린다.</summary>
+    private bool _townRotated;
+    private (int X, int Y, int W, int H) _rotIcon;
+
+    /// <summary>마을 「돌리기」 — 세로면 가로로, 가로면 세로로.</summary>
+    private void RotateTown()
+    {
+        _townRotated = true;
+        LockOrientation(_clientH > _clientW ? 2 : 1);
+    }
+
     private static string EscSpotName(int spot) => spot switch { 0 => "오른쪽 위", 1 => "오른쪽 아래", 3 => "왼쪽 아래", _ => "위 · 오른쪽 아래" };
 
     /// <summary>오른쪽 위 줄의 아래 끝 — 미니맵 패널을 그 밑에 놓는다(폰은 ESC 단추 밑).</summary>
@@ -23,8 +37,9 @@ internal sealed partial class GameWindow
 
     private void DrawHudToggles(int fs)
     {
-        _miniFold = _chestFold = _escIcon = _menuIcon = _mapIcon = _partyIcon = _readyIcon = _escIcon2 = _townPrev = _townNext = _townEnter = default;
+        _miniFold = _chestFold = _escIcon = _menuIcon = _mapIcon = _partyIcon = _readyIcon = _escIcon2 = _townPrev = _townNext = _townEnter = _rotIcon = default;
         _hudIconBottom = 12;
+        if (_townRotated && !InTownView) { _townRotated = false; ApplyScreenLock(); }   // 마을을 나가면 화면 방향을 설정대로(w-133)
         _chestRows.Clear();
         if (_bs is BattleState.CutIn or BattleState.Talk) return;
         if (TouchUi) DrawTouchButtons(fs);
@@ -44,7 +59,7 @@ internal sealed partial class GameWindow
 
     /// <summary>그 자리가 접기 단추 · ESC 단추인가 — 단추 누르기는 지도 끌기로 받지 않는다.</summary>
     private bool HudHit(int mx, int my) => (_touchMiniBig && _touchMini.W > 0) ||
-        _chestRows.Select(c => c.Rect).Concat([_townPrev, _townNext, _townEnter, _miniFold, _chestFold, _escIcon, _escIcon2, _menuIcon, _mapIcon, _partyIcon, _readyIcon, _touchMini]).Any(r => r.W > 0 && mx >= r.X - 4 && my >= r.Y - 4 && mx < r.X + r.W + 4 && my < r.Y + r.H + 4);
+        _chestRows.Select(c => c.Rect).Concat([_rotIcon, _townPrev, _townNext, _townEnter, _miniFold, _chestFold, _escIcon, _escIcon2, _menuIcon, _mapIcon, _partyIcon, _readyIcon, _touchMini]).Any(r => r.W > 0 && mx >= r.X - 4 && my >= r.Y - 4 && mx < r.X + r.W + 4 && my < r.Y + r.H + 4);
 
     /// <summary>단추를 눌렀으면 그 패널을 접고 펴고(ESC 는 원작 Esc, 메뉴는 모바일 메뉴) true.</summary>
     private bool HudToggleClick(int mx, int my)
@@ -53,6 +68,7 @@ internal sealed partial class GameWindow
         if (_touchMiniBig && _touchMini.W > 0) return TouchMinimapClick(mx, my);   // 큰 미니맵은 어디를 눌러도 닫는다(w-122)
         if (In(_escIcon, mx, my) || In(_escIcon2, mx, my)) { _mouseMoved = false; PlaySfx(Sound.UiBank, Sound.Cursor); BattleKey(Win32.VK_ESCAPE); return true; }
         if (In(_menuIcon, mx, my)) { OpenTouchMenu(); return true; }
+        if (In(_rotIcon, mx, my)) { PlaySfx(Sound.UiBank, Sound.Cursor); RotateTown(); return true; }
         if (In(_townEnter, mx, my)) { _mouseMoved = false; PlaySfx(Sound.UiBank, Sound.Cursor); BattleKey(Win32.VK_RETURN); return true; }
         if (In(_townPrev, mx, my) || In(_townNext, mx, my))
         {
@@ -146,6 +162,7 @@ internal sealed partial class GameWindow
             int next = menuAt.X;
             if (!TownTop) { _mapIcon = DrawHudButton("지도", fs, next - 10, y, "map"); next = _hudDefault.X; }
             _partyIcon = DrawHudButton("파티", fs, next - 10, y, "party");   // 파티 정보 — 메뉴에서 빼 단추로(사용자 요청)
+            if (TownTop) _rotIcon = DrawHudButton("돌리기", fs, _hudDefault.X - 10, y);   // 마을 — 화면을 돌려 넓게 보기(w-133)
         }
         if (bottom > 0) _hudIconBottom = bottom + 6;
         if (TownTop)

@@ -25,6 +25,8 @@ internal sealed partial class GameWindow
 
     partial void ApplyScreenLock() => ScreenLocker?.Invoke(_settings.ScreenLock);
 
+    partial void LockOrientation(int kind) => ScreenLocker?.Invoke(kind);
+
     /// <summary>버그 리포트 글 쓰는 창(요약, 보내기) — MainActivity 가 채운다.</summary>
     internal static Action<string, Action<string>>? BugAsker;
 
