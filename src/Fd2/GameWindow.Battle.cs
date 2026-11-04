@@ -470,6 +470,9 @@ internal sealed partial class GameWindow
             case BattleState.Banner:   // 알림 글 — 누르면 바로 다음(w-115)
                 _bannerLeft = 0;
                 return;
+            case BattleState.CutIn:   // 전투 장면 — 누르면 건너뛴다(w-130). 아직 안 맞았으면 셈부터
+                SkipCutIn();
+                return;
             case BattleState.Over:
                 OpenOverMenu();
                 return;
@@ -696,13 +699,19 @@ internal sealed partial class GameWindow
         return false;
     }
 
+    /// <summary>Esc 로 마지막에 간 사람 — 다음 Esc 는 그 다음 사람부터.</summary>
+    private Unit? _lastReady;
+
     /// <summary>Esc 를 거듭 누르면 — 커서가 아직 행동하지 않은 아군을 차례로 옮겨 다닌다(지금 커서 칸 다음 사람부터).</summary>
     private void CursorToNextReady()
     {
         var ready = Controlled.Where(Ready).OrderBy(u => u.Slot).ToList();
         if (ready.Count == 0) return;
         int at = ready.FindIndex(u => (u.X, u.Y) == _cursor);
+        // 커서가 아군 칸이 아니면(마우스가 살짝 움직였거나 폰에서 단추를 눌러 커서가 옮겨 갔다) 지난번에 간 사람 다음부터(w-131)
+        if (at < 0 && _lastReady != null) at = ready.IndexOf(_lastReady);
         var next = ready[(at + 1) % ready.Count];
+        _lastReady = next;
         _cursor = (next.X, next.Y);
         _centerCursor = true;
         PlaySfx(Sound.UiBank, Sound.Cursor);
@@ -1648,6 +1657,18 @@ internal sealed partial class GameWindow
         if (_strikeDamage >= 0 && _strikeFrame == frames - 1 && _strikeTail > 0.7 && !SpellFxRunning) NextStrike();
     }
 
+    /// <summary>전투 장면을 건너뛴다(w-130) — 남은 치기 · 반격까지 셈만 하고 지도로. 마법 효과도 멈춘다.</summary>
+    private void SkipCutIn()
+    {
+        PlaySfx(Sound.UiBank, Sound.Cursor);
+        do
+        {
+            if (_strikeDamage < 0) ResolveStrike();
+            _sfx = null;
+            NextStrike();
+        } while (_bs == BattleState.CutIn);
+    }
+
     // ── 컴퓨터 차례 ───────────────────────────────────────────────────────────
 
     /// <summary>
@@ -2194,7 +2215,7 @@ internal sealed partial class GameWindow
     /// <summary>폰 미니맵이 떠 있나 — 「지도」 단추로 열고 닫는다(저장하지 않음).</summary>
     private bool _touchMiniOpen;
 
-    /// <summary>폰 미니맵을 눌러 화면 가득 키웠나(w-122) — 한 번 더 누르면 작은 미니맵으로.</summary>
+    /// <summary>폰 미니맵이 화면 가득인가 — 「지도」 단추를 누르면 바로 화면 가득 뜨고(w-129), 어디를 누르면 닫힌다(w-122).</summary>
     private bool _touchMiniBig;
     private int _touchMiniCell, _miniBottom;
 
@@ -2221,7 +2242,7 @@ internal sealed partial class GameWindow
     private void DrawTouchMinimap()
     {
         _touchMini = default;
-        if (!_touchMiniOpen || _bs is BattleState.CutIn or BattleState.Talk or BattleState.Phase) { _touchMiniBig = false; return; }
+        if (!_touchMiniOpen || _bs is BattleState.CutIn or BattleState.Talk or BattleState.Phase) { _touchMiniBig = _touchMiniOpen = false; return; }
         BuildMini();
         int m = Math.Max(2, Math.Min(_clientH / 2 / _scene.Height, _clientW / 3 / _scene.Width));
         int mw = _scene.Width * m, mh = _scene.Height * m, mx = 12, my = Math.Max(12, VersionLabelBottom + 4);
@@ -2267,7 +2288,7 @@ internal sealed partial class GameWindow
             PlaySfx(Sound.UiBank, Sound.Cursor);
             return true;
         }
-        _touchMiniBig = false;
+        _touchMiniBig = _touchMiniOpen = false;   // 닫으면 작은 미니맵도 남기지 않는다(w-129)
         PlaySfx(Sound.UiBank, Sound.Cursor);
         if (!inside) return true;
         int tx = (x - r.X) / _touchMiniCell, ty = (y - r.Y) / _touchMiniCell;

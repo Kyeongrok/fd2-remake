@@ -63,7 +63,8 @@ internal sealed partial class GameWindow
         }
         if (In(_readyIcon, mx, my)) { CursorToNextReady(); PlaySfx(Sound.UiBank, Sound.Cursor); return true; }
         if (In(_partyIcon, mx, my)) { PlaySfx(Sound.UiBank, Sound.Menu); OpenParty(); return true; }
-        if (In(_mapIcon, mx, my)) { _touchMiniOpen = !_touchMiniOpen; PlaySfx(Sound.UiBank, Sound.Cursor); return true; }
+        if (In(_mapIcon, mx, my)) { _touchMiniOpen = !_touchMiniOpen; _touchMiniBig = _touchMiniOpen;   // 바로 화면 가득(w-129)
+            PlaySfx(Sound.UiBank, Sound.Cursor); return true; }
         if (TouchMinimapClick(mx, my)) return true;
         if (_bs is BattleState.Select or BattleState.Target && _chestRows.FindIndex(c => In(c.Rect, mx, my)) is var row and >= 0)
         {
