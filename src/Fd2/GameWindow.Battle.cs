@@ -758,6 +758,9 @@ internal sealed partial class GameWindow
             case BattleState.Menu when _stage == MenuStage.Slots:   // 전황 칸 고르기 — 기록 십자 메뉴로
                 OpenRecordMenu();
                 break;
+            case BattleState.Menu when _stage == MenuStage.Mobile && _mobilePage == 3 && !TouchUi:   // PC 메뉴로 연 에디트 — 폰 메뉴 맨 위가 아니라 닫기(w-128)
+                CloseTouchMenu();
+                break;
             case BattleState.Menu when _stage == MenuStage.Mobile && _mobilePage > 0:   // 모바일 메뉴의 아래 쪽 — 맨 위로(에디트의 사람 쪽은 에디트로)
                 OpenTouchMenu(0, _mobilePage == 4 ? 3 : 0);
                 break;

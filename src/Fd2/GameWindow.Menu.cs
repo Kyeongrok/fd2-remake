@@ -16,7 +16,7 @@ internal sealed partial class GameWindow
 
     private const int MenuScenePrev = 1001, MenuSceneNext = 1002, MenuSceneBase = 1100;
     private const int MenuResBase = 1300, MenuZoomBase = 1400, MenuFullscreen = 1500, MenuResetView = 1501, MenuKeys = 1502, MenuVolume = 1503;
-    private const int MenuEditor = 1600, MenuExit = 1601, MenuHiRes = 1700, MenuShowRange = 1701, MenuMusic = 1702, MenuSound = 1703, MenuShowHelp = 1704, MenuShowGoals = 1705, MenuControlAllies = 1706, MenuMobileView = 1707, MenuBugReport = 1708, MenuSettingsDialog = 1709, MenuModeDialog = 1710, MenuShowUnitInfo = 1711, MenuSharedBag = 1712, MenuSkipEnemyFights = 1713, MenuMiniChests = 1714, MenuCloud = 1715, MenuSendStats = 1716;
+    private const int MenuEditor = 1600, MenuExit = 1601, MenuHiRes = 1700, MenuShowRange = 1701, MenuMusic = 1702, MenuSound = 1703, MenuShowHelp = 1704, MenuShowGoals = 1705, MenuControlAllies = 1706, MenuMobileView = 1707, MenuBugReport = 1708, MenuSettingsDialog = 1709, MenuModeDialog = 1710, MenuShowUnitInfo = 1711, MenuSharedBag = 1712, MenuSkipEnemyFights = 1713, MenuMiniChests = 1714, MenuCloud = 1715, MenuSendStats = 1716, MenuEdit = 1717;
     private const int MenuBattle = 1003, MenuBattleStop = 1004, MenuVersions = 1005;
 
     private static readonly (int W, int H)[] ResChoices =
@@ -41,6 +41,7 @@ internal sealed partial class GameWindow
         // 설정 · 모드는 창 하나로(사용자 요청 — 창세기전3 · 대항해시대3 처럼). GameWindow.SettingsDialog.cs
         Win32.AppendMenuW(bar, Win32.MF_STRING, MenuSettingsDialog, "설정(&S)...");
         Win32.AppendMenuW(bar, Win32.MF_STRING, MenuModeDialog, "모드(&M)...");
+        Win32.AppendMenuW(bar, Win32.MF_STRING, MenuEdit, "에디트 — 돈 · 경험치(&D)...");   // 폰 메뉴의 에디트와 같은 것(w-128)
 
         IntPtr tools = Win32.CreatePopupMenu();
         Win32.AppendMenuW(tools, Win32.MF_STRING, MenuEditor, "편집기 열기(&E)...");
@@ -78,6 +79,11 @@ internal sealed partial class GameWindow
                 _settings.SendStats = !_settings.SendStats;
                 if (!_settings.SendStats) _play = null;
                 _settings.Save();
+                break;
+            case MenuEdit:
+                // 폰 메뉴의 에디트 쪽(돈 올리기 · 동료마다 경험치) — 우리 차례에 고르는 중이거나 마을 첫 화면에서(w-128)
+                if (CanOpenTouchMenu) OpenTouchMenu(0, 3);
+                else Toast("에디트는 전투 중 우리 차례(명령을 고르기 전)나 마을 첫 화면에서 쓸 수 있습니다");
                 break;
             case MenuSharedBag:
                 ToggleSharedBag();   // 켜면 동료 가방의 물건을 모으고, 끄면 나눠 넣는다(w-114)
