@@ -303,8 +303,9 @@ public sealed partial class Battle
         return e;
     }
 
-    /// <summary>최대 레벨 — 꼴 30 · 31(카일 · 워터)은 110, 나머지는 원작 50 을 99 로 올렸다(사용자 요청).</summary>
-    public static int MaxLevel(Unit u) => u.FormId is 30 or 31 ? 110 : 99;
+    /// <summary>최대 레벨 — 원작은 50(카일 · 워터 110), 리메이크는 모두 999(사용자 요청 w-123). 256 이상은 세이브 +40 · +41 에(<see cref="HeroRecord.Level"/>).</summary>
+    public const int LevelCap = 999;
+    public static int MaxLevel(Unit u) => LevelCap;
 
     /// <summary>
     /// 경험 e 를 받는다(sub_1E292) — 합이 <see cref="LevelUpExp"/>(원본 100) 넘는 동안 레벨 +1 · 성장 · 그만큼 빼기(최대 레벨에 닿으면 합 0).

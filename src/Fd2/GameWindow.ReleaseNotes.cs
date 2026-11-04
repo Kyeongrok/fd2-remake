@@ -16,10 +16,14 @@ internal sealed partial class GameWindow
     private List<(string Version, List<string> Lines)> _notesShown = new();
     private int? _notesDragFrom;
 
-    /// <summary>실행 파일에 든 릴리즈 노트 — 대목(새것부터)마다 버전과 줄들.</summary>
+    /// <summary>버전이 아닌 대목(「## 도움을 주신 분」) — 노트 끝에 늘 붙인다.</summary>
+    private static readonly List<(string Head, List<string> Lines)> _notesExtra = new();
+
+    /// <summary>실행 파일에 든 릴리즈 노트 — 대목(새것부터)마다 버전과 줄들. 버전이 아닌 대목은 <see cref="_notesExtra"/> 로.</summary>
     private static List<(string Version, List<string> Lines)> ReadNotes()
     {
         var list = new List<(string, List<string>)>();
+        _notesExtra.Clear();
         try
         {
             using var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("Fd2.ReleaseNotes.md");
@@ -31,7 +35,8 @@ internal sealed partial class GameWindow
                 if (line.StartsWith("## "))
                 {
                     string v = line[3..].Trim();
-                    if (v.StartsWith("fd2-")) v = v[4..];
+                    if (!v.StartsWith("fd2-")) { cur = new List<string>(); _notesExtra.Add((v, cur)); continue; }
+                    v = v[4..];
                     v = v.TrimStart('v');   // 「0.14.33」 — 그릴 때 v 를 붙인다
                     cur = new List<string>();
                     list.Add((v, cur));
@@ -54,7 +59,7 @@ internal sealed partial class GameWindow
             int at = all.FindIndex(n => n.Version == since);
             shown = at > 0 ? all.Take(Math.Min(at, 10)).ToList() : all.Take(1).ToList();   // 처음 보는 사람(지난 버전 모름)은 이번 대목만
         }
-        _notesShown = shown;
+        _notesShown = shown.Concat(_notesExtra.Select(e => ("#" + e.Head, e.Lines))).ToList();   // 「#」 = 버전이 아닌 대목
         _notesHead = since != null ? $"{TitleVersion} 로 업데이트했습니다" : "릴리즈 노트";
         (_notesOpen, _notesScroll, _notesDragFrom) = (true, 0, null);
         PlaySfx(Sound.UiBank, Sound.Menu);
@@ -131,7 +136,7 @@ internal sealed partial class GameWindow
         int gap = small / 2;
         foreach (var (ver, lines) in _notesShown)
         {
-            rows.Add((Text.Render($"v{ver}", fs, 0xFFFFE070), 0));
+            rows.Add((Text.Render(ver.StartsWith('#') ? ver[1..] : $"v{ver}", fs, 0xFFFFE070), 0));
             foreach (var raw in lines)
             {
                 bool bullet = raw.StartsWith("- ");

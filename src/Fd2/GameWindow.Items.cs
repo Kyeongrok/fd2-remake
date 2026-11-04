@@ -338,7 +338,7 @@ internal sealed partial class GameWindow
             DrawText(n, sx + sw - n.W - 16, y + lineH);
         }
         Bar("HP·", u.Hp, u.MaxHp, 0xFFF0D040, cy);
-        Bar("MP·", u.Mp, u.MaxMp, 0xFFA01818, cy + lineH * 2);
+        Bar("MP·", u.Mp, u.MaxMp, MpColor, cy + lineH * 2);
         }
 
         // 아래 — 가방 목록
@@ -448,7 +448,7 @@ internal sealed partial class GameWindow
         }
         int barY = y + m + boxS - 2 * U(18);
         Bar("HP", u.Hp, u.MaxHp, 0xFFF0D040, barY);
-        Bar("MP", u.Mp, u.MaxMp, 0xFF5088E0, barY + U(18));
+        Bar("MP", u.Mp, u.MaxMp, MpColor, barY + U(18));
         var cells = new (string Label, int Value)[] { ("공격", u.Atk), ("방어", u.Def), ("이동", u.Move), ("명중", u.Hit), ("회피", u.Evade), ("속도", u.Speed) };
         int gridY = y + m + boxS + U(8), gap = U(4), cw = (w - 2 * m - 2 * gap) / 3, ch = U(36);
         for (int k = 0; k < cells.Length; k++)

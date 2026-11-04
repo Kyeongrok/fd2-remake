@@ -288,6 +288,22 @@ public static class HeroRecord
 {
     public const int Size = 80;
 
+    /// <summary>
+    /// 레벨 — 원작은 +33 한 바이트(최대 255). 리메이크는 999 까지라(w-123) 256 이상이면 원작이 안 쓰는 +40 에 윗바이트,
+    /// +41 에 표식 0x4C 를 둔다(표식이 없으면 +40 은 보지 않는다 — 원작 세이브의 찌꺼기를 레벨로 읽지 않게).
+    /// </summary>
+    public static int Level(byte[] r) => Math.Max(1, r[33] | (r[41] == LevelMark ? r[40] << 8 : 0));
+
+    public static void SetLevel(byte[] r, int level)
+    {
+        level = Math.Clamp(level, 1, 0xFFFF);
+        r[33] = (byte)level;
+        if (level > 255) (r[40], r[41]) = ((byte)(level >> 8), LevelMark);
+        else if (r[41] == LevelMark) (r[40], r[41]) = (0, 0);
+    }
+
+    private const byte LevelMark = 0x4C;
+
     public static int Id(byte[] r) => r[8];
     public static int Form(byte[] r) => r[7];
     public static int Hp(byte[] r) => BinaryPrimitives.ReadUInt16LittleEndian(r.AsSpan(64));
@@ -312,7 +328,7 @@ public static class HeroRecord
         var u = new Unit
         {
             Icon = CharacterNames.SpriteOf(r[7], royalsMoved), Form = r[7], Id = r[8], Side = team == 0 ? Side.Other : Side.Player, Ai = team == 1,
-            Slot = slot, Level = Math.Max(1, (int)r[33]), X = r[0], Y = r[1], Facing = Enum.IsDefined((Dir)r[3]) ? (Dir)r[3] : Dir.Down,
+            Slot = slot, Level = Level(r), X = r[0], Y = r[1], Facing = Enum.IsDefined((Dir)r[3]) ? (Dir)r[3] : Dir.Down,
         };
         battle.Setup(u);
         Apply(r, u);
@@ -340,7 +356,8 @@ public static class HeroRecord
             else (r[10 + 2 * k], r[11 + 2 * k]) = (0x80, 0xFF);
         }
         for (int k = 0; k < 5; k++) r[26 + k] = (byte)(u.Spells >> (8 * k));
-        (r[31], r[32], r[33]) = ((byte)u.Race, (byte)u.Class, (byte)u.Level);
+        (r[31], r[32]) = ((byte)u.Race, (byte)u.Class);
+        SetLevel(r, u.Level);
         for (int k = 0; k < 6; k++) r[34 + k] = (byte)u.Status[k];
         r[49] = (byte)u.DropKind;
         BinaryPrimitives.WriteUInt16LittleEndian(r.AsSpan(50), (ushort)u.DropValue);
@@ -374,7 +391,7 @@ public static class HeroRecord
             if ((r[10 + 2 * k] & 0x80) == 0) u.Bag.Add((r[11 + 2 * k], (r[10 + 2 * k] & 0x40) != 0));
         u.Spells = 0;
         for (int k = 0; k < 5; k++) u.Spells |= (ulong)r[26 + k] << (8 * k);
-        (u.Race, u.Class, u.Level) = (r[31], r[32], Math.Max(1, (int)r[33]));
+        (u.Race, u.Class, u.Level) = (r[31], r[32], Level(r));
         for (int k = 0; k < 6; k++) u.Status[k] = r[34 + k];
         u.BaseAtk = BinaryPrimitives.ReadInt16LittleEndian(r.AsSpan(55));
         u.BaseDef = BinaryPrimitives.ReadInt16LittleEndian(r.AsSpan(57));

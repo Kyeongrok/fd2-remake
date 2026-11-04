@@ -133,12 +133,16 @@ jobs:
         shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}"
-          $keep = $false
+          $keep = $false; $thanks = $false
+          $credits = @()
           $body = foreach ($line in Get-Content -Encoding UTF8 "src/Fd2/릴리즈노트.md") {
-            if ($line -match '^## ') { $keep = ($line.Substring(3).Trim() -eq $tag); continue }
+            if ($line -match '^## ') { $h = $line.Substring(3).Trim(); $keep = ($h -eq $tag); $thanks = ($h -eq '도움을 주신 분'); continue }
+            if ($thanks -and $line.Trim()) { $credits += $line }
             if ($keep) { $line }
           }
           $text = ($body -join "`n").Trim()
+          # 「## 도움을 주신 분」 대목은 릴리즈마다 끝에 붙인다
+          if ($text -and $credits.Count -gt 0) { $text += "`n`n### 도움을 주신 분`n" + ($credits -join "`n") }
           if ($text) {
             Set-Content -Encoding UTF8 -Path notes.md -Value $text
             gh release edit $tag --notes-file notes.md

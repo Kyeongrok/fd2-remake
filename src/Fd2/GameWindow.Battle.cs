@@ -582,6 +582,8 @@ internal sealed partial class GameWindow
                     var magic = MagicTiles(who);
                     if (magic.Count > 0) { _magicTiles = magic; PlaySfx(Sound.UiBank, Sound.Cursor); return; }
                 }
+                // 범위를 보던 행동 마친 아군을 한 번 더 — 그 동료의 자세히 창(능력 · 상태 · 물건 · 마법, w-121)
+                if (_rangeOf == who && who.Side == Side.Player && OpenPartyDetailOf(who)) return;
                 Select(who);
                 _actor = null;
                 _rangeOf = who;
@@ -1920,13 +1922,17 @@ internal sealed partial class GameWindow
         }
         _miniBottom = 0;
         if (TouchUi) DrawTouchMinimap();   // 폰은 왼쪽 위 반투명 미니맵, 보물 목록은 그 밑
+        bool bigMini = _touchMiniBig && _touchMini.W > 0;   // 화면 가득 미니맵(w-122) — 그 위에 다른 창을 얹지 않는다
+        if (!bigMini)
+        {
         if (!TouchUi || _settings.TouchChests) DrawChestList(fs);
         if (!TouchUi) DrawMinimap();
         int tileH = !TouchUi || _settings.TouchTileInfo ? DrawTileInfo(fs) : 0;
         var hover = HoverUnit() ?? _actor;
         if (hover is { MaxHp: > 0 } && (TouchUi ? _settings.TouchUnitInfo : _settings.ShowUnitInfo)) DrawInfo(hover, fs, tileH);   // PC 는 모드 「캐릭터 정보 창」(기본 끔)
+        }
 
-        if (_bs is BattleState.Select or BattleState.Target or BattleState.Moving && !_mouseMoved) DrawCursor();   // 마우스를 쓰는 동안에는 커서를 숨긴다
+        if (!bigMini && _bs is BattleState.Select or BattleState.Target or BattleState.Moving && !_mouseMoved) DrawCursor();   // 마우스를 쓰는 동안에는 커서를 숨긴다
         if (_bs == BattleState.Menu) DrawMenu(fs);
 
         DrawBannerBox(fs);
@@ -1987,6 +1993,9 @@ internal sealed partial class GameWindow
     }
 
     /// <summary>정보 창 — 이름(몬스터는 원본 글꼴 이름) · 레벨 · 경험, HP · MP, 공격 · 방어 · 명중 · 회피, 이동 · 사거리, 상태.</summary>
+    /// <summary>MP 막대 색 — 어디서나 파랑(HP 노랑과 헷갈리지 않게, w-124).</summary>
+    private const uint MpColor = 0xFF4890F0;
+
     private void DrawInfo(Unit u, int fs, int below = 0)
     {
         string range = u.RangeMax == 0 ? "-" : u.RangeMax >= 16 ? $"직선 {u.RangeMax - 16}" : u.RangeMin == u.RangeMax ? $"{u.RangeMax}" : $"{u.RangeMin}~{u.RangeMax}";
@@ -2181,6 +2190,9 @@ internal sealed partial class GameWindow
 
     /// <summary>폰 미니맵이 떠 있나 — 「지도」 단추로 열고 닫는다(저장하지 않음).</summary>
     private bool _touchMiniOpen;
+
+    /// <summary>폰 미니맵을 눌러 화면 가득 키웠나(w-122) — 한 번 더 누르면 작은 미니맵으로.</summary>
+    private bool _touchMiniBig;
     private int _touchMiniCell, _miniBottom;
 
     /// <summary>칸마다 타일 평균 색 — 미니맵 바탕(장면이 바뀌면 다시).</summary>
@@ -2206,10 +2218,18 @@ internal sealed partial class GameWindow
     private void DrawTouchMinimap()
     {
         _touchMini = default;
-        if (!_touchMiniOpen || _bs is BattleState.CutIn or BattleState.Talk or BattleState.Phase) return;
+        if (!_touchMiniOpen || _bs is BattleState.CutIn or BattleState.Talk or BattleState.Phase) { _touchMiniBig = false; return; }
         BuildMini();
         int m = Math.Max(2, Math.Min(_clientH / 2 / _scene.Height, _clientW / 3 / _scene.Width));
         int mw = _scene.Width * m, mh = _scene.Height * m, mx = 12, my = Math.Max(12, VersionLabelBottom + 4);
+        if (_touchMiniBig)
+        {
+            // 화면 가득 — 가운데, 바깥은 어둡게
+            m = Math.Max(2, Math.Min((_clientW - 24) / _scene.Width, (_clientH - 24) / _scene.Height));
+            (mw, mh) = (_scene.Width * m, _scene.Height * m);
+            (mx, my) = ((_clientW - mw) / 2, (_clientH - mh) / 2);
+            FillRect(0, 0, _clientW, _clientH, 0xC0000000);
+        }
         FillRect(mx - 3, my - 3, mw + 6, mh + 6, 0x80101020);
         for (int y = 0; y < _scene.Height; y++)
             for (int x = 0; x < _scene.Width; x++) FillRect(mx + x * m, my + y * m, m, m, 0xB0000000 | _mini![y * _scene.Width + x] & 0xFFFFFF);
@@ -2228,11 +2248,25 @@ internal sealed partial class GameWindow
         // 닫기 ✕ 는 두지 않는다(오른쪽 메뉴를 가렸다, 사용자 요청) — 「지도」 단추를 한 번 더 누르면 닫힌다
     }
 
-    /// <summary>폰 미니맵을 눌렀으면 그 칸이 가운데 오게 지도를 옮기고 true.</summary>
+    /// <summary>
+    /// 폰 미니맵을 눌렀다 — 작은 미니맵이면 화면 가득 키우고, 큰 미니맵이면 어디를 눌러도 작게 되돌린다(w-122).
+    /// 큰 미니맵 안을 눌렀으면 그 칸이 가운데 오게 지도도 옮긴다.
+    /// </summary>
     private bool TouchMinimapClick(int x, int y)
     {
         var r = _touchMini;
-        if (r.W <= 0 || x < r.X || y < r.Y || x >= r.X + r.W || y >= r.Y + r.H) return false;
+        if (r.W <= 0) { _touchMiniBig = false; return false; }
+        bool inside = x >= r.X && y >= r.Y && x < r.X + r.W && y < r.Y + r.H;
+        if (!_touchMiniBig)
+        {
+            if (!inside) return false;
+            _touchMiniBig = true;
+            PlaySfx(Sound.UiBank, Sound.Cursor);
+            return true;
+        }
+        _touchMiniBig = false;
+        PlaySfx(Sound.UiBank, Sound.Cursor);
+        if (!inside) return true;
         int tx = (x - r.X) / _touchMiniCell, ty = (y - r.Y) / _touchMiniCell;
         int mw = _scene.Width * T, mh = _scene.Height * T;
         if (mw > _boardW) _camX = Math.Clamp(tx * T + T / 2 - _boardW / 2, -CamOver, mw - _boardW + CamOver);
@@ -2383,8 +2417,13 @@ internal sealed partial class GameWindow
         if (InTownView) (sx, sy) = (_clientW, 8);   // 마을 그림 위 — 오른쪽 위에(건물 안 목록은 아래에서 가운데로)
         int cell = T * _zoom;
         if (TouchUi) fs = _stage == MenuStage.Mobile ? fs * 2 : fs * 4 / 3;   // 폰은 메뉴 글을 더 크게(모바일 메뉴는 두 배) — 넘치면 줄이지 않고 끌어 넘긴다(사용자 요청)
+        // PC 건물 안 목록(사기 · 팔기 · 장비 …) — 글을 키우고(작아 읽기 어렵다, w-125), 줄이 많으면 줄이지 않고 휠 · 방향키로 넘긴다. 폭만 화면에 맞춘다
+        bool pcShop = !TouchUi && InTownView && !_townTop;
+        if (pcShop) fs = Math.Max(20, fs * 4 / 3);
         var imgs = MenuImages(fs);
-        if (!TouchUi)
+        if (pcShop)
+            while (fs > 14 && imgs.Max(i => i.W) + fs * 2 + 24 > _clientW - 8) imgs = MenuImages(fs -= 2);
+        else if (!TouchUi)
         {
             // 줄이 많아 화면 높이를 넘으면 글을 줄인다
             while (fs > 12 && (imgs.Max(i => i.H) + 12) * imgs.Count > _clientH - 8)
@@ -2858,11 +2897,12 @@ internal sealed partial class GameWindow
             int barX = x + 24 * s, barW = (W - 30) * s - Math.Max(n.W, 22 * s), barH = 6 * s;
             FillRect(barX, ry + s, barW, barH, 0xFF3A4670);   // 막대 바탕 — 검정은 너무 짙어 창 바탕보다 조금 어두운 남색으로
             if (max <= 0) return;
-            FillRect(barX + s, ry + 2 * s, barW - 2 * s, barH - 2 * s, 0xFFC02020);
+            // 빈 몫 — HP 는 빨강, MP 는 어두운 남색(빨강이면 MP 가 빨갛게 보여 헷갈린다, w-124)
+            FillRect(barX + s, ry + 2 * s, barW - 2 * s, barH - 2 * s, label == "HP" ? 0xFFC02020 : 0xFF283050);
             FillRect(barX + s, ry + 2 * s, (barW - 2 * s) * Math.Clamp(now, 0, max) / max, barH - 2 * s, color);
         }
         Bar("HP", 21, hp, u.MaxHp, 0xFFF0C030);
-        Bar("MP", 31, u.Mp, u.MaxMp, 0xFF58A030);
+        Bar("MP", 31, u.Mp, u.MaxMp, MpColor);
     }
 
     private readonly Dictionary<(int, int, uint), Text.Image?> _nameImages = new();

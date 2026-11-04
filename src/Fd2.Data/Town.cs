@@ -24,7 +24,7 @@ public sealed class Town(Campaign campaign, Battle battle)
     public int SellPrice(int item) => T.Items[item].Price * 3 / 4;
 
     /// <summary>부활 값 — 직업 부활값(word_52397) × 레벨(sub_2A43E).</summary>
-    public int ReviveCost(byte[] r) => r[32] < T.Classes.Count ? T.Classes[r[32]].Revive * Math.Max(1, (int)r[33]) : 0;
+    public int ReviveCost(byte[] r) => r[32] < T.Classes.Count ? T.Classes[r[32]].Revive * Level(r) : 0;
 
     // ── 칸 읽기 ────────────────────────────────────────────────────────────
 
@@ -37,7 +37,7 @@ public sealed class Town(Campaign campaign, Battle battle)
         return bag;
     }
 
-    public static int Level(byte[] r) => Math.Max(1, (int)r[33]);
+    public static int Level(byte[] r) => HeroRecord.Level(r);
 
     /// <summary>쓰러졌나 — 교회 부활 대상(sub_34894 · sub_2A07A). 동료 표에선 HP 0.</summary>
     public static bool Down(byte[] r) => HeroRecord.Hp(r) == 0;
@@ -163,7 +163,7 @@ public sealed class Town(Campaign campaign, Battle battle)
     public (int Form, int Item)? ChangeTo(byte[] r)
     {
         int f = r[7];
-        if (r[33] < 20 || f >= 18 || f == 7) return null;
+        if (Level(r) < 20 || f >= 18 || f == 7) return null;
         var bag = Bag(r);
         bool Has(int item) => item != 255 && bag.Any(b => b.Item == item);
         if (f == 9 && Has(90)) return (52, 90);

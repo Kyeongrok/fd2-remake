@@ -43,13 +43,14 @@ internal sealed partial class GameWindow
     }
 
     /// <summary>그 자리가 접기 단추 · ESC 단추인가 — 단추 누르기는 지도 끌기로 받지 않는다.</summary>
-    private bool HudHit(int mx, int my) =>
+    private bool HudHit(int mx, int my) => (_touchMiniBig && _touchMini.W > 0) ||
         _chestRows.Select(c => c.Rect).Concat([_townPrev, _townNext, _townEnter, _miniFold, _chestFold, _escIcon, _escIcon2, _menuIcon, _mapIcon, _partyIcon, _readyIcon, _touchMini]).Any(r => r.W > 0 && mx >= r.X - 4 && my >= r.Y - 4 && mx < r.X + r.W + 4 && my < r.Y + r.H + 4);
 
     /// <summary>단추를 눌렀으면 그 패널을 접고 펴고(ESC 는 원작 Esc, 메뉴는 모바일 메뉴) true.</summary>
     private bool HudToggleClick(int mx, int my)
     {
         static bool In((int X, int Y, int W, int H) r, int x, int y) => r.W > 0 && x >= r.X - 4 && y >= r.Y - 4 && x < r.X + r.W + 4 && y < r.Y + r.H + 4;
+        if (_touchMiniBig && _touchMini.W > 0) return TouchMinimapClick(mx, my);   // 큰 미니맵은 어디를 눌러도 닫는다(w-122)
         if (In(_escIcon, mx, my) || In(_escIcon2, mx, my)) { _mouseMoved = false; PlaySfx(Sound.UiBank, Sound.Cursor); BattleKey(Win32.VK_ESCAPE); return true; }
         if (In(_menuIcon, mx, my)) { OpenTouchMenu(); return true; }
         if (In(_townEnter, mx, my)) { _mouseMoved = false; PlaySfx(Sound.UiBank, Sound.Cursor); BattleKey(Win32.VK_RETURN); return true; }

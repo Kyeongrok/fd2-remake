@@ -37,7 +37,26 @@ internal sealed partial class GameWindow
         (_partyScroll, _partyVel) = (0, 0);
     }
 
-    private void CloseParty() => (_partyOpen, _partyDrag, _partyDetail) = (false, null, false);
+    private void CloseParty() => (_partyOpen, _partyDrag, _partyDetail, _partyDetailOnly) = (false, null, false, false);
+
+    /// <summary>지도에서 바로 연 자세히 창 — 닫으면 목록이 아니라 지도로(w-121).</summary>
+    private bool _partyDetailOnly;
+
+    /// <summary>그 동료의 자세히 창(능력 · 상태 · 물건 · 마법)을 바로 연다 — 행동을 마친 아군을 한 번 더 눌렀을 때(w-121).</summary>
+    private bool OpenPartyDetailOf(Unit u)
+    {
+        var party = PartyMembers();
+        int i = party.IndexOf(u);
+        if (i < 0) return false;
+        _party = party;
+        (_partyOpen, _partyTop, _partyDrag, _partyScroll, _partyVel) = (true, 0, null, 0, 0);
+        PartyDetail(i);
+        _partyDetailOnly = true;
+        return true;
+    }
+
+    /// <summary>자세히 창을 닫는다 — 지도에서 바로 열었으면 파티 창째로.</summary>
+    private void ClosePartyDetail() { if (_partyDetailOnly) CloseParty(); else _partyDetail = false; }
 
     /// <summary>자세히 창(원작 인물 정보 창처럼 — 능력 · 가방 물건 · 아는 마법, 제보 w-95)이 열려 있나.</summary>
     private bool _partyDetail;
@@ -120,7 +139,7 @@ internal sealed partial class GameWindow
             {
                 case Win32.VK_UP or Win32.VK_LEFT: PartySelect(_partyIndex == 0 ? n - 1 : _partyIndex - 1); PlaySfx(Sound.UiBank, Sound.Cursor); break;
                 case Win32.VK_DOWN or Win32.VK_RIGHT: PartySelect(_partyIndex == n - 1 ? 0 : _partyIndex + 1); PlaySfx(Sound.UiBank, Sound.Cursor); break;
-                case Win32.VK_ESCAPE or Win32.VK_RETURN or Win32.VK_SPACE: _partyDetail = false; break;
+                case Win32.VK_ESCAPE or Win32.VK_RETURN or Win32.VK_SPACE: ClosePartyDetail(); break;
                 default: if (action == KeyAction.Party) CloseParty(); break;
             }
             return true;
@@ -158,7 +177,7 @@ internal sealed partial class GameWindow
     private bool PartyPress(int x, int y)
     {
         if (!_partyOpen) return false;
-        if (_partyDetail) { _partyDetail = false; _partyTap = -1; return true; }   // 자세히 창은 누르면 목록으로
+        if (_partyDetail) { ClosePartyDetail(); _partyTap = -1; return true; }   // 자세히 창은 누르면 목록으로
         if (!InRect(_partyBox, x, y)) { CloseParty(); return true; }
         int hit = _partyRects.FindIndex(r => InRect(r, x, y));
         bool flinging = Math.Abs(_partyVel) > 60;   // 미끄러지는 중에 누르면 멈추기만
@@ -337,7 +356,7 @@ internal sealed partial class GameWindow
                 else bx = barX + barW + 8 + numW + small;
             }
             Bar(hpL, c.Hp, u.Hp, u.MaxHp, 0xFFF0C030);
-            if (u.MaxMp > 0) Bar(Line("MP"), c.Mp, u.Mp, u.MaxMp, 0xFF58A030);
+            if (u.MaxMp > 0) Bar(Line("MP"), c.Mp, u.Mp, u.MaxMp, MpColor);
             if (narrow)
             {
                 // 이름 · 경험 · HP · MP · 능력 둘 · 무기 · 옷 — MP 가 없는 사람도 자리를 맞춘다
@@ -427,7 +446,7 @@ internal sealed partial class GameWindow
         if (bw > fs * 4)
         {
             Bar("HP", u.Hp, u.MaxHp, 0xFFF0D040, cy);
-            Bar("MP", u.Mp, u.MaxMp, 0xFFA01818, cy + lineH * 2);
+            Bar("MP", u.Mp, u.MaxMp, MpColor, cy + lineH * 2);
         }
 
         // 아래 — 물건 | 마법

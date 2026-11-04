@@ -84,7 +84,7 @@ internal sealed partial class GameWindow
             int id = HeroRecord.Id(r), line = _menu.Count;
             bool locked = id == 0 || required.Contains(id), on = _deploy.Contains(id);
             _menuGlyphs[line] = id + 1;
-            _menu.Add(($"{(on ? "■" : "□")} Lv{r[33],-3} {(locked ? "(꼭) " : "")}", () =>
+            _menu.Add(($"{(on ? "■" : "□")} Lv{Town.Level(r),-3} {(locked ? "(꼭) " : "")}", () =>
             {
                 if (locked) { PlaySfx(Sound.UiBank, 7); return; }
                 if (_deploy.Contains(id)) _deploy.Remove(id);
