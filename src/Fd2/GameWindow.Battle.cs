@@ -2536,7 +2536,7 @@ internal sealed partial class GameWindow
             int row = i - _menuScroll;
             if (row < 0 || row >= shown) { _menu[i] = (_menu[i].Label, _menu[i].Do, default); continue; }   // 가려진 줄은 누를 수 없다
             var rect = (x, y + row * rowH, w, rowH);
-            if (_mouseX >= rect.x && _mouseY >= rect.Item2 && _mouseX < x + w && _mouseY < rect.Item2 + rowH && _mouseMoved && !_menuDragging) _menuIndex = i;
+            if (_mouseX >= rect.x && _mouseY >= rect.Item2 && _mouseX < x + w && _mouseY < rect.Item2 + rowH && _mouseMoved && !_menuDragging && _menuPress == null) _menuIndex = i;   // 누르고 있는 동안(끌어 넘기기일 수 있다)은 고른 줄을 안 바꾼다(w-138)
             FillRect(rect.x, rect.Item2, w, rowH - 2, roomy ? (i == _menuIndex ? 0xFF34447Eu : 0xFF1A2140u) : i == _menuIndex ? 0xE0405090u : 0xD0202030u);
             int ty = rect.Item2 + (rowH - 2 - imgs[i].H) / 2;
             if (i == _menuIndex && !noArrow) DrawText(arrow, x + 4, ty);
@@ -2588,6 +2588,7 @@ internal sealed partial class GameWindow
         if (_menuPress == null) return false;
         bool dragged = _menuDragging;
         (_menuPress, _menuDragging) = (null, false);
+        if (dragged) _mouseMoved = false;   // 넘기고 뗀 자리의 줄이 골라지지 않게(w-138)
         if (!dragged) PointerDown(x, y);
         return true;
     }

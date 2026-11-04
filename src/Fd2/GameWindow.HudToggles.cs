@@ -162,7 +162,7 @@ internal sealed partial class GameWindow
             int next = menuAt.X;
             if (!TownTop) { _mapIcon = DrawHudButton("지도", fs, next - 10, y, "map"); next = _hudDefault.X; }
             _partyIcon = DrawHudButton("파티", fs, next - 10, y, "party");   // 파티 정보 — 메뉴에서 빼 단추로(사용자 요청)
-            if (TownTop) _rotIcon = DrawHudButton("돌리기", fs, _hudDefault.X - 10, y);   // 마을 — 화면을 돌려 넓게 보기(w-133)
+            if (TownTop) _rotIcon = DrawRotateButton(fs, _hudDefault.X - 10, y);   // 마을 — 화면을 돌려 넓게 보기(w-133), 그림 단추(w-136)
         }
         if (bottom > 0) _hudIconBottom = bottom + 6;
         if (TownTop)
@@ -213,6 +213,46 @@ internal sealed partial class GameWindow
         FillRect(x, y, 1, h, edge); FillRect(x + w - 1, y, 1, h, edge);
         DrawText(label, x + pad, y + pad / 2);
         _readyIcon = (x, y, w, h);
+    }
+
+    /// <summary>
+    /// 화면 돌리기 그림 단추(w-136) — 글자 단추와 같은 높이 · 테두리, 가운데 폰 모양과 그 둘레를 도는 화살표. 오른쪽 끝이 right.
+    /// </summary>
+    private (int X, int Y, int W, int H) DrawRotateButton(int fs, int right, int y)
+    {
+        int h = Text.Render("가", fs, 0xFFFFFFFF).H + fs / 2, w = h * 5 / 4, x = right - w;
+        const uint edge = 0xC0FFFFFF, ink = 0xFFFFFFFF;
+        FillRect(x, y, w, h, 0x90101020);
+        FillRect(x, y, w, 1, edge); FillRect(x, y + h - 1, w, 1, edge);
+        FillRect(x, y, 1, h, edge); FillRect(x + w - 1, y, 1, h, edge);
+        double cx = x + w / 2.0, cy = y + h / 2.0, r = h * 0.36;
+        int t = Math.Max(2, h / 14), t2 = Math.Max(1, h / 20);
+        // 가운데 폰(세로 네모 테두리)
+        int pw = (int)(r * 0.55), ph = (int)(r * 0.9), px = (int)(cx - pw / 2.0), py = (int)(cy - ph / 2.0);
+        FillRect(px, py, pw, t2, ink); FillRect(px, py + ph - t2, pw, t2, ink);
+        FillRect(px, py, t2, ph, ink); FillRect(px + pw - t2, py, t2, ph, ink);
+        // 둘레 화살(위 오른쪽에서 시계 방향으로 거의 한 바퀴)
+        double a0 = -55, a1 = 225;
+        for (double a = a0; a <= a1; a += 3)
+        {
+            double rad = a * Math.PI / 180;
+            FillRect((int)(cx + r * Math.Cos(rad) - t / 2.0), (int)(cy + r * Math.Sin(rad) - t / 2.0), t, t, ink);
+        }
+        // 화살촉 — 끝(a0)에서 반시계 쪽을 향해(그림이 시계 방향으로 돌게)
+        double e = a0 * Math.PI / 180, ex = cx + r * Math.Cos(e), ey = cy + r * Math.Sin(e);
+        double dx = Math.Sin(e), dy = -Math.Cos(e);   // a 가 줄어드는 쪽(반시계) 접선
+        double sz = Math.Max(4, h * 0.18);
+        (double X, double Y) tip = (ex + dx * sz, ey + dy * sz), l = (ex - dy * sz * 0.8, ey + dx * sz * 0.8), rr = (ex + dy * sz * 0.8, ey - dx * sz * 0.8);
+        int bx0 = (int)Math.Floor(Math.Min(tip.X, Math.Min(l.X, rr.X))), bx1 = (int)Math.Ceiling(Math.Max(tip.X, Math.Max(l.X, rr.X)));
+        int by0 = (int)Math.Floor(Math.Min(tip.Y, Math.Min(l.Y, rr.Y))), by1 = (int)Math.Ceiling(Math.Max(tip.Y, Math.Max(l.Y, rr.Y)));
+        static double Side((double X, double Y) p, (double X, double Y) q, double ax, double ay) => (q.X - p.X) * (ay - p.Y) - (q.Y - p.Y) * (ax - p.X);
+        for (int qy = by0; qy <= by1; qy++)
+            for (int qx = bx0; qx <= bx1; qx++)
+            {
+                double s1 = Side(tip, l, qx + .5, qy + .5), s2 = Side(l, rr, qx + .5, qy + .5), s3 = Side(rr, tip, qx + .5, qy + .5);
+                if (s1 >= 0 && s2 >= 0 && s3 >= 0 || s1 <= 0 && s2 <= 0 && s3 <= 0) FillRect(qx, qy, 1, 1, ink);
+            }
+        return (x, y, w, h);
     }
 
     /// <summary>

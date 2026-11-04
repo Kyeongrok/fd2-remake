@@ -40,6 +40,9 @@ internal sealed partial class GameWindow
     private void CloseParty() => (_partyOpen, _partyDrag, _partyDetail, _partyDetailOnly) = (false, null, false, false);
 
     /// <summary>지도에서 바로 연 자세히 창 — 닫으면 목록이 아니라 지도로(w-121).</summary>
+    /// <summary>장비한 물건 이름 색 — 원작처럼 빨강(w-139).</summary>
+    private const uint EquippedColor = 0xFFFF5050;
+
     private bool _partyDetailOnly;
 
     /// <summary>그 동료의 자세히 창(능력 · 상태 · 물건 · 마법)을 바로 연다 — 행동을 마친 아군을 한 번 더 눌렀을 때(w-121).</summary>
@@ -250,8 +253,8 @@ internal sealed partial class GameWindow
         int gold = InBattle ? _battle.Gold : _campaign?.Gold ?? 0;
         var title = Text.Render($"파티 정보 — {_party.Count}명 · 돈 {gold}", fs, 0xFFFFE070);
         bool narrow = _clientW < _clientH;   // 세로 화면 — 옆이 잘리지 않게 줄을 나눠 세로로 길게(사용자 요청)
-        var hint = Text.Render(PartyGearOn ? "동료를 누르면 장비를 바꿉니다 · 창 밖을 누르면 닫기" : narrow ? "눌러 자세히 · 끌어 넘기기 · 창 밖을 누르면 닫기" : TouchUi ? "줄을 누르면 자세히(물건 · 마법) · 끌어 넘기기 · 창 밖을 누르면 닫기"
-                                       : $"↑↓ · 휠 고르기 · 누르기 · Enter 자세히(물건 · 마법) · {KeyBindings.KeyName(_keyMap[KeyAction.Party])} · Esc 닫기", small, 0xFF9098A8, bold: false);
+        var hint = Text.Render((PartyGearOn ? "동료를 누르면 장비를 바꿉니다 · 창 밖을 누르면 닫기" : narrow ? "눌러 자세히 · 끌어 넘기기 · 창 밖을 누르면 닫기" : TouchUi ? "줄을 누르면 자세히(물건 · 마법) · 끌어 넘기기 · 창 밖을 누르면 닫기"
+                                       : $"↑↓ · 휠 고르기 · 누르기 · Enter 자세히(물건 · 마법) · {KeyBindings.KeyName(_keyMap[KeyAction.Party])} · Esc 닫기") + " · 초록 숫자 = 파티 최고", small, 0xFF9098A8, bold: false);
 
         // 한 사람의 글 줄 — 넷째 줄까지(이름 · 막대 · 능력 · 장비)
         Text.Image Line(string s, uint c = 0xFFFFFFFF) => Text.Render(s, small, c, bold: false);
@@ -265,6 +268,9 @@ internal sealed partial class GameWindow
         int faceH = faceOf.Where(f => f != null).Select(f => f!.Value.H * faceS).DefaultIfEmpty(0).Max();
         _partyCardH = Math.Max(textH, faceH) + 12;
 
+        // 능력마다 파티에서 가장 높은 값 — 그 숫자는 초록으로(한눈에 비교, w-140). 모두 같으면 안 칠한다
+        int? Top(Func<Unit, int> f) { var v = _party.Select(f).ToList(); return v.Count > 1 && v.Max() != v.Min() ? v.Max() : null; }
+        int? topAtk = Top(u => u.Atk), topDef = Top(u => u.Def), topHit = Top(u => u.Hit), topEva = Top(u => u.Evade), topSpd = Top(u => u.Speed), topMov = Top(u => u.Move);
         var cards = _party.Select(u =>
         {
             bool down = u.Hp <= 0;
@@ -277,17 +283,19 @@ internal sealed partial class GameWindow
             string headShort = $"  {GameNames.Class(u.Class)}  Lv {u.Level}", exp = u.Team == 2 ? $"경험 {u.Exp}/{_battle.LevelUpExp}" : "(컴퓨터 아군)";
             // 원작 정보 창(sub_17FC0)처럼 오른 능력 숫자는 색을 바꾼다. 상태는 오른 것 노랑 · 독 · 마비 · 봉쇄 빨강
             const uint upC = 0xFFFFD040, badC = 0xFFFF9090;
-            Text.Image Stat(string label, int v, bool up) => HJoin(Line(label), Line($"{v}", up && !down ? upC : 0xFFFFFFFF));
+            const uint topC = 0xFF60F080;
+            Text.Image Stat(string label, int v, bool up, int? top = null) => HJoin(Line(label), Line($"{v}", up && !down ? upC : v == top ? topC : 0xFFFFFFFF));
+            var spd = HJoin(Stat("  속도 ", u.Speed, false, topSpd), Stat("  이동 ", u.Move, false, topMov));
             Text.Image? StatusImg() => status.Length == 0 ? null : down ? Line($"   {status}", badC)
                 : HJoin(Enumerable.Range(0, 6).Where(k => u.Status[k] > 0)
                     .Select(k => Line($"   {Battle.StatusNames[k]}({u.Status[k]})", k < 3 ? upC : badC)).ToArray());
-            var atk = Stat("공격 ", u.Atk, u.Status[0] > 0); var def = Stat("  방어 ", u.Def, u.Status[1] > 0);
-            var hit = Stat("  명중 ", u.Hit, u.Status[2] > 0); var eva = Stat("  회피 ", u.Evade, u.Status[2] > 0);
+            var atk = Stat("공격 ", u.Atk, u.Status[0] > 0, topAtk); var def = Stat("  방어 ", u.Def, u.Status[1] > 0, topDef);
+            var hit = Stat("  명중 ", u.Hit, u.Status[2] > 0, topHit); var eva = Stat("  회피 ", u.Evade, u.Status[2] > 0, topEva);
             return (Head: HJoin(name, Line(narrow ? headShort : head)), Exp: Line(exp),
-                    Stats1: HJoin(atk, def, hit), Stats2: HJoin(Stat("회피 ", u.Evade, u.Status[2] > 0), Line($"  속도 {u.Speed}  이동 {u.Move}")),
+                    Stats1: HJoin(atk, def, hit), Stats2: HJoin(Stat("회피 ", u.Evade, u.Status[2] > 0, topEva), spd),
                     Weapon: Line($"무기 {weapon}"), Armor: HJoin(Line($"옷 {armor}"), StatusImg()),
                     Hp: Line($"{Math.Max(0, u.Hp)} / {u.MaxHp}"), Mp: Line($"{u.Mp} / {u.MaxMp}"), ExpNum: Line($"{u.Exp} / {_battle.LevelUpExp}"),
-                    Stats: HJoin(atk, def, hit, eva, Line($"  속도 {u.Speed}  이동 {u.Move}")),
+                    Stats: HJoin(atk, def, hit, eva, spd),
                     Gear: HJoin(Line($"무기 {weapon}   옷 {armor}"), StatusImg()));
         }).ToList();
 
@@ -461,7 +469,7 @@ internal sealed partial class GameWindow
             int ry = iy + (i + 1) * lineH;
             var mark = T(on ? "E" : " ", 0xFFFF9070);
             DrawText(mark, colX0, ry);
-            var nm = NameImage(181 + id, g, on ? 0xFFFFFFFF : 0xFFB8C8FF) ?? T(GameNames.Item(id), on ? 0xFFFFFFFF : 0xFFB8C8FF);
+            var nm = NameImage(181 + id, g, on ? EquippedColor : 0xFFB8C8FF) ?? T(GameNames.Item(id), on ? EquippedColor : 0xFFB8C8FF);   // 장비한 것은 빨강(원작, w-139)
             int nx = colX0 + T("E ").W;
             DrawText(nm, nx, ry);
             string eff = ItemEffect(id);

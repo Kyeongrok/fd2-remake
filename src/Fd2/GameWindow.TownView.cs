@@ -121,6 +121,9 @@ internal sealed partial class GameWindow
     /// <summary>마을 그림 자리 · 배율 — 건물 누르기에 쓴다.</summary>
     private (int X, int Y, double S) _townPicAt;
 
+    /// <summary>오른쪽 아래 건물 이름 상자 자리 — 누르면 고른 건물에 들어간다(w-137).</summary>
+    private (int X, int Y, int W, int H) _townLabelAt;
+
     /// <summary>마을 첫 화면을 눌렀다 — 가장 가까운 건물을 고르고, 이미 고른 건물이면 들어간다. 받았으면 참.</summary>
     private bool TownTap(int mx, int my)
     {
@@ -133,6 +136,12 @@ internal sealed partial class GameWindow
             var (tx, ty) = _tables.TownSpot(shop.Town, i - 1);
             double dx = px + (tx + T / 2) * s - mx, dy = py + (ty + T / 2) * s - my, d = dx * dx + dy * dy;
             if (d < bestD) (bestD, best) = (d, i);
+        }
+        var lb = _townLabelAt;
+        if (lb.W > 0 && mx >= lb.X && my >= lb.Y && mx < lb.X + lb.W && my < lb.Y + lb.H && _menuIndex > 0 && _menuIndex < _menu.Count)
+        {
+            _menu[_menuIndex].Do();   // 건물 이름을 누르면 그 건물로 들어간다(w-137)
+            return true;
         }
         if (best < 0) return false;
         if (best == _menuIndex) { _menu[best].Do(); return true; }
@@ -182,6 +191,7 @@ internal sealed partial class GameWindow
         }
         var pic = TownPicture(shop.Town);
         FillRect(0, 0, _clientW, _clientH, 0xFF000000);
+        _townLabelAt = default;
         if (pic == null) return;
         double s = Math.Min(_clientW / (double)AfmPlayer.Width, _clientH / (double)AfmPlayer.Height);
         int pw = (int)(AfmPlayer.Width * s), ph = (int)(AfmPlayer.Height * s), px = (_clientW - pw) / 2, py = (_clientH - ph) / 2;
@@ -201,6 +211,7 @@ internal sealed partial class GameWindow
         if (TownLabel() is { } label)
         {
             BlitFit(label.Px, label.W, label.H, X(244), Y(162), (int)(label.W * s), (int)(label.H * s));
+            _townLabelAt = (X(244), Y(162), (int)(label.W * s), (int)(label.H * s));
             int g = Math.Max(1, (int)s);
             if (NameImage(495 + _townSpot, g, 0xFFFFFFFF) is { } name)
                 DrawText(name, X(244) + ((int)(label.W * s) - name.W) / 2, Y(162) + ((int)(label.H * s) - name.H) / 2);

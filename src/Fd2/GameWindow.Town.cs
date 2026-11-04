@@ -212,7 +212,7 @@ internal sealed partial class GameWindow
         if (_settings.SharedBag && _tables!.Items[item].Kind >= 32 && PoolItem(item)) { BuyToPool(item, price, Back); return; }
         BeginTownMenu(Back);
         _menuGlyphs[0] = 181 + item;
-        _menu.Add(($"{price}원 — 누가 받나  ", () => { }, default));
+        _menu.Add(($"{price}원{(ItemEffect(item) is { Length: > 0 } fx ? " · " + fx : "")} — 누가 받나  ", () => { }, default));   // 고른 물건의 효과도(w-138)
         if (_settings.SharedBag && PoolItem(item)) _menu.Add(("공통 가방에 넣는다", () => BuyToPool(item, price, Back), default));   // 장비는 나중에 아무나
         foreach (int i in takers.Skip(page * TownPage).Take(TownPage))
         {
