@@ -118,6 +118,9 @@ internal sealed class Settings
     /// <summary>켤 때 오프닝 — 타이틀 Setup 에서 끈다(w-102, 기본 켬).</summary>
     public bool ShowOpening { get; set; } = true;
 
+    /// <summary>시작 화면(타이틀) 뒤 그림 — 타이틀 Setup 에서 끄면 검은 바탕에 메뉴만(w-127, 기본 켬).</summary>
+    public bool ShowTitleImage { get; set; } = true;
+
     public bool TouchChests { get; set; }
     public bool TouchGoals { get; set; }
     public bool TouchHelp { get; set; }

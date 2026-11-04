@@ -530,7 +530,7 @@ internal sealed partial class GameWindow
         double ls = Math.Min(_clientW / (double)AfmPlayer.Width, _clientH / (double)AfmPlayer.Height);
         int lw = (int)(AfmPlayer.Width * ls), lh = (int)(AfmPlayer.Height * ls);
         int lx = (_clientW - lw) / 2, ly = (_clientH - lh) / 2;
-        if (_titleBack != null) BlitFit(_titleBack, AfmPlayer.Width, AfmPlayer.Height, lx, ly, lw, lh);
+        if (_titleBack != null && _settings.ShowTitleImage) BlitFit(_titleBack, AfmPlayer.Width, AfmPlayer.Height, lx, ly, lw, lh);
         MaybeOpenTutorial();   // 폰 — 완전 처음 시작이면 조작법 안내(w-91 · fb-85)
         MaybeOpenNotes();      // 게임 버전이 바뀌었으면 릴리즈 노트(w-101)
         if (_continueOpen) { DrawLoadScreen(fs); return; }
