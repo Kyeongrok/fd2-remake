@@ -433,25 +433,28 @@ internal sealed partial class GameWindow
             if (at >= 0 && System.Text.RegularExpressions.Regex.IsMatch(detail[(at + 3)..], @"^\d\d-\d\d \d\d:\d\d$")) (detail, when) = (detail[..at], detail[(at + 3)..]);
             bool sel = i == _titleIndex;
             uint kind = LoadKindColor(detail);   // 아랫줄이 「전황 1 · …」 「기록 2 · …」로 시작한다
+            // 칸 이름(「전황 6」 「기록 2」)은 보이지 않는다(w-143) — 종류는 왼쪽 띠 색으로. 원작 것만 「원작」을 남긴다
+            detail = System.Text.RegularExpressions.Regex.Replace(detail, @"^(원작 )?(전황|기록)( \d+)?( · )?", m => m.Groups[1].Success ? "원작 · " : "");
             FillRect(cx, cy, cw, cardH, sel ? FdBlueLit : FdBlue);
             Frame(cx, cy, cw, cardH, sel ? FdYellow : FdEdge);
             FillRect(cx + 3, cy + 3, Math.Max(4, pad / 2), cardH - 6, kind);
             int tx = cx + Math.Max(4, pad / 2) + pad;
-            var nameImg = Text.Render(name, mainFs, sel ? 0xFFFFE070 : 0xFFFFFFFF);
-            DrawText(nameImg, tx, cy + pad);
+            int lineH = cardH - pad * 2;   // 한 줄 높이 — 글은 이 안에서 가운데
+            var nameImg = Text.Render(name, Math.Max(12, mainFs * 3 / 4), sel ? 0xFFFFE070 : 0xFFFFFFFF);   // 「2장 앞」은 작게, 장 제목이 크게(w-146)
+            DrawText(nameImg, tx, cy + pad + (lineH - nameImg.H) / 2);
             // 장 제목(원작 글 550 + 장면 — 「사라촌가는길」 …, 사용자 요청 w-117) — 원작 글꼴로 장 번호 옆에
             int lx = tx + nameImg.W + pad;
             if (i < _continueList.Count && (_continueList[i].Campaign.Battle?.Scene ?? _continueList[i].Campaign.NextScene) is int sc and >= 0 and < 30
                 && NameImage(550 + sc, MenuNameScale(mainFs), sel ? 0xFFFFE070 : 0xFFE8E0C0) is { } title)
             {
-                DrawText(title, lx, cy + pad + (nameImg.H - title.H) / 2);
+                DrawText(title, lx, cy + pad + (lineH - title.H) / 2);
                 lx += title.W + pad;
             }
             int right = cx + cw - pad;
             if (when.Length > 0)
             {
-                var whenImg = Text.Render(when, subFs, FdEdgeLit, bold: false);
-                DrawText(whenImg, right - whenImg.W, cy + pad + (nameImg.H - whenImg.H) / 2);
+                var whenImg = Text.Render(when, Math.Max(11, mainFs * 3 / 5), FdEdgeLit, bold: false);   // 날짜 · 시간은 작게(w-145)
+                DrawText(whenImg, right - whenImg.W, cy + pad + (lineH - whenImg.H) / 2);
                 right -= whenImg.W + pad;
             }
             if (detail.Length > 0 && right - lx > 0)
@@ -459,7 +462,7 @@ internal sealed partial class GameWindow
                 var d = Text.Render(detail, subFs, 0xFFFFFFFF, bold: false);
                 int room = right - lx;
                 if (d.W > room) d = Text.Render(detail, Math.Max(10, subFs * room / Math.Max(1, d.W)), 0xFFFFFFFF, bold: false);
-                DrawText(d, lx, cy + pad + (nameImg.H - d.H) / 2);
+                DrawText(d, lx, cy + pad + (lineH - d.H) / 2);
             }
             _titleRects[i] = (cx, cy, cw, cardH);
             cy += cardH + gap;

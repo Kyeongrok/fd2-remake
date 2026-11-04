@@ -41,7 +41,7 @@ internal sealed partial class GameWindow
         // 설정 · 모드는 창 하나로(사용자 요청 — 창세기전3 · 대항해시대3 처럼). GameWindow.SettingsDialog.cs
         Win32.AppendMenuW(bar, Win32.MF_STRING, MenuSettingsDialog, "설정(&S)...");
         Win32.AppendMenuW(bar, Win32.MF_STRING, MenuModeDialog, "모드(&M)...");
-        Win32.AppendMenuW(bar, Win32.MF_STRING, MenuEdit, "에디트 — 돈 · 경험치(&D)...");   // 폰 메뉴의 에디트와 같은 것(w-128)
+        Win32.AppendMenuW(bar, Win32.MF_STRING, MenuEdit, "에디트 — 돈 · 경험치 · 아이템(&D)...");   // 폰 메뉴의 에디트와 같은 것(w-128)
 
         IntPtr tools = Win32.CreatePopupMenu();
         Win32.AppendMenuW(tools, Win32.MF_STRING, MenuEditor, "편집기 열기(&E)...");

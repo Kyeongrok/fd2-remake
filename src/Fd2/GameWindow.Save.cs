@@ -154,7 +154,7 @@ internal sealed partial class GameWindow
         }
     }
 
-    private static string SlotDetail(Campaign c) => $"동료 {c.Party.Count}명 · 돈 {c.Gold}";
+    private static string SlotDetail(Campaign c) => $"동료 {c.Party.Count}명";   // 돈은 안 보인다(w-144)
 
     private string SlotLabel(SaveFile save, int k) => save.ReadSlot(k) is { } c
         ? $"{ChapterName(c.NextScene)} 앞 · 동료 {c.Party.Count}명 · 돈 {c.Gold}"

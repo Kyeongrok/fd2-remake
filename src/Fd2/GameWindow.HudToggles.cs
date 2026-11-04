@@ -124,6 +124,25 @@ internal sealed partial class GameWindow
         if (_touchFromTown && _campaign is { } c) c.Gold = _battle.Gold;
     }
 
+    /// <summary>에디트 — 그 사람 가방에 물건 하나(w-147). 가방이 차면 공통 가방(켜져 있고 담을 수 있는 것)으로.</summary>
+    private void EditAddItem(Unit u, int item)
+    {
+        if (u.Bag.Count < 8)
+        {
+            u.Bag.Add((item, false));
+            EditCommit(u);
+            PlaySfx(Sound.UiBank, 5);
+            Toast($"{GameNames.Item(item)} 넣었습니다 (가방 {u.Bag.Count}/8)");
+        }
+        else if (_settings.SharedBag && PoolItem(item))
+        {
+            Pool.Add(item);
+            PlaySfx(Sound.UiBank, 5);
+            Toast($"가방이 가득 차 공통 가방에 넣었습니다 — {GameNames.Item(item)}");
+        }
+        else { PlaySfx(Sound.UiBank, 7); Toast("가방이 가득 찼습니다"); }
+    }
+
     /// <summary>에디트로 고친 사람을 동료 표에 — 마을의 사람은 동료 표로 세운 사본이다.</summary>
     private void EditCommit(Unit u)
     {
@@ -368,7 +387,7 @@ internal sealed partial class GameWindow
         ["화면 표시"] = ("화면 표시", "칸 정보 · 상대 정보 · 보물상자 · 승패 조건"),
         ["설정"] = ("설정", "속도 · 회전 고정 · 소리 · 조작"),
         ["시스템 메뉴"] = ("시스템 메뉴", "턴 끝 · 행군 · 전황 기록"),
-        ["에디트 — 돈 · 경험치"] = ("에디트", "돈 · 경험치"),
+        ["에디트 — 돈 · 경험치 · 아이템"] = ("에디트", "돈 · 경험치 · 아이템"),
         ["세이브 연동(구글 · 개발중)"] = ("세이브 연동(개발중)", "구글 계정에 기록 올리고 받기"),
         ["버그 리포트"] = ("버그 리포트", "문제를 적어 보내기"),
         ["타이틀로"] = ("타이틀로", "처음 화면으로(기록하지 않은 진행은 사라짐)"),
@@ -640,13 +659,27 @@ internal sealed partial class GameWindow
                         ShowNotices(notes, () => { _bs = BattleState.Menu; OpenTouchMenu(row, 4); });
                     }, default));
                 }
+                _menu.Add(($"아이템 넣기 — 회복약 · 장비  (가방 {eu.Bag.Count}/8)", () => OpenTouchMenu(0, 6), default));   // w-147
                 _menu.Add(("돌아가기", () => OpenTouchMenu(0, 3), default));
+                break;
+            case 6 when _editUnit is { } iu && _tables != null:
+                // 에디트 아이템 넣기(w-147) — 쓰는 물건(회복약 등) 먼저, 그다음 무기 · 옷. 가방이 차면 공통 가방으로(켜져 있으면)
+                _menuGlyphs[_menu.Count] = Battle.NameLine(iu);
+                _menu.Add(($"가방 {iu.Bag.Count}/8 — 넣을 물건", () => { }, default));
+                foreach (int id in Enumerable.Range(0, _tables.Items.Count).Where(i => GameNames.Item(i).Length > 0 && !GameNames.Item(i).All(char.IsDigit)).OrderBy(i => _tables.Items[i].Kind < 32 ? 1 : 0).ThenBy(i => i))
+                {
+                    int item = id;
+                    _menuGlyphs[_menu.Count] = 181 + item;
+                    _menuIcons[_menu.Count] = ItemIcon(item);
+                    _menu.Add(($"  {ItemEffect(item)}", () => { EditAddItem(iu, item); OpenTouchMenu(_menuIndex, 6); }, default));
+                }
+                _menu.Add(("돌아가기", () => OpenTouchMenu(0, 4), default));
                 break;
             default:
                 _menu.Add(("화면 표시", () => OpenTouchMenu(0, 1), default));
                 _menu.Add(("설정", () => OpenTouchMenu(0, 2), default));
                 if (!_touchFromTown) _menu.Add(("시스템 메뉴", OpenSystemMenu, default));   // 턴 끝 · 전황 기록은 싸움 것
-                _menu.Add(("에디트 — 돈 · 경험치", () => OpenTouchMenu(0, 3), default));
+                _menu.Add(("에디트 — 돈 · 경험치 · 아이템", () => OpenTouchMenu(0, 3), default));
                 _menu.Add(("세이브 연동(구글 · 개발중)", () => { Close(); OpenCloudDialog(); }, default));
                 _menu.Add(("버그 리포트", () => { Close(); OpenBugReport(); }, default));
                 _menu.Add(("타이틀로", () => OpenTouchMenu(1, 5), default));   // 메뉴에서 타이틀로 갈 길이 없었다(사용자 요청) — 한 번 묻는다
