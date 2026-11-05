@@ -203,7 +203,10 @@ internal sealed partial class GameWindow
             {
                 int slot = k;
                 var b = ReadBattleAt(BattleSlotPath(false, k));
-                string label = b != null && b.Scene < _sceneCount ? $"전황 {k + 1} — {ChapterName(b.Scene)} {b.Turn}턴 · {SavedAt(BattleSlotPath(false, k))}" : $"전황 {k + 1} — 빈 칸";
+                // 장 · 장 제목(원작 글 550 + 장면, 원작 글꼴) · 저장한 시간만(사용자 요청 w-153) —  자리에 장 제목 그림
+                bool has = b != null && b.Scene < _sceneCount;
+                string label = has ? $"{ChapterName(b!.Scene)}   {SavedAt(BattleSlotPath(false, k))}" : "빈 칸";
+                if (has && b!.Scene < 30) _menuGlyphs[_menu.Count] = 550 + b.Scene;
                 _menu.Add((label, () => AskSys(TxtAskSave, () => SaveBattleRecord(BattleSlotPath(false, slot))), default));
             }
         }

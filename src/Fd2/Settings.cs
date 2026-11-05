@@ -98,6 +98,9 @@ internal sealed class Settings
     /// <summary>미니맵에 안 연 보물상자 · 비밀상자 표시(모드, 사용자 요청) — 기본 켬.</summary>
     public bool MiniChests { get; set; } = true;
 
+    /// <summary>마법을 고르면 닿는 적 칸마다 최대 HP 의 몇 % 를 깎는지(모드, 기본 켬, 사용자 요청 w-151).</summary>
+    public bool SpellDamagePct { get; set; } = true;
+
     /// <summary>폰 남은 아군 표시 자리 — 0 아래 가운데 · 1 아래 왼쪽 · 2 아래 오른쪽(ESC 위) · 3 위 가운데 · 4 숨김(사용자 요청).</summary>
     public int ReadySpot { get; set; }
     /// <summary>

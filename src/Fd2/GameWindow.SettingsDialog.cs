@@ -168,6 +168,7 @@ internal sealed partial class GameWindow
             f.Controls.Add(Toggle("캐릭터 정보 창(전투 왼쪽 아래 — 이름 · HP · 능력치)", _settings.ShowUnitInfo, MenuShowUnitInfo));
             f.Controls.Add(Toggle("공통 가방(장비 안 한 물건 · 소모품을 한 곳에 모아 누구나 사용)", _settings.SharedBag, MenuSharedBag));
             f.Controls.Add(Toggle("미니맵에 보물상자 표시(금색 · 비밀 보라)", _settings.MiniChests, MenuMiniChests));
+            f.Controls.Add(Toggle("마법 고를 때 칸에 깎는 · 채우는 HP %(최대 HP 대비)", _settings.SpellDamagePct, MenuSpellPct));
             f.Controls.Add(Toggle("적 공격은 전투 장면 건너뛰기(지도에서 결과만)", _settings.SkipEnemyFights, MenuSkipEnemyFights));
             f.Controls.Add(Choice("전투 모션 속도", SpellSpeeds.Select(SpellSpeedName).ToArray(), Array.IndexOf(SpellSpeeds, _settings.StrikeSpeed),
                 i => { _settings.StrikeSpeed = SpellSpeeds[i]; _settings.Save(); }));

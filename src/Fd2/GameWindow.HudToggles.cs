@@ -553,6 +553,12 @@ internal sealed partial class GameWindow
                     _settings.Save();
                     OpenTouchMenu(_menuIndex, 2);
                 }, default));
+                _menu.Add(($"마법 피해 · 회복 %  [{(_settings.SpellDamagePct ? "켬" : "끔")}]", () =>
+                {
+                    _settings.SpellDamagePct = !_settings.SpellDamagePct;
+                    _settings.Save();
+                    OpenTouchMenu(_menuIndex, 2);
+                }, default));
                 _menu.Add(($"적 공격 장면  [{(_settings.SkipEnemyFights ? "건너뛰기" : "보기")}]", () =>
                 {
                     _settings.SkipEnemyFights = !_settings.SkipEnemyFights;

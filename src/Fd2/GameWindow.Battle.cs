@@ -1819,6 +1819,31 @@ internal sealed partial class GameWindow
 
     private const uint MagicRangeColor = 0x80B040E0;
 
+    /// <summary>
+    /// 마법 피해 %(모드, w-151) — 공격 마법 대상을 고르는 동안, 걸 수 있는 가운데 칸 어디서든 닿는 적마다
+    /// 그 칸 위에 「최대 HP 의 몇 %」(예상 피해 90~99.9% 의 가운데, 남은 HP 까지)를 쓴다. 쓰러뜨리면 노란 글.
+    /// 회복 마법은 닿는 우리 편마다 「+몇 %」(잃은 HP 까지, 초록) — HP 가 가득이면 안 쓴다(fb-85).
+    /// </summary>
+    private void DrawSpellPct()
+    {
+        if (!_settings.SpellDamagePct || _bs != BattleState.Target || _pendingSpell < 0 || _actor is not { } a) return;
+        if (_battle.SpellOf(_pendingSpell) == null) return;
+        var hit = new HashSet<Unit>();
+        foreach (var c in _attackTiles) hit.UnionWith(_battle.SpellTargets(a, _pendingSpell, c));
+        int cell = T * _zoom, fs = Math.Max(11, cell * 2 / 5);
+        foreach (var t in hit)
+        {
+            if (t.MaxHp <= 0 || _battle.Expected(a, _pendingSpell, t) is not { } e || e.Heal && e.Max <= 0) continue;
+            int pct = (int)Math.Round((e.Min + e.Max) * 50.0 / t.MaxHp);
+            bool kill = !e.Heal && e.Min >= t.Hp;
+            var img = Text.Render(e.Heal ? $"+{pct}%" : $"{pct}%", fs, kill ? 0xFFFFE040 : e.Heal ? 0xFF80FF90 : 0xFFFFFFFF);
+            var (sx, sy) = TileScreen(t.X, t.Y);
+            int x = sx + (cell - img.W) / 2, y = sy + 1;
+            FillRect(x - 2, y - 1, img.W + 4, img.H + 2, kill ? 0xC0A01010 : e.Heal ? 0xC0105020 : 0xB0000000);
+            DrawText(img, x, y);
+        }
+    }
+
     /// <summary>겨눈 칸에 걸면 실제로 맞는 칸 — 진하게 칠한다(제보: 어디까지 맞는지 알 수 없었다).</summary>
     private const uint AimColor = 0xB0FFC030;
 
@@ -1911,6 +1936,7 @@ internal sealed partial class GameWindow
             }
         }
 
+        if (!town) DrawSpellPct();
         if (_bs == BattleState.Phase) { DrawPhaseFx(); return; }   // 차례 넘김 효과 동안은 다른 창을 그리지 않는다
         int fs = Math.Max(14, 7 * HudZoom);
         // 위 가운데 — 몇 턴 · 누구 차례
@@ -2663,6 +2689,15 @@ internal sealed partial class GameWindow
     /// <summary>글 한 줄 메뉴 — 화면 폭을 넘으면 줄을 나눈다(세로 화면 설정 메뉴가 잘렸다, 사용자 요청).</summary>
     private Text.Image MenuRow(string label, int i, int fs)
     {
+        // 글 가운데()에 원작 글꼴 이름 — 전황 기록 칸의 「7장 왕성가는길  11-05 14:30」(w-153)
+        if (label.IndexOf('') is int cut and >= 0)
+        {
+            var parts = new List<Text.Image> { Text.Render(label[..cut], fs, 0xFFFFFFFF) };
+            if (_menuGlyphs.TryGetValue(i, out int at) && NameImage(at, MenuNameScale(fs), 0xFFFFE070) is { } g) parts.Add(g);
+            parts.Add(Text.Render(label[(cut + 1)..], fs, 0xFFFFFFFF));
+            int x = 0;
+            return ComposeRow(parts.Select(p => { var a = (p, x); x += p.W; return a; }).ToList(), x);
+        }
         var row = WithGlyphs(Text.Render(label, fs, 0xFFFFFFFF), i, fs);
         if (row.W <= MenuAvail(fs) || _menuGlyphs.ContainsKey(i)) return row;
         var lines = Wrap(label, fs, MenuAvail(fs)).Select(l => Text.Render(l, fs, 0xFFFFFFFF)).ToList();
