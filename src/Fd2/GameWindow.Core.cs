@@ -32,8 +32,10 @@ internal sealed partial class GameWindow
     private readonly uint[] _pal;
     private readonly IconBank _icons;
 
-    /// <summary>원작 규칙 표(FD2.EXE) — 없으면 null(전투는 기본값으로 돈다).</summary>
-    private readonly GameTables? _tables;
+    /// <summary>원작 규칙 표(FD2.EXE) — 없으면 null(전투는 기본값으로 돈다).
+    /// 편집기가 저장하면(<see cref="GameTables.Stamp"/> 가 바뀌면) 장을 열 때 다시 읽는다 — 켜 둔 게임이 처음 읽은 값만 들고 있지 않게.</summary>
+    private GameTables? _tables;
+    private long _tablesStamp;
     private readonly int _sceneCount;
     private Scene _scene = null!;
     private Unit? _selected;
@@ -73,6 +75,7 @@ internal sealed partial class GameWindow
         _icons = new IconBank(Path.Combine(dir, "FDICON.B24"), _pal);
         _sceneCount = Dat.Count(Path.Combine(dir, "FDFIELD.DAT")) / 3;
         TablesJson.EnsureExported(dir);   // 수치 표는 게임 폴더 tables/*.json 을 쓴다 — 처음이면 EXE 에서 뽑아 둔다
+        _tablesStamp = GameTables.Stamp(dir);
         _tables = GameTables.Load(dir);
         PlatformInit();
     }
@@ -429,6 +432,8 @@ internal sealed partial class GameWindow
         _bs = BattleState.None;
         ClearSelection();
         MotionFiles.Reload();   // 편집기에서 캐릭터 모션 버전을 바꿨으면 장마다 새로
+        // 편집기에서 수치 표(FD2.EXE · tables/*.json)를 저장했으면 장마다 새로 — 켜 둔 채 고친 값이 다시 켜기 전까지 안 들어가던 것(버그 리포트 #1)
+        if (GameTables.Stamp(_dir) is var stamp && stamp != _tablesStamp && GameTables.Load(_dir) is { } fresh) (_tables, _tablesStamp) = (fresh, stamp);
         _motions.Clear();
         _stands.Clear();
         _scene = new Scene(_dir, index, _pal, _icons, party);

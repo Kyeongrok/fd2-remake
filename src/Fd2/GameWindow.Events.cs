@@ -195,6 +195,19 @@ internal sealed partial class GameWindow
                         ShowNotices(Reward(0, int.Parse(gm.Groups[1].Value)), Go);
                         return;
                     }
+                    // 사건 속 싸움(sub_2E2B0(a, b) — a 가 치고 b 가 되받아친다, 그 뒤 sub_1DB65 죽음 처리는 Attack 이 한다).
+                    // 25장 꼭대기 칸(10,1)에서 사울이 명령을 고르면 사건 55 가 화룡(배열 17)이 사울을 치게 한다(버그 리포트 #3)
+                    var fm = Regex.Match(raw, @"^sub_2E2B0\(([^,]+),([^)]+)\)$");
+                    if (fm.Success)
+                    {
+                        if (Eval(fm.Groups[1].Value) is { } fa && Eval(fm.Groups[2].Value) is { } fd
+                            && BySlot(fa) is { } atk && BySlot(fd) is { } def && atk != def)
+                        {
+                            Attack(atk, def, Go);
+                            return;
+                        }
+                        break;
+                    }
                     var cm = Regex.Match(raw, @"^(spawn|talk)\((.+)\)$");
                     if (cm.Success && Eval(cm.Groups[2].Value) is { } cv)
                     {

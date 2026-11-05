@@ -174,6 +174,25 @@ public sealed class GameTables
         return t;
     }
 
+    /// <summary>
+    /// <see cref="Load"/> 가 읽는 파일들(FD2.EXE · tables 폴더의 *.json · rules.json)의 고친 때를 묶은 값 — 바뀌었으면 다시 읽을 때다.
+    /// 게임이 켜진 채로 편집기에서 저장해도 다음 장부터 새 값이 들어가게(버그 리포트 #1).
+    /// </summary>
+    public static long Stamp(string dir)
+    {
+        long s = 0;
+        void Add(string f) { s = unchecked(s * 31 + File.GetLastWriteTimeUtc(f).Ticks + f.Length); }
+        try
+        {
+            string exe = Path.Combine(dir, "FD2.EXE");
+            if (File.Exists(exe)) Add(exe);
+            string tables = TablesJson.DirOf(dir);
+            if (Directory.Exists(tables)) foreach (var f in Directory.GetFiles(tables).Order(StringComparer.OrdinalIgnoreCase)) Add(f);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        return s;
+    }
+
     /// <summary>exe 바이트 위에서 읽은 표(EXE 자리 그대로).</summary>
     public static GameTables FromBytes(byte[] exe) => new((byte[])exe.Clone());
 
