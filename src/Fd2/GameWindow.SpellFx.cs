@@ -49,7 +49,7 @@ internal sealed partial class GameWindow
     private bool _spellFast;
 
     /// <summary>마법 그림이 도는 중인가 — 전투 화면의 마법 치기 · 효과, 지도 위 마법 그림.</summary>
-    private bool SpellPlaying => _sfx != null || _fx != null || _bs == BattleState.CutIn && _strike.Magic;
+    private bool SpellPlaying => _sfx != null || _fx != null || _sheetFx != null || _bs == BattleState.CutIn && _strike.Magic;
 
     /// <summary>마법이 도는 중이면 빨리 감기를 켜고 참(누르기는 거기서 끝난다). 마법이 끝나면 <see cref="SpellFastTick"/> 가 끈다.</summary>
     private bool SpellFastForward()

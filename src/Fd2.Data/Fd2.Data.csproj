@@ -10,6 +10,8 @@
     <ItemGroup>
         <!-- 장면 사건 대본(원작 사건 함수를 낱말로 옮긴 것) — SceneEvents.Load 가 읽는다 -->
         <EmbeddedResource Include="SceneEvents.json" LogicalName="Fd2.Data.SceneEvents.json" Condition="Exists('SceneEvents.json')" />
+        <!-- 지도 위 마법 이펙트 시트(pixelfx, MIT — Fx/LICENSE-pixelfx.txt, w-158) -->
+        <EmbeddedResource Include="Fx/*.png;Fx/*.json;Fx/*.txt" LogicalName="Fd2.Data.Fx.%(Filename)%(Extension)" />
     </ItemGroup>
 
 </Project>

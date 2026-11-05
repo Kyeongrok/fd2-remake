@@ -25,7 +25,12 @@ internal static class Rules
 
         // 원작 sub_10C50 은 땅을 보지 않고 빈 칸이면 그대로 세운다 — 25장 꼭대기 화룡(편 1, 못 가는 칸)은 (10,0) 에 남는다(w-150)
         var s25 = new Scene(dir, 24, pal, icons);
-        Same("25장 화룡(유닛 표 1) 자리", s25.Units.Find(u => u.Form == 104) is { } dragon ? (dragon.X, dragon.Y) : (-1, -1), (10, 0));
+        // 지도 위 마법 이펙트 시트(pixelfx holy/heal, 실행 파일에 넣어 둔 것) — 58컷 80x104, 발 (40,92), 컷 33ms(w-158)
+        var heal = SpellFxMap.Sheet(dir, "holy-heal");
+        Same("회복술 이펙트 시트 컷 수 · 크기 · 발 · 첫 컷 ms", heal is { } hs ? (hs.Frames.Count, hs.Frames[0].W, hs.Frames[0].H, hs.PivotX, hs.PivotY, hs.Durations[0]) : default,
+             (58, 80, 104, 40, 92, 33));
+        Same("회복술 이펙트 가운데 컷에 보이는 점이 있음", heal != null && heal.Frames[20].Px.Any(c => c >> 24 != 0), true);
+        Same("25장 화룡(유닛 표 1) 자리",s25.Units.Find(u => u.Form == 104) is { } dragon ? (dragon.X, dragon.Y) : (-1, -1), (10, 0));
 
         // 등장 차례 1 의 도적(몬스터 96, Lv 2) — 유닛 표 0 번은 배열 4 번
         var e0 = scene.Roster[0];

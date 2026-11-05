@@ -163,6 +163,7 @@ internal sealed partial class GameWindow
     private void FxTick(double dt)
     {
         if (DeathFxTick(dt)) return;
+        if (SheetFxTick(dt)) return;
         if (_fx == null) return;
         if ((_fxClock += dt * SpellRate) < FxFrame) return;   // 지도 위 마법 그림도 마법 속도 배율로
         _fxClock -= FxFrame;
@@ -177,6 +178,7 @@ internal sealed partial class GameWindow
     private void DrawTileFx()
     {
         DrawDeathFx();
+        DrawSheetFx();
         if (_fx == null) return;
         var (px, w, h) = _fx[_fxStart + _fxAt];
         foreach (var (x, y) in _fxCells)
@@ -197,6 +199,13 @@ internal sealed partial class GameWindow
     {
         if (_tables == null) { after(); return; }
         var (start, count, first) = _tables.MapSpellFx(spell);
+        // 편집기 마법 모션 탭에서 이 마법에 바깥 이펙트 시트를 짝지었으면 원작 그림 대신(w-158 · w-159) — 첫 장 소리는 원작 것
+        if (SpellFxMap.For(_dir, spell) is { } sheet && cells.ToList() is { Count: > 0 } at)
+        {
+            if (first > 0) PlaySfx(80, first);
+            PlaySheetFx(sheet, at, after);
+            return;
+        }
         void Sound(int n)
         {
             int s = n == 0 ? first : spell switch
@@ -277,6 +286,80 @@ internal sealed partial class GameWindow
             {
                 int sx = _offX + ((u.X - 1) * T - _camX) * _zoom, sy = _offY + ((u.Y - 1) * T - 6 - _camY) * _zoom;
                 BlitScaled(px, w, h, sx, sy, _zoom, 0, 0, _fbW, _fbH);
+            }
+        }
+    }
+}
+
+/// <summary>
+/// 바깥 이펙트 시트(pixelfx, <see cref="FxSheet"/>)를 지도 칸 위에 — 시트의 발 자리를 대상 칸 아래 가운데에 맞춰 알파로 겹친다.
+/// 컷 시간은 시트대로, 마법 속도 모드 · 누르면 빨리 감기(<see cref="SpellRate"/>)를 따른다.
+/// </summary>
+internal sealed partial class GameWindow
+{
+    private FxSheet? _sheetFx;
+    private List<(int X, int Y)> _sheetCells = new();
+    private double _sheetMs;
+    private Action? _sheetAfter;
+    private BattleState _sheetResume;
+
+    private void PlaySheetFx(FxSheet sheet, List<(int X, int Y)> cells, Action after)
+    {
+        (_sheetFx, _sheetCells, _sheetMs, _sheetAfter, _sheetResume) = (sheet, cells, 0, after, _bs);
+        _bs = BattleState.Fx;
+    }
+
+    private bool SheetFxTick(double dt)
+    {
+        if (_sheetFx is not { } s) return false;
+        _sheetMs += dt * 1000 * SpellRate;
+        if (_sheetMs < s.TotalMs) return true;
+        _sheetFx = null;
+        _bs = _sheetResume;
+        var a = _sheetAfter;
+        _sheetAfter = null;
+        a?.Invoke();
+        return true;
+    }
+
+    /// <summary>
+    /// 지금 컷을 대상 칸마다 — 보이는 폭이 칸(24점)을 넘으면 칸 너비에 맞게 줄인다(옆 칸에 걸치지 않게, fb-86).
+    /// 화면 배율을 곱한 실수 배로 그려(가장 가까운 점) 배율 2 이상이면 줄여도 점이 뭉개지지 않는다.
+    /// </summary>
+    private void DrawSheetFx()
+    {
+        if (_sheetFx is not { } s || s.FrameAt(_sheetMs) is not (>= 0 and var f)) return;
+        var (px, w, h) = s.Frames[f];
+        double fit = Math.Min(1.0, T / 2.0 / s.HalfWidth), k = _zoom * fit;
+        foreach (var (x, y) in _sheetCells)
+        {
+            // 발 자리 = 칸 아래 가운데(화면 점)
+            double fx = _offX + (x * T + T / 2.0 - _camX) * _zoom, fy = _offY + (y * T + T - 2 - _camY) * _zoom;
+            BlendScaled(px, w, h, fx - s.PivotX * k, fy - s.PivotY * k, k);
+        }
+    }
+
+    /// <summary>알파가 있는 그림을 k 배(실수)로 겹친다 — 화면 점마다 가장 가까운 그림 점(그릴 판은 늘 불투명).</summary>
+    private void BlendScaled(uint[] px, int w, int h, double x, double y, double k)
+    {
+        int y0 = Math.Max(0, (int)Math.Floor(y)), y1 = Math.Min(_fbH, (int)Math.Ceiling(y + h * k));
+        int x0 = Math.Max(0, (int)Math.Floor(x)), x1 = Math.Min(_fbW, (int)Math.Ceiling(x + w * k));
+        for (int yy = y0; yy < y1; yy++)
+        {
+            int sy = (int)((yy + 0.5 - y) / k);
+            if (sy < 0 || sy >= h) continue;
+            int srow = sy * w;
+            for (int xx = x0; xx < x1; xx++)
+            {
+                int sx = (int)((xx + 0.5 - x) / k);
+                if (sx < 0 || sx >= w) continue;
+                uint c = px[srow + sx], a = c >> 24;
+                if (a == 0) continue;
+                ref uint d = ref _fb[yy * _fbW + xx];
+                if (a == 255) { d = c; continue; }
+                uint dv = d, na = 255 - a;
+                uint r = ((c >> 16 & 255) * a + (dv >> 16 & 255) * na) / 255, g = ((c >> 8 & 255) * a + (dv >> 8 & 255) * na) / 255, b = ((c & 255) * a + (dv & 255) * na) / 255;
+                d = 0xFF000000 | r << 16 | g << 8 | b;
             }
         }
     }

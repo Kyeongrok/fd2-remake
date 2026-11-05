@@ -65,6 +65,13 @@ public partial class MainWindow
             info.Add($"지도 위 그림: FDOTHER 6 의 {start}~{start + count - 1}장 ({count}장){(sound > 0 ? $", 첫 장 소리 FDOTHER 80 의 {sound}번" : "")}");
         }
         else info.Add("지도 위 그림: 없음(이 마법은 전투 화면에서만 보입니다)");
+        bool hasMap = _spellMapFrames.Count > 0;
+        if (FillSpellFxChoice(spell, hasMap) is { } sheet)
+        {
+            // 짝지은 바깥 이펙트 — 미리 보기도 그것으로(게임과 같은 그림)
+            _spellMapFrames = sheet.Frames.Select(f => (ImageSource)ToBitmap(f.Px, f.W, f.H)).ToList();
+            info.Add($"지도 위 이펙트: 「{SpellFxChoice.SelectedItem}」 {sheet.Frames.Count}컷 · {sheet.TotalMs / 1000.0:0.##}초, 발 ({sheet.PivotX},{sheet.PivotY}) — 게임은 원작 그림 대신 이것을 대상 칸 위에(첫 장 소리는 원작 것)");
+        }
 
         // 전투 화면 효과
         _spellBattleFrames = [];
@@ -200,5 +207,72 @@ public partial class MainWindow
         if (_spellBattleFrames.Count > 0) SpellBattleImage.Source = _spellBattleFrames[_spellTick % _spellBattleFrames.Count];
         else SpellBattleImage.Source = null;
         _spellTick++;
+    }
+
+    // ── 지도 위 이펙트 짝(w-159) ─────────────────────────────────────────────
+
+    private bool _fxChoiceFilling;
+
+    /// <summary>고르개를 채우고 지금 짝지은 시트를 돌려준다(원작이면 null). 지도 위 그림이 없는 마법은 고를 수 없다.</summary>
+    private FxSheet? FillSpellFxChoice(int spell, bool hasMap)
+    {
+        _fxChoiceFilling = true;
+        try
+        {
+            var names = new List<string> { "원작" };
+            names.AddRange(SpellFxMap.Names(_dir));
+            SpellFxChoice.ItemsSource = names;
+            var map = SpellFxMap.Load(_dir);
+            string cur = map.TryGetValue(spell, out var n) && n.Length > 0 ? n : "";
+            SpellFxChoice.SelectedIndex = cur.Length > 0 && names.IndexOf(cur) is var i and > 0 ? i : 0;
+            SpellFxChoice.IsEnabled = hasMap;
+            SpellFxHint.Text = hasMap
+                ? "pixelfx(github.com/patch-gg/pixelfx)의 render.mjs --sheet 로 뽑은 PNG + JSON 을 불러와 고르면, 게임은 다음 마법부터 이 그림을 씁니다"
+                : "이 마법은 지도 위 그림이 없어 바꿀 수 없습니다";
+            return hasMap && cur.Length > 0 ? SpellFxMap.Sheet(_dir, cur) : null;
+        }
+        finally { _fxChoiceFilling = false; }
+    }
+
+    private void OnSpellFxChoice(object sender, SelectionChangedEventArgs e)
+    {
+        int spell = SpellMotionList.SelectedIndex;
+        if (_fxChoiceFilling || spell < 0 || _dir == "" || SpellFxChoice.SelectedItem is not string name) return;
+        var map = SpellFxMap.Load(_dir);
+        map[spell] = name == "원작" ? "" : name;
+        try
+        {
+            SpellFxMap.Save(_dir, map);
+            Status.Text = $"{SpellNames.Of(spell)} 지도 위 이펙트 → {name} (게임은 다음 마법부터)";
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException) { Status.Text = $"저장하지 못했습니다: {ex.Message}"; }
+        LoadSpellMotion();
+    }
+
+    /// <summary>PNG(옆에 같은 이름의 JSON)를 게임 폴더 fx 에 넣고 지금 마법에 짝짓는다.</summary>
+    private void OnImportFxSheet(object sender, RoutedEventArgs e)
+    {
+        int spell = SpellMotionList.SelectedIndex;
+        if (_dir == "" || spell < 0) return;
+        var open = new Microsoft.Win32.OpenFileDialog { Title = "이펙트 시트 불러오기 (PNG — 옆에 같은 이름의 JSON)", Filter = "이펙트 시트 (*.png)|*.png" };
+        if (open.ShowDialog(this) != true) return;
+        string json = System.IO.Path.ChangeExtension(open.FileName, ".json");
+        if (!System.IO.File.Exists(json)) { Status.Text = $"같은 이름의 JSON 이 없습니다: {json}"; return; }
+        try
+        {
+            var sheet = FxSheet.Load(System.IO.File.ReadAllBytes(open.FileName), System.IO.File.ReadAllText(json));
+            if (sheet == null) { Status.Text = "이펙트 시트로 읽지 못했습니다(8비트 RGBA PNG + Aseprite 꼴 JSON)."; return; }
+            string name = System.IO.Path.GetFileNameWithoutExtension(open.FileName);
+            string dir = SpellFxMap.DirOf(_dir);
+            System.IO.Directory.CreateDirectory(dir);
+            System.IO.File.Copy(open.FileName, System.IO.Path.Combine(dir, name + ".png"), overwrite: true);
+            System.IO.File.Copy(json, System.IO.Path.Combine(dir, name + ".json"), overwrite: true);
+            var map = SpellFxMap.Load(_dir);
+            map[spell] = name;
+            SpellFxMap.Save(_dir, map);
+            LoadSpellMotion();
+            Status.Text = $"「{name}」 {sheet.Frames.Count}컷을 넣고 {SpellNames.Of(spell)} 에 짝지었습니다 — {dir}";
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException) { Status.Text = $"불러오지 못했습니다: {ex.Message}"; }
     }
 }
