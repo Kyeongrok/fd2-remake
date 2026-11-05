@@ -414,17 +414,22 @@ public sealed class Scene
     /// <summary>장면 정보(FDFIELD 3n+1) 원본 바이트 — 싸움 중 기록에 넣는다.</summary>
     public byte[] Info { get; private set; } = [];
 
-    /// <summary>같은 칸에 여럿이 겹치면(입장 연출 자리) 가장 가까운 빈 칸으로 — 원본 sub_10C50 처럼.</summary>
+    /// <summary>
+    /// 같은 칸에 여럿이 겹치면(입장 연출 자리) 가장 가까운 빈 칸으로 — 원본 sub_10C50 처럼.
+    /// 원본은 사람이 선 칸(sub_145CD 의 칸 +6 0x40)만 피하고 땅은 보지 않는다 — 25장 꼭대기 화룡(10,0)처럼 못 가는 칸에도 그대로 선다(w-150).
+    /// 거리가 같으면 나중에 훑은 칸(아래 · 오른쪽)이 이긴다(cmp · jg).
+    /// </summary>
     private void Place(Unit u, int x, int y)
     {
-        if (!Free(x, y))
+        bool Empty(int xx, int yy) => Inside(xx, yy) && UnitAt(xx, yy) == null;
+        if (!Empty(x, y))
         {
             int best = int.MaxValue;
             for (int yy = 0; yy < Height; yy++)
                 for (int xx = 0; xx < Width; xx++)
                 {
                     int d = Math.Abs(xx - x) + Math.Abs(yy - y);
-                    if (d < best && Free(xx, yy)) { best = d; (u.X, u.Y) = (xx, yy); }
+                    if (d <= best && Empty(xx, yy)) { best = d; (u.X, u.Y) = (xx, yy); }
                 }
             if (best == int.MaxValue) return;
         }

@@ -45,6 +45,12 @@ public sealed class ExeRules
     public int TeleportMul { get; private init; } = 10;
     public int TeleportPromoted { get; private init; } = 30;
 
+    /// <summary>
+    /// MP 절반만 드는 사람의 이름 번호(기록 +8) — 곡우는 MP 빼기(sub_1CA89) 끝을 jmp 로 바꿔 <c>cmp byte [eax+8], 11 / jne / sar edx, 1 / add ebx, edx</c>
+    /// (이름 11 이면 낸 MP 의 절반을 돌려준다). 없으면 −1(원본 · 파워).
+    /// </summary>
+    public int HalfMpId { get; private init; } = -1;
+
     /// <summary>걸기 마법 명중 %(sub_22D1B `cmp edx, n` 0x22DCB — 난수 % 100 &lt; n 이면 걸림) — 원본 50, 곡우 · 파워 70.</summary>
     public int HexHit { get; private init; } = 50;
 
@@ -114,6 +120,14 @@ public sealed class ExeRules
         int? heal = At(0x1C9BA, [0x89, 0xC2, 0xC1, 0xE2, 0, 0x01, 0xC2, 0xC1, 0xE2], 4) && Imm(0x1C9BE) < 8 && Imm(0x1C9C3) < 8
             ? ((1 << Imm(0x1C9BE)) + 1) << Imm(0x1C9C3) : null;
 
+        // MP 절반(곡우) — 0x1CAC1 의 jmp 가 가리키는 곳이 「cmp byte [eax+8], n / jne +4 / sar edx, 1 / add ebx, edx」 꼴일 때만
+        int halfMp = -1;
+        if (At(0x1CABF, [0x29, 0xD3, 0xE9]))
+        {
+            int to = 0x1CAC6 + BinaryPrimitives.ReadInt32LittleEndian(exe.AsSpan(0x1CAC2 + CodeOffset));
+            if (At(to, [0x80, 0x78, 0x08, 0, 0x75, 0x04, 0xD1, 0xFA, 0x01, 0xD3], 3)) halfMp = Imm(to + 3);
+        }
+
         var d = Original;
         int? sub = Imm8(0x1E3EE, [0x83, 0x6C, 0x24, 0x04]), cmp = Imm8(0x1E414, [0x83, 0x7C, 0x24, 0x04]);
         return new ExeRules
@@ -137,6 +151,7 @@ public sealed class ExeRules
             MaxLevelGainOther = (sbyte?)Imm8(0x1E2EF, [0x83, 0xF8]) ?? d.MaxLevelGainOther,
             MaxLevelResetKyle = (sbyte?)Imm8(0x1E403, [0x83, 0xF8]) ?? d.MaxLevelResetKyle,
             MaxLevelResetOther = (sbyte?)Imm8(0x1E4F6, [0x83, 0xF8]) ?? d.MaxLevelResetOther,
+            HalfMpId = halfMp,
             HexHit = At(0x22DC9, [0xF7, 0xFB, 0x83, 0xFA]) ? Imm(0x22DCD) : d.HexHit,
             Exe = exe,
             StrikeFromCode = StrikeBlockOk(exe) && !StrikeIsOriginal(exe),

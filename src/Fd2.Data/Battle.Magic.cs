@@ -162,7 +162,8 @@ public sealed partial class Battle
                 return new SpellResult(target, true, dmg, false);
             }
             case 25:
-                if (!target.Acted) return new SpellResult(target, false, 0, false);
+                // 쓴 사람 자신은 다시 움직이지 않는다(w-148 제보 — 행동술 뒤 소피아가 또 움직였다)
+                if (!target.Acted || ReferenceEquals(target, caster)) return new SpellResult(target, false, 0, false);
                 target.Acted = false;
                 return new SpellResult(target, true, 0, false, " 다시 움직일 수 있음");
             default:
@@ -170,10 +171,15 @@ public sealed partial class Battle
         }
     }
 
-    /// <summary>MP 를 뺀다(sub_1CA89). 공격술(17)은 원작이 방어술(18) 값을 빼는 버그가 있지만 둘 다 5 라 같다.</summary>
+    /// <summary>
+    /// MP 를 뺀다(sub_1CA89). 공격술(17)은 원작이 방어술(18) 값을 빼는 버그가 있지만 둘 다 5 라 같다.
+    /// EXE 가 MP 절반인 사람을 두면(곡우 — 이름 11 소피아, <see cref="ExeRules.HalfMpId"/>) 그 사람은 낸 값의 절반(내림)을 돌려받는다(w-149).
+    /// </summary>
     public void PayMp(Unit caster, int spell)
     {
-        if (SpellOf(spell == 17 ? 18 : spell) is { } s) caster.Mp = Math.Max(0, caster.Mp - s.Mp);
+        if (SpellOf(spell == 17 ? 18 : spell) is not { } s) return;
+        int cost = s.Mp - (caster.NameId == Rules.HalfMpId ? s.Mp >> 1 : 0);
+        caster.Mp = Math.Max(0, caster.Mp - cost);
     }
 
     /// <summary>HP 를 p 의 90 ~ 99.9% 채운다(sub_1C916, 늘 듦). 물건 회복도 이 길.</summary>

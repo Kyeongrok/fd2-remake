@@ -23,6 +23,10 @@ internal static class Rules
         Same("유니 MP · 화염술 비트", (party[1].MaxMp, (int)(party[1].Spells & 1)), (8, 1));
         Same("아래스 자창 사거리 1~2 · 이동 7", (party[2].RangeMin, party[2].RangeMax, party[2].Move), (1, 2, 7));
 
+        // 원작 sub_10C50 은 땅을 보지 않고 빈 칸이면 그대로 세운다 — 25장 꼭대기 화룡(편 1, 못 가는 칸)은 (10,0) 에 남는다(w-150)
+        var s25 = new Scene(dir, 24, pal, icons);
+        Same("25장 화룡(유닛 표 1) 자리", s25.Units.Find(u => u.Form == 104) is { } dragon ? (dragon.X, dragon.Y) : (-1, -1), (10, 0));
+
         // 등장 차례 1 의 도적(몬스터 96, Lv 2) — 유닛 표 0 번은 배열 4 번
         var e0 = scene.Roster[0];
         var thief = scene.Spawn(e0)!;
