@@ -30,6 +30,13 @@ internal static class Rules
         Same("회복술 이펙트 시트 컷 수 · 크기 · 발 · 첫 컷 ms", heal is { } hs ? (hs.Frames.Count, hs.Frames[0].W, hs.Frames[0].H, hs.PivotX, hs.PivotY, hs.Durations[0]) : default,
              (58, 80, 104, 40, 92, 33));
         Same("회복술 이펙트 가운데 컷에 보이는 점이 있음", heal != null && heal.Frames[20].Px.Any(c => c >> 24 != 0), true);
+        // 필살기 이펙트 돌리기(w-162) — 위로 자라는 불기둥을 왼쪽으로: 크기가 가로세로 바뀌고, 발이 오른쪽 가운데쯤, 왼쪽으로 닿는 길이 = 위로 닿던 길이
+        if (SpellFxMap.Sheet(dir, "fire-flame-pillar") is { } pillar)
+        {
+            var left = pillar.Turned(FxDir.Left);
+            Same("불기둥 왼쪽으로 돌림 — 크기 · 발 · 닿는 길이", (left.Frames[0].W, left.Frames[0].H, left.PivotX, left.PivotY, left.Reach(FxDir.Left)),
+                 (pillar.Frames[0].H, pillar.Frames[0].W, pillar.PivotY, pillar.Frames[0].W - 1 - pillar.PivotX, pillar.Reach(FxDir.Up)));
+        }
         Same("25장 화룡(유닛 표 1) 자리",s25.Units.Find(u => u.Form == 104) is { } dragon ? (dragon.X, dragon.Y) : (-1, -1), (10, 0));
 
         // 등장 차례 1 의 도적(몬스터 96, Lv 2) — 유닛 표 0 번은 배열 4 번

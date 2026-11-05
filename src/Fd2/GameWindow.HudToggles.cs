@@ -559,6 +559,12 @@ internal sealed partial class GameWindow
                     _settings.Save();
                     OpenTouchMenu(_menuIndex, 2);
                 }, default));
+                _menu.Add(($"필살기 모션  [{(_settings.SplitSkillMotion ? "몸짓 · 이펙트 따로" : "원작 그대로")}]", () =>
+                {
+                    _settings.SplitSkillMotion = !_settings.SplitSkillMotion;
+                    _settings.Save();
+                    OpenTouchMenu(_menuIndex, 2);
+                }, default));
                 _menu.Add(($"적 공격 장면  [{(_settings.SkipEnemyFights ? "건너뛰기" : "보기")}]", () =>
                 {
                     _settings.SkipEnemyFights = !_settings.SkipEnemyFights;

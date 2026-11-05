@@ -66,7 +66,8 @@ public partial class MainWindow
         }
         else info.Add("지도 위 그림: 없음(이 마법은 전투 화면에서만 보입니다)");
         bool hasMap = _spellMapFrames.Count > 0;
-        if (FillSpellFxChoice(spell, hasMap) is { } sheet)
+        _skillCaster = -1;
+        if (hasMap && FillSpellFxChoice(spell, hasMap) is { } sheet)
         {
             // 짝지은 바깥 이펙트 — 미리 보기도 그것으로(게임과 같은 그림)
             _spellMapFrames = sheet.Frames.Select(f => (ImageSource)ToBitmap(f.Px, f.W, f.H)).ToList();
@@ -96,6 +97,13 @@ public partial class MainWindow
             {
                 AddBattleFrames(m);
                 info.Add($"전투 화면 효과: 기술 — 쓰는 사람의 몸짓 FIGANI {3 * found.c + 2} ({CharacterNames.Of(found.c)}) {m.Frames.Count}컷. 기술은 쓰는 사람 몸짓이 곧 효과입니다");
+                int end = MotionSplit.BodyEnd(_dir, found.c, m.Frames.Count);
+                info.Add(end >= 0
+                    ? $"필살기 나누기: 몸짓 0~{end}컷 · 이펙트 {end + 1}~{m.Frames.Count - 1}컷 — 게임 모드 「몸짓 · 이펙트 따로」면 이펙트 동안 {end}컷 자세로 세워 둡니다(fx/{MotionSplit.MapFile})"
+                    : "필살기 나누기: 없음(원작 그대로)");
+                _skillCaster = end >= 0 ? found.c : -1;
+                if (end >= 0 && MotionSplit.EffectFor(_dir, found.c) is var (sf, ss))
+                    info.Add($"필살기 이펙트: 이펙트 구간 대신 「{sf.Sheet}」 {ss.Frames.Count}컷 · {ss.TotalMs / 1000.0:0.##}초 — 방향 {SkillFx.DirNames[(int)sf.Dir]} · 배율 {sf.Scale:0.##} · 기준점 밀기 ({sf.Dx},{sf.Dy}). 기준점은 원작 이펙트 컷 상자의 자라기 시작하는 변 가운데(아래 전투 화면 효과 미리 보기는 원작 컷)");
             }
             else info.Add("전투 화면 효과: 기술 — 쓰는 사람의 몸짓(FIGANI 3c+2)을 찾지 못함");
         }
@@ -115,6 +123,7 @@ public partial class MainWindow
             var s = tables.Spells[spell];
             info.Add($"수치: 세기 {s.Power} · 명중 {s.Hit}% · 사거리 {s.Range} · 범위 {s.Area} · MP {s.Mp} · 대상 편 {s.Side}");
         }
+        if (!hasMap) FillSpellFxChoice(spell, false);   // 필살기면 위에서 _skillCaster 를 정한 뒤
         SpellInfo.Text = string.Join("\n", info);
         SpellMapStrip.ItemsSource = _spellMapFrames;
         SpellBattleStrip.ItemsSource = _spellBattleFrames;
@@ -213,6 +222,9 @@ public partial class MainWindow
 
     private bool _fxChoiceFilling;
 
+    /// <summary>지금 고른 마법이 나눈 필살기면 그 캐릭터(FIGANI 번호) — 고르개가 필살기 이펙트 짝(MotionSplit)을 바꾼다. 아니면 -1.</summary>
+    private int _skillCaster = -1;
+
     /// <summary>고르개를 채우고 지금 짝지은 시트를 돌려준다(원작이면 null). 지도 위 그림이 없는 마법은 고를 수 없다.</summary>
     private FxSheet? FillSpellFxChoice(int spell, bool hasMap)
     {
@@ -222,8 +234,24 @@ public partial class MainWindow
             var names = new List<string> { "원작" };
             names.AddRange(SpellFxMap.Names(_dir));
             SpellFxChoice.ItemsSource = names;
+            string cur;
+            if (!hasMap && _skillCaster >= 0)
+            {
+                // 나눈 필살기 — 이펙트 구간을 바꿔 끼우는 짝(w-161)
+                var how = MotionSplit.LoadEffects(_dir).TryGetValue(_skillCaster, out var sn) ? sn : new SkillFx("");
+                cur = how.Sheet;
+                SpellFxChoice.SelectedIndex = cur.Length > 0 && names.IndexOf(cur) is var si and > 0 ? si : 0;
+                SpellFxChoice.IsEnabled = true;
+                SkillFxPlace.Visibility = Visibility.Visible;
+                SkillFxDir.ItemsSource = SkillFx.DirNames;
+                SkillFxDir.SelectedIndex = (int)how.Dir;
+                (SkillFxScale.Text, SkillFxDx.Text, SkillFxDy.Text) = (how.Scale.ToString("0.##"), how.Dx.ToString(), how.Dy.ToString());
+                SpellFxHint.Text = "필살기 이펙트 — 몸짓 뒤 이펙트 구간을 이 시트로(게임 모드 「몸짓 · 이펙트 따로」일 때, 원작이면 원작 컷)";
+                return null;
+            }
+            SkillFxPlace.Visibility = Visibility.Collapsed;
             var map = SpellFxMap.Load(_dir);
-            string cur = map.TryGetValue(spell, out var n) && n.Length > 0 ? n : "";
+            cur = map.TryGetValue(spell, out var n) && n.Length > 0 ? n : "";
             SpellFxChoice.SelectedIndex = cur.Length > 0 && names.IndexOf(cur) is var i and > 0 ? i : 0;
             SpellFxChoice.IsEnabled = hasMap;
             SpellFxHint.Text = hasMap
@@ -238,6 +266,15 @@ public partial class MainWindow
     {
         int spell = SpellMotionList.SelectedIndex;
         if (_fxChoiceFilling || spell < 0 || _dir == "" || SpellFxChoice.SelectedItem is not string name) return;
+        if (_skillCaster >= 0)
+        {
+            var em = MotionSplit.LoadEffects(_dir);
+            em[_skillCaster] = (em.TryGetValue(_skillCaster, out var was) ? was : new SkillFx("")) with { Sheet = name == "원작" ? "" : name };
+            try { MotionSplit.SaveEffects(_dir, em); Status.Text = $"{SpellNames.Of(spell)} 필살기 이펙트 → {name} (게임은 다음 기술부터)"; }
+            catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException) { Status.Text = $"저장하지 못했습니다: {ex.Message}"; }
+            LoadSpellMotion();
+            return;
+        }
         var map = SpellFxMap.Load(_dir);
         map[spell] = name == "원작" ? "" : name;
         try
@@ -267,12 +304,45 @@ public partial class MainWindow
             System.IO.Directory.CreateDirectory(dir);
             System.IO.File.Copy(open.FileName, System.IO.Path.Combine(dir, name + ".png"), overwrite: true);
             System.IO.File.Copy(json, System.IO.Path.Combine(dir, name + ".json"), overwrite: true);
-            var map = SpellFxMap.Load(_dir);
-            map[spell] = name;
-            SpellFxMap.Save(_dir, map);
+            if (_skillCaster >= 0)
+            {
+                var em = MotionSplit.LoadEffects(_dir);
+                em[_skillCaster] = (em.TryGetValue(_skillCaster, out var was) ? was : new SkillFx("")) with { Sheet = name };
+                MotionSplit.SaveEffects(_dir, em);
+            }
+            else
+            {
+                var map = SpellFxMap.Load(_dir);
+                map[spell] = name;
+                SpellFxMap.Save(_dir, map);
+            }
             LoadSpellMotion();
             Status.Text = $"「{name}」 {sheet.Frames.Count}컷을 넣고 {SpellNames.Of(spell)} 에 짝지었습니다 — {dir}";
         }
         catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException) { Status.Text = $"불러오지 못했습니다: {ex.Message}"; }
+    }
+
+    /// <summary>필살기 이펙트 놓는 법(방향 · 배율 · 기준점 밀기)을 저장한다(w-162).</summary>
+    private void OnApplySkillFx(object sender, RoutedEventArgs e)
+    {
+        int spell = SpellMotionList.SelectedIndex;
+        if (_dir == "" || spell < 0 || _skillCaster < 0) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        if (!double.TryParse(SkillFxScale.Text, System.Globalization.NumberStyles.Float, ci, out double scale) || scale <= 0
+            || !int.TryParse(SkillFxDx.Text, out int dx) || !int.TryParse(SkillFxDy.Text, out int dy))
+        {
+            Status.Text = "배율은 0 보다 큰 수, 기준점 밀기는 정수(320x200 화면 점)로 적어 주세요.";
+            return;
+        }
+        var em = MotionSplit.LoadEffects(_dir);
+        var was = em.TryGetValue(_skillCaster, out var w) ? w : new SkillFx("");
+        em[_skillCaster] = was with { Dir = (FxDir)Math.Max(0, SkillFxDir.SelectedIndex), Scale = scale, Dx = dx, Dy = dy };
+        try
+        {
+            MotionSplit.SaveEffects(_dir, em);
+            Status.Text = $"{SpellNames.Of(spell)} 필살기 이펙트 — 방향 {SkillFx.DirNames[Math.Max(0, SkillFxDir.SelectedIndex)]} · 배율 {scale:0.##} · 밀기 ({dx},{dy}) (게임은 다음 기술부터)";
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException) { Status.Text = $"저장하지 못했습니다: {ex.Message}"; }
+        LoadSpellMotion();
     }
 }

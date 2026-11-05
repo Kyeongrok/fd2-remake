@@ -186,6 +186,18 @@
                         <TextBlock Text="지도 위 이펙트" FontWeight="Bold" VerticalAlignment="Center" />
                         <ComboBox x:Name="SpellFxChoice" Width="200" Margin="8,0,0,0" SelectionChanged="OnSpellFxChoice" />
                         <Button Content="이펙트 시트 불러오기..." Click="OnImportFxSheet" Margin="6,0,0,0" Padding="10,2" />
+                        <!-- 필살기 이펙트 놓는 법(w-162): 자라는 쪽 · 크기 배율 · 기준점 밀기(320x200 점) -->
+                        <StackPanel x:Name="SkillFxPlace" Orientation="Horizontal" Margin="12,0,0,0" Visibility="Collapsed">
+                            <TextBlock Text="방향" VerticalAlignment="Center" />
+                            <ComboBox x:Name="SkillFxDir" Width="70" Margin="4,0,0,0" />
+                            <TextBlock Text="배율" VerticalAlignment="Center" Margin="10,0,0,0" />
+                            <TextBox x:Name="SkillFxScale" Width="44" Margin="4,0,0,0" VerticalContentAlignment="Center" />
+                            <TextBlock Text="기준점 밀기 x" VerticalAlignment="Center" Margin="10,0,0,0" />
+                            <TextBox x:Name="SkillFxDx" Width="40" Margin="4,0,0,0" VerticalContentAlignment="Center" />
+                            <TextBlock Text="y" VerticalAlignment="Center" Margin="6,0,0,0" />
+                            <TextBox x:Name="SkillFxDy" Width="40" Margin="4,0,0,0" VerticalContentAlignment="Center" />
+                            <Button Content="적용" Click="OnApplySkillFx" Margin="8,0,0,0" Padding="10,2" />
+                        </StackPanel>
                         <TextBlock x:Name="SpellFxHint" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="Gray" TextWrapping="Wrap" />
                     </StackPanel>
                     <TextBlock x:Name="SpellInfo" DockPanel.Dock="Top" Margin="12,0,12,8" FontSize="13" TextWrapping="Wrap" />

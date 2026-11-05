@@ -72,6 +72,54 @@ internal sealed partial class GameWindow
     private Unit? _castCaster;
     private readonly List<SpellResult> _spellResults = new();
     private Motion? _strikeMotion;
+
+    /// <summary>필살기 몸짓 끝 컷(<see cref="MotionSplit"/>) — 이 뒤 컷은 이펙트라 쓰는 사람은 이 컷에 세워 두고 겹친다. -1 이면 원작 그대로.</summary>
+    private int _strikeBodyEnd = -1;
+
+    /// <summary>
+    /// 이펙트 구간을 바꿔 끼운 시트(<see cref="MotionSplit.EffectFor"/>, w-161) — 원작 이펙트 컷 대신 이것을 원작 이펙트 자리(아래 가운데)에 원작 키로 맞춰 겹친다.
+    /// 원작 이펙트 구간(몇 틱)을 시트 길이(2.5초까지)로 늘려 맞는 컷 때도 같은 비율로 늦춘다. 시트가 더 길면 빨리 튼다.
+    /// </summary>
+    private FxSheet? _skillSheet;
+    private double _skillStretch = 1, _skillSpeed = 1, _skillMs, _skillKx = 1, _skillKy = 1;
+
+    /// <summary>바꿔 끼운 이펙트의 발을 놓을 자리(320x200 점) — <see cref="SkillFx"/> 의 기준점 + 밀기.</summary>
+    private (double X, double Y) _skillAnchor;
+    private const double SkillSheetMaxMs = 2500;
+
+    /// <summary>바꿔 끼운 이펙트가 원작 이펙트 상자보다 굵어도 되는 만큼(w-162 — 돌린 불기둥이 화면을 다 덮었다).</summary>
+    private const double CrossRoom = 1.6;
+
+    private void SetupSkillSheet()
+    {
+        _skillSheet = null;
+        _skillMs = 0;
+        if (_strikeBodyEnd < 0 || _strikeMotion is not { } m || MotionSplit.EffectFor(_dir, _strike.A.Icon) is not var (how, sheet)) return;
+        var fx = m.Frames.Skip(_strikeBodyEnd + 1).ToList();
+        var shown = fx.Where(f => !(f.Width >= Motion.ScreenWidth && f.Height >= Motion.ScreenHeight) && f.Width > 0).ToList();
+        if (shown.Count == 0) return;
+        int x0 = shown.Min(f => f.X), x1 = shown.Max(f => f.X + f.Width), y0 = shown.Min(f => f.Y), y1 = shown.Max(f => f.Y + f.Height);
+        // 기준점 — 원작 이펙트 상자의 자라기 시작하는 변 가운데, 크기 — 자라는 쪽 길이에 맞춤(w-162)
+        (double ax, double ay, int len) = how.Dir switch
+        {
+            FxDir.Left => ((double)x1, (y0 + y1) / 2.0, x1 - x0),
+            FxDir.Right => ((double)x0, (y0 + y1) / 2.0, x1 - x0),
+            FxDir.Down => ((x0 + x1) / 2.0, (double)y0, y1 - y0),
+            _ => ((x0 + x1) / 2.0, (double)y1, y1 - y0),
+        };
+        _skillAnchor = (ax + how.Dx, ay + how.Dy);
+        // 길이(자라는 쪽)와 굵기(가로지르는 쪽)를 원작 이펙트 상자에 따로 맞춘다 — 돌린 불기둥이 화면을 다 덮지 않게(w-162)
+        bool upright = how.Dir is FxDir.Up or FxDir.Down;
+        var box = sheet.Box;
+        double cross = upright ? x1 - x0 : y1 - y0, sheetCross = upright ? box.X1 - box.X0 : box.Y1 - box.Y0;
+        double kLen = Math.Min(1.5, Math.Max(8, len) / (double)sheet.Reach(how.Dir)), kCross = Math.Min(kLen, CrossRoom * cross / Math.Max(1, sheetCross));   // 굵기는 길이와 같은 배율로, 원작 상자 굵기의 1.6배를 넘으면 줄임
+        double mul = Math.Clamp(how.Scale, 0.1, 5);
+        (_skillKx, _skillKy) = upright ? (kCross * mul, kLen * mul) : (kLen * mul, kCross * mul);
+        double origMs = fx.Sum(f => f.Hold) * FigTick * 1000, want = Math.Min(sheet.TotalMs, SkillSheetMaxMs);
+        _skillStretch = Math.Max(1, want / Math.Max(1, origMs));
+        _skillSpeed = sheet.TotalMs / Math.Max(1, origMs * _skillStretch);
+        _skillSheet = sheet;
+    }
     private int _strikeFrame, _strikeHeld, _strikeDamage = -1;
     private bool _strikeMiss, _strikeCrit;
     private double _strikeClock, _strikeTail;
@@ -1501,7 +1549,11 @@ internal sealed partial class GameWindow
         // 무리가 바뀌면(되받아치기) 앞 무리의 경험을 먼저
         if (_groupExp is { } g && g.Who != _strike.A) FlushExp();
         // 마법 · 물건은 셋째 모션(FIGANI 3c+2 — 마법 몸짓, 17 캐릭터만 있다), 없으면 공격 모션
-        _strikeMotion = _strike.Magic ? MotionOf(_strike.A.Icon, 2) ?? MotionOf(_strike.A.Icon, 1) : MotionOf(_strike.A.Icon, 1);
+        var skill = _strike.Magic ? MotionOf(_strike.A.Icon, 2) : null;
+        _strikeMotion = skill ?? MotionOf(_strike.A.Icon, 1);
+        // 필살기 모션 나누기(모드 「몸짓 · 이펙트 따로」, w-160) — 몸짓 끝 컷, 나누지 않으면 -1
+        _strikeBodyEnd = skill != null && _settings.SplitSkillMotion ? MotionSplit.BodyEnd(_dir, _strike.A.Icon, skill.Frames.Count) : -1;
+        SetupSkillSheet();
         _strikeFriendly = _strike.Heal > 0
                           || _strike.Spell >= 0 && _battle.SpellOf(_strike.Spell) is { Side: not 0 };
         _strikeFrame = _strikeHeld = 0;
@@ -1631,10 +1683,12 @@ internal sealed partial class GameWindow
         {
             _strikeClock -= FigTick;
             int hold = _strikeMotion?.Frames[_strikeFrame].Hold ?? 2;
+            if (_skillSheet != null && _strikeFrame > _strikeBodyEnd) hold = Math.Max(1, (int)Math.Round(hold * _skillStretch));   // 바꿔 끼운 이펙트 길이만큼
             if (++_strikeHeld < hold) continue;
             _strikeHeld = 0;
             if (_strikeFrame < frames - 1) _strikeFrame++;
         }
+        if (_skillSheet != null && _strikeFrame > _strikeBodyEnd) _skillMs += dt * (_strike.Magic ? SpellRate : StrikeRate) * 1000 * _skillSpeed;
         FrameSound();
         SpellFxTick(dt);
         bool hitFrame = _strikeMotion == null ? _strikeFrame >= frames / 2 : _strikeMotion.Frames[_strikeFrame].Hit != 0 || _strikeFrame == frames - 1;
@@ -2874,8 +2928,27 @@ internal sealed partial class GameWindow
         {
             if (_strikeMotion != null)
             {
-                var f = _strikeMotion.Frames[_strikeFrame];
-                BlitFrame(f.Pixels, f.Width, f.Height, bx + f.X * s, by + f.Y * s, s, false, 0, 0, clip);
+                // 몸짓 · 이펙트 따로: 이펙트 컷 동안 쓰는 사람은 몸짓 끝 자세로(원작은 그 동안 사람이 안 보인다)
+                if (_strikeBodyEnd >= 0 && _strikeFrame > _strikeBodyEnd)
+                {
+                    var body = _strikeMotion.Frames[_strikeBodyEnd];
+                    BlitFrame(body.Pixels, body.Width, body.Height, bx + body.X * s, by + body.Y * s, s, false, 0, 0, clip);
+                }
+                if (_skillSheet is { } sheet && _strikeFrame > _strikeBodyEnd)
+                {
+                    // 바꿔 끼운 이펙트 — 원작 이펙트 자리 아래 가운데에 발을, 원작 키에 맞춰
+                    if (sheet.FrameAt(_skillMs) is >= 0 and var sf)
+                    {
+                        var (spx, sw, sh) = sheet.Frames[sf];
+                        double kx = s * _skillKx, ky = s * _skillKy;
+                        BlendFrame(spx, sw, sh, bx + _skillAnchor.X * s - sheet.PivotX * kx, by + _skillAnchor.Y * s - sheet.PivotY * ky, kx, clip, ky);
+                    }
+                }
+                else
+                {
+                    var f = _strikeMotion.Frames[_strikeFrame];
+                    BlitFrame(f.Pixels, f.Width, f.Height, bx + f.X * s, by + f.Y * s, s, false, 0, 0, clip);
+                }
             }
             else
             {
@@ -3026,6 +3099,30 @@ internal sealed partial class GameWindow
     }
 
     /// <summary>w x h 그림을 s 배로 — 좌우 뒤집기, 색 섞기(amount 0~255), 클립 상자 안에만.</summary>
+    /// <summary>알파가 있는 그림을 k 배(실수)로 클립 안에 겹친다 — 바꿔 끼운 필살기 이펙트(w-161).</summary>
+    private void BlendFrame(uint[] px, int w, int h, double x, double y, double k, (int X0, int Y0, int X1, int Y1) clip, double ky = 0)
+    {
+        if (ky <= 0) ky = k;
+        int y0 = Math.Max(Math.Max(0, clip.Y0), (int)Math.Floor(y)), y1 = Math.Min(Math.Min(_fbH, clip.Y1), (int)Math.Ceiling(y + h * ky));
+        int x0 = Math.Max(Math.Max(0, clip.X0), (int)Math.Floor(x)), x1 = Math.Min(Math.Min(_fbW, clip.X1), (int)Math.Ceiling(x + w * k));
+        for (int yy = y0; yy < y1; yy++)
+        {
+            int sy = (int)((yy + 0.5 - y) / ky);
+            if (sy < 0 || sy >= h) continue;
+            for (int xx = x0; xx < x1; xx++)
+            {
+                int sx = (int)((xx + 0.5 - x) / k);
+                if (sx < 0 || sx >= w) continue;
+                uint c = px[sy * w + sx], a = c >> 24;
+                if (a == 0) continue;
+                ref uint d = ref _fb[yy * _fbW + xx];
+                if (a == 255) { d = c; continue; }
+                uint dv = d, na = 255 - a;
+                d = 0xFF000000 | ((c >> 16 & 255) * a + (dv >> 16 & 255) * na) / 255 << 16 | ((c >> 8 & 255) * a + (dv >> 8 & 255) * na) / 255 << 8 | ((c & 255) * a + (dv & 255) * na) / 255;
+            }
+        }
+    }
+
     private void BlitFrame(uint[] px, int w, int h, int x, int y, int s, bool mirror, uint tint, int amount,
                            (int X0, int Y0, int X1, int Y1) clip)
     {
