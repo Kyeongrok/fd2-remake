@@ -171,6 +171,7 @@ internal sealed partial class GameWindow
             f.Controls.Add(Toggle("마법 고를 때 칸에 깎는 · 채우는 HP %(최대 HP 대비)", _settings.SpellDamagePct, MenuSpellPct));
             f.Controls.Add(Toggle("적 공격은 전투 장면 건너뛰기(지도에서 결과만)", _settings.SkipEnemyFights, MenuSkipEnemyFights));
             f.Controls.Add(Toggle("필살기 모션 몸짓 · 이펙트 따로(끄면 원작 그대로)", _settings.SplitSkillMotion, MenuSplitSkill));
+            f.Controls.Add(Toggle("지도 아래 빈 곳에 안 움직인 아군", _settings.ReadyBelowMap, MenuReadyBelow));
             f.Controls.Add(Choice("전투 모션 속도", SpellSpeeds.Select(SpellSpeedName).ToArray(), Array.IndexOf(SpellSpeeds, _settings.StrikeSpeed),
                 i => { _settings.StrikeSpeed = SpellSpeeds[i]; _settings.Save(); }));
             f.Controls.Add(Choice("마법 속도", SpellSpeeds.Select(SpellSpeedName).ToArray(), Array.IndexOf(SpellSpeeds, _settings.SpellSpeed),

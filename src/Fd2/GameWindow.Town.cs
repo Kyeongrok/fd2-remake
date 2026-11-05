@@ -39,6 +39,8 @@ internal sealed partial class GameWindow
         _menuGlyphs.Clear(); _menuIcons.Clear();
         _townBack = back;
         _townButtons = false;
+        _menuAsk = false;
+        _sellQty = null;
         _menuIcons.Clear();
         _shopTab = -1;
         _shopTabRects.Clear();
@@ -276,14 +278,17 @@ internal sealed partial class GameWindow
             int id = item;
             _menuIcons[_menu.Count] = ItemIcon(id);
             _menuGlyphs[_menu.Count] = 181 + id;
-            _menu.Add(($"{t.SellPrice(id)}원	× {Pool.Count(x => x == id)}  {ItemEffect(id)}", () => AskSell(id, t.SellPrice(id), () => OpenSellPool(shop, page), () =>
+            _menu.Add(($"{t.SellPrice(id)}원	× {Pool.Count(x => x == id)}  {ItemEffect(id)}", () => AskSell(id, t.SellPrice(id), () => OpenSellPool(shop, page), n =>
             {
-                if (_campaign is not { } c || !Pool.Remove(id)) return;
-                c.Gold += t.SellPrice(id);
+                if (_campaign is not { } c) return;
+                int sold = 0;
+                while (sold < n && Pool.Remove(id)) sold++;
+                if (sold == 0) return;
+                c.Gold += t.SellPrice(id) * sold;
                 _battle.Gold = c.Gold;
                 PlaySfx(Sound.UiBank, 5);
                 StartDeal();
-                TownBanner($" 1개 팔았습니다 — 남은 것 {Pool.Count(x => x == id)}개 · 돈 {c.Gold}원", () => OpenSellPool(shop, page));
+                TownBanner($" {sold}개 팔았습니다 +{t.SellPrice(id) * sold}원 — 남은 것 {Pool.Count(x => x == id)}개 · 돈 {c.Gold}원", () => OpenSellPool(shop, page));
             }, Pool.Count(x => x == id)), default));
         }
         _menu.Add(("돌아가기", Back, default));
@@ -339,19 +344,53 @@ internal sealed partial class GameWindow
         EndTownMenu(1);
     }
 
-    /// <summary>팔기 전에 묻는다(w-141) — 「팔겠습니까? — 120원」 판다 · 그만둔다.</summary>
-    private void AskSell(int item, int price, Action back, Action sell, int left = 1)
+    /// <summary>
+    /// 팔기 전에 묻는다(w-141) — 「팔겠습니까? — 120원」 판다 · 그만둔다. sell(개수).
+    /// 여러 개 가진 것(공통 가방)은 수량을 정해 판다(w-168): 「◀ n개 · 합 ▶」 줄(←→ · 줄 왼쪽 / 오른쪽 1/3 누르기로 하나씩, 가운데 누르기 · Enter 로 판다),
+    /// 「n개 판다」, 「모두 판다」, 「그만둔다」. 처음은 1개(하나씩 팔던 w-142 그대로).
+    /// </summary>
+    private void AskSell(int item, int price, Action back, Action<int> sell, int left = 1, int qty = 1, int row = -1)
     {
         BeginTownMenu(back);
         _menuGlyphs[0] = 181 + item;
         _menuIcons[0] = ItemIcon(item);
-        // 하나씩 판다(w-142) — 여러 개 가진 것은 몇 개 남는지도. 고른 탭이 「판다」까지 눌러 버리지 않게 잠깐은 안 받는다
-        _menu.Add(($"1개를 {price}원에 팔겠습니까?{(left > 1 ? $" (가진 것 {left}개)" : "")} — ", () => { }, default));
-        double opened = _time;
-        _menu.Add(("판다", () => { if (_time - opened >= 0.25) sell(); }, default));
+        double opened = row >= 0 ? double.MinValue : _time;   // 고른 탭이 「판다」까지 눌러 버리지 않게 처음 잠깐은 안 받는다
+        bool Ok() => _time - opened >= 0.25;
+        _sellQty = null;
+        if (left <= 1)
+        {
+            _menu.Add(($"1개를 {price}원에 팔겠습니까? — ", () => { }, default));
+            _menu.Add(("판다", () => { if (Ok()) sell(1); }, default));
+            _menu.Add(("그만둔다", back, default));
+            _menuAsk = true;   // 묻는 창은 화면 가운데에(w-167)
+            EndTownMenu(1);
+            return;
+        }
+        qty = Math.Clamp(qty, 1, left);
+        void Again(int q) { AskSell(item, price, back, sell, left, q, _menuIndex); PlaySfx(Sound.UiBank, Sound.Cursor); }
+        _sellQty = d => { if (Math.Clamp(qty + d, 1, left) != qty) Again(qty + d); };
+        _menu.Add(($"몇 개 팔겠습니까? (가진 것 {left}개) — ", () => { }, default));
+        _menu.Add(($"◀   {qty}개 · {qty * price}원   ▶", () =>
+        {
+            // 누른 자리 — 왼쪽 1/3 은 하나 덜, 오른쪽 1/3 은 하나 더, 가운데(또는 Enter)는 판다
+            var box = _menuBox;
+            bool mouse = _mouseMoved || TouchUi;
+            if (mouse && _mouseX < box.X + box.W / 3) { _sellQty?.Invoke(-1); return; }
+            if (mouse && _mouseX >= box.X + box.W * 2 / 3) { _sellQty?.Invoke(+1); return; }
+            if (Ok()) sell(qty);
+        }, default));
+        _menu.Add(($"{qty}개 판다", () => { if (Ok()) sell(qty); }, default));
+        _menu.Add(($"모두 판다 ({left}개 · {left * price}원)", () => { if (Ok()) sell(left); }, default));
         _menu.Add(("그만둔다", back, default));
-        EndTownMenu(1);
+        _menuAsk = true;
+        EndTownMenu(row >= 0 ? row : 1);
     }
+
+    /// <summary>팔 수량 줄이 떠 있으면 ←→(−1 · +1)로 바꾼다 — 아니면 null(w-168).</summary>
+    private Action<int>? _sellQty;
+
+    /// <summary>건물 안 목록이 묻는 창(팔기 확인)인가 — 폰 세로에서도 위에 붙이지 않고 남은 자리 가운데에(w-167).</summary>
+    private bool _menuAsk;
 
     /// <summary>산 장비를 바로 장비하나(원작 「장비합니까?」).</summary>
     private void AskEquip(int member, int item, Action back)
@@ -416,7 +455,7 @@ internal sealed partial class GameWindow
             int slot = k, item = bag[k].Item;
             _menuIcons[_menu.Count] = ItemIcon(item);
             _menuGlyphs[_menu.Count] = 181 + item;
-            _menu.Add(($"{t.SellPrice(item)}원	{(bag[k].Equipped ? "(장비) " : "")}{ItemEffect(item)}", () => AskSell(item, t.SellPrice(item), () => OpenSellItem(shop, page, member), () =>
+            _menu.Add(($"{t.SellPrice(item)}원	{(bag[k].Equipped ? "(장비) " : "")}{ItemEffect(item)}", () => AskSell(item, t.SellPrice(item), () => OpenSellItem(shop, page, member), _ =>
             {
                 int gain = t.SellPrice(item);
                 t.Sell(member, slot);

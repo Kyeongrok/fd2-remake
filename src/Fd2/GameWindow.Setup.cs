@@ -41,6 +41,7 @@ internal sealed partial class GameWindow
             new("마법 피해 · 회복 %", () => _settings.SpellDamagePct, () => _settings.SpellDamagePct = !_settings.SpellDamagePct),
             new("필살기 몸짓 · 이펙트 따로", () => _settings.SplitSkillMotion, () => _settings.SplitSkillMotion = !_settings.SplitSkillMotion, Note: "끄면 원작 그대로"),
             new("컴퓨터 아군 직접 조종", () => _settings.ControlAllies, () => _settings.ControlAllies = !_settings.ControlAllies),
+            new("지도 아래 남은 아군", () => _settings.ReadyBelowMap, () => _settings.ReadyBelowMap = !_settings.ReadyBelowMap, Note: "지도를 줄여 아래가 비면"),
         ];
 
     private int SetupCloseRow => SetupItems().Count + 1;

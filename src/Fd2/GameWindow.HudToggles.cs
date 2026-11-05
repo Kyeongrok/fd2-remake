@@ -59,7 +59,7 @@ internal sealed partial class GameWindow
 
     /// <summary>그 자리가 접기 단추 · ESC 단추인가 — 단추 누르기는 지도 끌기로 받지 않는다.</summary>
     private bool HudHit(int mx, int my) => (_touchMiniBig && _touchMini.W > 0) ||
-        _chestRows.Select(c => c.Rect).Concat([_rotIcon, _townPrev, _townNext, _townEnter, _miniFold, _chestFold, _escIcon, _escIcon2, _menuIcon, _mapIcon, _partyIcon, _readyIcon, _touchMini]).Any(r => r.W > 0 && mx >= r.X - 4 && my >= r.Y - 4 && mx < r.X + r.W + 4 && my < r.Y + r.H + 4);
+        _readyBelow.Select(c => c.Rect).Concat(_chestRows.Select(c => c.Rect)).Concat([_rotIcon, _townPrev, _townNext, _townEnter, _miniFold, _chestFold, _escIcon, _escIcon2, _menuIcon, _mapIcon, _partyIcon, _readyIcon, _touchMini]).Any(r => r.W > 0 && mx >= r.X - 4 && my >= r.Y - 4 && mx < r.X + r.W + 4 && my < r.Y + r.H + 4);
 
     /// <summary>단추를 눌렀으면 그 패널을 접고 펴고(ESC 는 원작 Esc, 메뉴는 모바일 메뉴) true.</summary>
     private bool HudToggleClick(int mx, int my)
@@ -68,6 +68,9 @@ internal sealed partial class GameWindow
         if (_touchMiniBig && _touchMini.W > 0) return TouchMinimapClick(mx, my);   // 큰 미니맵은 어디를 눌러도 닫는다(w-122)
         if (In(_escIcon, mx, my) || In(_escIcon2, mx, my)) { _mouseMoved = false; PlaySfx(Sound.UiBank, Sound.Cursor); BattleKey(Win32.VK_ESCAPE); return true; }
         if (In(_menuIcon, mx, my)) { OpenTouchMenu(); return true; }
+        // 지도 아래 안 움직인 아군 줄 — 누르면 커서가 그 사람에게(지도가 따라간다, w-166)
+        foreach (var (r, who) in _readyBelow)
+            if (In(r, mx, my) && who.Hp > 0) { _cursor = (who.X, who.Y); _centerCursor = true; _mouseMoved = false; PlaySfx(Sound.UiBank, Sound.Cursor); return true; }
         if (In(_rotIcon, mx, my)) { PlaySfx(Sound.UiBank, Sound.Cursor); RotateTown(); return true; }
         if (In(_townEnter, mx, my)) { _mouseMoved = false; PlaySfx(Sound.UiBank, Sound.Cursor); BattleKey(Win32.VK_RETURN); return true; }
         if (In(_townPrev, mx, my) || In(_townNext, mx, my))
@@ -565,6 +568,12 @@ internal sealed partial class GameWindow
                     _settings.Save();
                     OpenTouchMenu(_menuIndex, 2);
                 }, default));
+                _menu.Add(($"지도 아래 남은 아군  [{(_settings.ReadyBelowMap ? "켬" : "끔")}]", () =>
+                {
+                    _settings.ReadyBelowMap = !_settings.ReadyBelowMap;
+                    _settings.Save();
+                    OpenTouchMenu(_menuIndex, 2);
+                }, default));
                 _menu.Add(($"적 공격 장면  [{(_settings.SkipEnemyFights ? "건너뛰기" : "보기")}]", () =>
                 {
                     _settings.SkipEnemyFights = !_settings.SkipEnemyFights;
@@ -773,5 +782,55 @@ internal sealed partial class GameWindow
         for (int i = 0; i < _talkMenuRows.Count; i++)
             if (In(_talkMenuRows[i], mx, my)) { TalkMenuItems[i].Do(); break; }
         return true;
+    }
+}
+
+/// <summary>
+/// 지도 아래 빈 곳의 안 움직인 아군(모드 「지도 아래 남은 아군」, 기본 켬, w-166) — 지도를 줄여 아래가 까맣게 비면
+/// 그 띠에 아직 안 움직인 우리 편을 지도 그림 · 원작 글꼴 이름 · HP 로 줄지어 보인다. 누르면 커서가 그 사람에게.
+/// 띠가 사람 한 줄보다 낮으면 그리지 않는다. 우리 차례에 고르는 동안만.
+/// </summary>
+internal sealed partial class GameWindow
+{
+    private readonly List<((int X, int Y, int W, int H) Rect, Unit Who)> _readyBelow = new();
+
+    private void DrawReadyBelow(int fs)
+    {
+        _readyBelow.Clear();
+        if (!_settings.ReadyBelowMap || !InBattle || InTownView || _enemyPhase || _bs is not (BattleState.Select or BattleState.Target)) return;
+        // 지도 아래 끝(화면 점) — 그 밑이 빈 띠
+        int mapBottom = _offY + (_scene.Height * T - _camY) * _zoom;
+        int top = Math.Max(0, mapBottom) + 4, band = _clientH - top - 4;
+        var ready = Controlled.Where(u => u.Hp > 0 && Ready(u)).OrderBy(u => u.Slot).ToList();
+        if (ready.Count == 0) return;
+        int icon = Math.Clamp(band - fs / 2, T, T * 3);   // 사람 그림 한 변
+        int g = Math.Max(1, fs / Font16.Size), small = Math.Max(11, fs * 3 / 4);
+        if (band < Math.Max(T, fs * 2)) return;
+        int pad = Math.Max(4, fs / 3), x = 12, y = top;
+        var title = Text.Render($"남은 아군 {ready.Count}", small, 0xFFA8C8FF);
+        int rowH = Math.Max(icon, fs * 2) + pad;
+        DrawText(title, x, y + (Math.Min(rowH, band) - title.H) / 2);
+        x += title.W + pad * 2;
+        foreach (var u in ready)
+        {
+            var name = NameImage(Battle.NameLine(u), g, 0xFFFFFFFF) ?? Text.Render(CharacterNames.Of(u.Form >= 0 ? u.Form : u.Icon), fs, 0xFFFFFFFF);
+            var hp = Text.Render($"HP {u.Hp}/{u.MaxHp}", small, u.Hp * 3 < u.MaxHp ? 0xFFFF8080 : 0xFFB8F0B8);
+            int textW = Math.Max(name.W, hp.W), w = pad + icon + pad + textW + pad, h = Math.Max(icon, name.H + hp.H) + pad;
+            if (x + w > _clientW - 8) { x = 12 + title.W + pad * 2; y += h + 4; }
+            if (y + h > _clientH - 2) break;   // 띠를 넘으면 그만(몇 명은 안 보일 수 있다 — 위 「남은 아군」 수는 다 센다)
+            bool here = _cursor == (u.X, u.Y);
+            FillRect(x, y, w, h, here ? 0xC0344480 : 0xA0101020);
+            uint edge = here ? 0xFFFFE070 : 0x80FFFFFF;
+            FillRect(x, y, w, 1, edge); FillRect(x, y + h - 1, w, 1, edge);
+            FillRect(x, y, 1, h, edge); FillRect(x + w - 1, y, 1, h, edge);
+            var hi = HiIcon(u.Icon, (int)Dir.Down * 3);
+            if (hi != null) BlitFit(hi, T * 4, T * 4, x + pad, y + (h - icon) / 2, icon, icon);
+            else BlitFit(_icons.Frame(u.Icon, (int)Dir.Down * 3), T, T, x + pad, y + (h - icon) / 2, icon, icon);
+            int tx = x + pad + icon + pad, ty = y + (h - name.H - hp.H) / 2;
+            DrawText(name, tx, ty);
+            DrawText(hp, tx, ty + name.H);
+            _readyBelow.Add(((x, y, w, h), u));
+            x += w + 6;
+        }
     }
 }

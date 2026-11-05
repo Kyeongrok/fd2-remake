@@ -714,6 +714,7 @@ internal sealed partial class GameWindow
             bool townRow = _townTop && _stage == MenuStage.Town;   // 마을 첫 화면 — 건물 사이를 옮긴다
             if (townRow && vk is Win32.VK_LEFT or Win32.VK_RIGHT) vk = vk == Win32.VK_RIGHT ? Win32.VK_UP : Win32.VK_DOWN;   // 마을 건물은 줄 차례가 그림에서 반시계라 오른쪽이 앞 줄 = 시계 방향(사용자 요청)
             else if ((AskBoxOpen || _townButtons) && vk is Win32.VK_LEFT or Win32.VK_RIGHT) vk = vk == Win32.VK_LEFT ? Win32.VK_UP : Win32.VK_DOWN;   // YES · NO · 건물 네 단추는 좌우로
+            else if (_sellQty is { } q && vk is Win32.VK_LEFT or Win32.VK_RIGHT) { q(vk == Win32.VK_LEFT ? -1 : +1); return true; }   // 팔 수량(w-168)
             if (vk is Win32.VK_UP or Win32.VK_DOWN) _menuScrolledByDrag = false;   // 키로 고르면 고른 줄이 보이게 다시 따라간다
             if (vk is Win32.VK_UP or Win32.VK_DOWN)
             {
@@ -740,6 +741,14 @@ internal sealed partial class GameWindow
         if (confirm) { BattleClick(_cursor.X, _cursor.Y, -1, -1); return true; }
         if (cancel)
         {
+            // 왼쪽 위 보물상자 목록이 펼쳐져 있으면 Esc · 뒤로는 먼저 그 목록을 접는다(사용자 요청 w-165) — 접혀 있으면 하던 대로
+            if (_actor == null && _reach == null && _bs == BattleState.Select && _chestListShown)
+            {
+                _settings.ShowChests = false;
+                _settings.Save();
+                PlaySfx(Sound.UiBank, Sound.Cursor);
+                return true;
+            }
             if (_actor == null && _reach == null && _bs == BattleState.Select) { CursorToNextReady(); return true; }   // 고른 것이 없으면 다음 안 움직인 아군으로(원작)
             BattleCancel();
             return true;
@@ -2029,7 +2038,9 @@ internal sealed partial class GameWindow
         bool bigMini = _touchMiniBig && _touchMini.W > 0;   // 화면 가득 미니맵(w-122) — 그 위에 다른 창을 얹지 않는다
         if (!bigMini)
         {
+        _chestListShown = false;
         if (!TouchUi || _settings.TouchChests) DrawChestList(fs);
+        DrawReadyBelow(fs);
         if (!TouchUi) DrawMinimap();
         int tileH = !TouchUi || _settings.TouchTileInfo ? DrawTileInfo(fs) : 0;
         var hover = HoverUnit() ?? _actor;
@@ -2178,6 +2189,9 @@ internal sealed partial class GameWindow
         }
     }
 
+    /// <summary>이번 그림에서 보물상자 목록이 펼쳐져 보였나 — Esc 가 먼저 접는다(w-165).</summary>
+    private bool _chestListShown;
+
     private void DrawChestList(int fs)
     {
         if (_scene.Index >= 30 || _bs is BattleState.CutIn or BattleState.Talk) return;
@@ -2214,6 +2228,7 @@ internal sealed partial class GameWindow
         // 폰은 작은 단추 없이 제목 줄 전체를 눌러 접고 편다(사용자 요청)
         _chestFold = TouchUi ? (bx, by, w, title.H + 12) : FoldButton(bx + w - btn - 6, by + 6, btn, open);
         if (!open) return;
+        _chestListShown = true;
         int cy = by + 8 + title.H;
         for (int i = 0; i < rows.Count; i++)
         {
@@ -2599,7 +2614,7 @@ internal sealed partial class GameWindow
         int shown = Math.Min(fit, _menu.Count);
         int x = Math.Min(sx + cell + 6, _clientW - w - 4), y = Math.Max(4, Math.Min(sy, _clientH - rowH * shown - 4));
         if (_stage == MenuStage.Mobile) { w = Math.Min(_clientW - 8, Math.Max(w, _clientW / 3)); (x, y) = ((_clientW - w) / 2, Math.Max(4, (_clientH - rowH * shown) / 2)); }   // 모바일 메뉴는 화면 가운데에 넓게
-        else if (InTownView && !_townTop) { w = Math.Min(_clientW - 8, Math.Max(w, _clientW / 3)); (x, y) = ((_clientW - w) / 2, roomy ? top : Math.Max(4, (_clientH - rowH * shown) / 2)); }   // 건물 안 목록(사기 · 팔기 …) — 화면 가운데에 크게
+        else if (InTownView && !_townTop) { w = Math.Min(_clientW - 8, Math.Max(w, _clientW / 3)); (x, y) = ((_clientW - w) / 2, roomy && !_menuAsk ? top : roomy ? top + Math.Max(0, (_clientH - top - bottom - rowH * shown) / 2) : Math.Max(4, (_clientH - rowH * shown) / 2)); }   // 건물 안 목록(사기 · 팔기 …) — 화면 가운데에 크게, 폰 세로 목록은 위에서부터(묻는 창은 가운데, w-167)
         _menuBox = (x, y, w, rowH * shown);
         if (_menuFace >= 0 && _stage == MenuStage.Town && Face(_menuFace) is { Count: > 0 } mf)
         {
