@@ -163,7 +163,7 @@ public partial class MainActivity
             .SetView(big)!
             .SetPositiveButton("복사", (_, _) =>
             {
-                (GetSystemService(ClipboardService) as ClipboardManager)?.SetPrimaryClip(ClipData.NewPlainText("세이브 코드", code));
+                if (GetSystemService(ClipboardService) is ClipboardManager cm) cm.PrimaryClip = ClipData.NewPlainText("세이브 코드", code);
                 Toast.MakeText(this, $"복사했습니다 — {code}", ToastLength.Short)?.Show();
             })!
             .SetNeutralButton("코드 보내기", (_, _) =>
