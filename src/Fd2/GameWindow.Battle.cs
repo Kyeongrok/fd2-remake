@@ -1499,6 +1499,7 @@ internal sealed partial class GameWindow
         // 다 쳤다 — 마법 경험, 쓰러진 사람의 떨굼(쓰러뜨린 사람마다), 레벨업 · 독 알림 뒤 다음으로
         _bs = BattleState.Select;
         _strikeOnMap = false;
+        _sfx = null;   // 전투 화면 마법 효과는 전투 화면과 함께 끝난다 — 남으면 지도에서 탭이 빨리 감기에 먹힌다(버그 리포트 #4)
         if (_castSpell >= 0 && _castCaster != null)
             _strikeNotes.AddRange(_battle.GainExp(_castCaster, _battle.SpellExp(_castCaster, _castSpell, _spellResults)));
         _castSpell = -1;
@@ -1573,7 +1574,7 @@ internal sealed partial class GameWindow
         _strikeDamage = -1;
         (_strikeHitsSeen, _strikeLastFrame) = (0, -1);
         _strikeMiss = _strikeCrit = false;
-        if (_strikeOnMap || _settings.SkipEnemyFights && _enemyPhase)
+        if (StrikeOffScreen)
         {
             // 지도 위 마법 · 적 공격 장면 건너뛰기(모드) — 원작처럼 전투 화면 없이 그 자리에서 셈하고 알림만
             ResolveStrike();
@@ -1592,6 +1593,9 @@ internal sealed partial class GameWindow
 
     /// <summary>지금 치기들이 지도 위 마법인가(전투 화면을 안 띄운다).</summary>
     private bool _strikeOnMap;
+
+    /// <summary>이 치기를 전투 화면 없이 지도에서 셈하나 — 지도 위 마법이거나, 모드 「적 공격 장면 건너뛰기」의 적 차례.</summary>
+    private bool StrikeOffScreen => _strikeOnMap || _settings.SkipEnemyFights && _enemyPhase;
 
     private int _strikeSounded = -1;
 
@@ -1660,7 +1664,9 @@ internal sealed partial class GameWindow
             _spellResults.Add(r);
             _strikeDamage = r.Amount;
             _strikeMiss = !r.Hit;
-            if (!_strikeOnMap && r.Hit) StartSpellFx(_strike.Spell, a.Team == 0);   // 전투 화면 마법 효과(0~8)
+            // 전투 화면 마법 효과(0~8) — 전투 화면을 띄울 때만. 「적 공격 장면 건너뛰기」로 지도에서 셈할 때 켜면 효과를 돌릴 화면(CutInTick)이 없어
+            // 끝나지 않고 남아, 마법이 도는 중으로 보여 탭 · 화면 단추가 모두 빨리 감기에 먹혔다(버그 리포트 #4 — 지도 끌기만 됨)
+            if (!StrikeOffScreen && r.Hit) StartSpellFx(_strike.Spell, a.Team == 0);
             if (r.Hit && r.Note != null && !_strikeOnMap) _strikeNotes.Add(new Notice(r.Note, Battle.NameLine(d)));   // 지도 위 마법은 머리 위 숫자로(w-118)
         }
         else if (_strike.Heal > 0)

@@ -237,6 +237,13 @@ public sealed unsafe class GameView : SurfaceView, ISurfaceHolderCallback
                 if (tap) _input.Enqueue(g => g.PointerRelease(x, y));
                 else _input.Enqueue(g => g.PointerAbort());
                 return true;
+            case MotionEventActions.Cancel:
+                // 시스템이 손가락을 가져갔다(가장자리 쓸기 · 알림 창 등) — 뗌이 오지 않으니 누르기를 버린다.
+                // 예전에는 받지 않아 누른 때가 남아 0.5초 뒤 길게 누르기(물리기)가 저절로 걸렸다
+                _downAt = -1;
+                _pinched = false;
+                _input.Enqueue(g => g.PointerAbort());
+                return true;
         }
         return base.OnTouchEvent(e);
     }
