@@ -484,14 +484,13 @@ public sealed partial class Battle
     }
 
     /// <summary>
-    /// 상자를 연다 — 종류 0 물건(가방이 차면 못 꺼내고 닫힌 채로 둔다, 원작은 바꾸기를 묻는다), 1 돈(0 이면 빈 상자), 2 이상 사건(그 사건 번호를 돌려준다).
+    /// 상자를 연다 — 종류 0 물건(가방이 차면 못 꺼내고 닫힌 채로 둔다, 원작은 바꾸기를 묻는다), 1 돈(0 이면 빈 상자), 2 이상 사건(그 사건 번호를 돌려준다 — 열림 깃발은 사건이 켠다).
     /// 연 상자는 표시하고 보석상자 그림을 연 그림으로 바꾼다.
     /// </summary>
     public (List<Notice> Notes, int Event) OpenChest(Unit u, int k)
     {
         var notes = new List<Notice>();
         var (kind, value) = Scene.Chests[k];
-        int ev = -1;
         switch (kind)
         {
             case 0 when u.Bag.Count >= 8:
@@ -509,12 +508,13 @@ public sealed partial class Battle
                 notes.Add(new Notice($"돈 {value} 획득"));
                 break;
             default:
-                ev = value;
-                break;
+                // 사건 상자는 열림 깃발을 켜지 않고 사건만 건다 — 원작 sub_190AC 는 사건을 부를 뿐(0x19511)이고 깃발은 사건이 켠다.
+                // 26장 꼭대기 다섯 상자(사건 58)는 가방이 차면 「가득」만 말하고 다섯 다 닫힌 채로 둔다(버그 리포트 #6)
+                return (notes, value);
         }
         OpenedChests.Add(k);
         Scene.ShowOpenedChests(OpenedChests);
-        return (notes, ev);
+        return (notes, -1);
     }
 
     /// <summary>

@@ -195,6 +195,23 @@ internal sealed partial class GameWindow
                         ShowNotices(Reward(0, int.Parse(gm.Groups[1].Value)), Go);
                         return;
                     }
+                    // 26장 꼭대기 다섯 상자(사건 58, 0x35854) — 연 사람 칸의 상자 번호(0~4)로 표 0x5274E 의 물건을 그 사람에게 주고(글 422),
+                    // 사건이 상자 깃발 0~4 를 다 켜 다섯이 함께 열린다. 가방이 차면 글 480 만 하고 닫힌 채로 둔다(버그 리포트 #6)
+                    if (raw == "sub_1BB8C(arg0,?[0])")
+                    {
+                        if (BySlot(_eventArg) is { } cu && ChestPickItem(_scene.Mark(cu.X, cu.Y)) is int pick)
+                        {
+                            if (cu.Bag.Count < 8) { cu.Bag.Add((pick, false)); ShowNotices([new Notice(" 획득", 181 + pick)], Go); }
+                            else ShowNotices([new Notice(" — 가방이 가득해 받지 못함", 181 + pick)], Go);
+                            return;
+                        }
+                        break;
+                    }
+                    if (raw.StartsWith("sub_15F84(g53a7d,480,"))
+                    {
+                        ShowNotices([new Notice("가방이 가득해 꺼내지 못함")], Go);
+                        return;
+                    }
                     // 사건 속 싸움(sub_2E2B0(a, b) — a 가 치고 b 가 되받아친다, 그 뒤 sub_1DB65 죽음 처리는 Attack 이 한다).
                     // 25장 꼭대기 칸(10,1)에서 사울이 명령을 고르면 사건 55 가 화룡(배열 17)이 사울을 치게 한다(버그 리포트 #3)
                     var fm = Regex.Match(raw, @"^sub_2E2B0\(([^,]+),([^)]+)\)$");
@@ -428,6 +445,16 @@ internal sealed partial class GameWindow
 
     /// <summary>배열 번호 slot 의 사람 — 숨긴 사람까지.</summary>
     private Unit? AnySlot(int slot) => BySlot(slot) ?? _scene.Hidden.Find(u => u.Slot == slot);
+
+    /// <summary>
+    /// 26장 꼭대기 다섯 상자의 물건(사건 58 이 스택에 베끼는 5바이트 표 VA 0x5274E) — 상자 번호 0~4 마다 전신재 · 마신부 · 바람궁 · 용장대 · 마룡조.
+    /// 표가 없으면(EXE 없음) 원본 값으로. 0~4 밖이면 null.
+    /// </summary>
+    private int? ChestPickItem(int mark)
+    {
+        if (mark is < 0 or > 4) return null;
+        return _tables?.U8(0x5274E + mark) ?? new[] { 29, 43, 51, 61, 71 }[mark];
+    }
 
     /// <summary>가방에서 물건 하나를 뺀다 — 장비 중이었으면 능력을 다시 셈한다.</summary>
     private void DropItem(Unit u, int item)

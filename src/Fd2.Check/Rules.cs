@@ -25,6 +25,18 @@ internal static class Rules
 
         // 원작 sub_10C50 은 땅을 보지 않고 빈 칸이면 그대로 세운다 — 25장 꼭대기 화룡(편 1, 못 가는 칸)은 (10,0) 에 남는다(w-150)
         var s25 = new Scene(dir, 24, pal, icons);
+        // 26장 꼭대기 다섯 상자(버그 리포트 #6) — 상자 0~4 가 모두 사건 58 이고, 사건이 연 칸의 상자 번호로 표 0x5274E 의 물건을 준다.
+        // 사건 상자는 열 때 깃발을 켜지 않는다(sub_190AC) — 깃발 0~4 는 사건 58 이 물건을 준 뒤 한꺼번에 켠다
+        var s26 = new Scene(dir, 25, pal, icons);
+        Seq("26장 상자 0~4 사건 번호", s26.Chests.Take(5).Select(c => c.Kind >= 2 ? c.Value : -1), [58, 58, 58, 58, 58]);
+        Seq("26장 다섯 상자 물건 표 0x5274E(전신재 · 마신부 · 바람궁 · 용장대 · 마룡조)", t.Bytes(0x5274E, 5).Select(b => (int)b), [29, 43, 51, 61, 71]);
+        var cell26 = Enumerable.Range(0, s26.Width * s26.Height).Select(i => (X: i % s26.Width, Y: i / s26.Width))
+            .First(c => (s26.TileFlags(c.X, c.Y) & 0x20) != 0 && s26.Mark(c.X, c.Y) == 2 && s26.Ground(c.X, c.Y) != 5);
+        var b26 = new Battle(s26, t, seed: 1);
+        var opener = scene.Units.First(u => u.Team == 2);
+        (opener.X, opener.Y) = cell26;
+        var (_, ev26) = b26.OpenChest(opener, 2);
+        Same("26장 상자 2 를 열면 사건 58 만 걸고 열림 깃발은 사건에 맡긴다", (ev26, b26.OpenedChests.Count), (58, 0));
         // 지도 위 마법 이펙트 시트(pixelfx holy/heal, 실행 파일에 넣어 둔 것) — 58컷 80x104, 발 (40,92), 컷 33ms(w-158)
         var heal = SpellFxMap.Sheet(dir, "holy-heal");
         Same("회복술 이펙트 시트 컷 수 · 크기 · 발 · 첫 컷 ms", heal is { } hs ? (hs.Frames.Count, hs.Frames[0].W, hs.Frames[0].H, hs.PivotX, hs.PivotY, hs.Durations[0]) : default,
