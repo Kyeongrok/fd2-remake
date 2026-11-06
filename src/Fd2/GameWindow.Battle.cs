@@ -2170,7 +2170,12 @@ internal sealed partial class GameWindow
     /// <summary>보물상자 목록 줄 자리와 그 칸 — 줄을 누르면 커서가 그리로(사용자 요청).</summary>
     private readonly List<((int X, int Y, int W, int H) Rect, int X, int Y)> _chestRows = new();
 
-    /// <summary>이 장면의 상자 칸 — 장면이 바뀌면 다시.</summary>
+    /// <summary>
+    /// 이 장면의 상자 칸 — 장면이 바뀌면 다시.
+    /// 땅 종류 5(벽 — 이동비가 모든 직업 20) 칸은 뺀다: 원작 상자(sub_190AC)는 선 칸에서만 열려 아무도 못 연다.
+    /// 25장 화룡 자리(10,0) · 26장 벽에 갇힌 워터(1,44)(1,45)는 상자 깃발 타일을 사건이 그림 바꾸기(sub_12263)로 쓰는 것이라
+    /// 빈 상자(0, 0)가 「단검」으로 보였다(버그 리포트 #5).
+    /// </summary>
     private void BuildChestCells()
     {
         if (_chestCellsFor == _scene) return;
@@ -2179,7 +2184,7 @@ internal sealed partial class GameWindow
         foreach (int flag in new[] { 0x20, 0x40 })   // 보석상자 먼저, 비밀상자는 뒤에
             for (int y = 0; y < _scene.Height; y++)
                 for (int x = 0; x < _scene.Width; x++)
-                    if ((_scene.TileFlags(x, y) & 0x60) == flag && _scene.Mark(x, y) is var k && k < _scene.Chests.Count) _chestCells.Add((x, y, k));
+                    if ((_scene.TileFlags(x, y) & 0x60) == flag && _scene.Ground(x, y) != 5 && _scene.Mark(x, y) is var k && k < _scene.Chests.Count) _chestCells.Add((x, y, k));
     }
 
     /// <summary>미니맵의 안 연 상자 — 보석상자 금색 · 비밀상자 보라(모드, 사용자 요청). 사람이 위에 그려진다.</summary>

@@ -321,7 +321,14 @@ internal sealed partial class GameWindow
     /// <summary>대본의 raw 가운데 옮길 수 있는 것 — ai(units a..b, m), warp(u,x,y), giveitem(i), killfrom(n), flag[k]=식. 그 밖(그림 · 팔레트 연출)은 넘긴다.</summary>
     private void RawOp(string text)
     {
-        var fm = Regex.Match(text, @"^flag\[(\d+)\]=(.+)$");
+        // 연 상자 그림으로(sub_12263) — 사건이 상자 깃발을 켠 뒤 부른다. 25장 화룡 자리(10,0) · 26장 벽에 갇힌 워터(1,44)(1,45) 처럼
+        // 상자 깃발(0x20) 타일을 그림 바꾸기로 쓰는 장이 있다 — 안 하면 풀려난 워터 위에 갇힌 그림이 그대로 남는다(버그 리포트 #5)
+        if (text == "refresh chest tiles")
+        {
+            _scene.ShowOpenedChests(_battle.OpenedChests);
+            return;
+        }
+        var fm =Regex.Match(text, @"^flag\[(\d+)\]=(.+)$");
         if (fm.Success)
         {
             if (Eval(fm.Groups[2].Value) is { } fv) SetFlag(int.Parse(fm.Groups[1].Value), fv);
