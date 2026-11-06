@@ -147,10 +147,12 @@ async function playStats(url, env) {
 // ── 세이브 코드(w-171) ─────────────────────────────────────────────────────
 // POST /v1/save {v:1, install, version, game, gameName, label, kind, save(base64), shared?} → {code, expires}
 // GET  /v1/save/<code>                                                                 → 같은 것(코드는 대시 · 소문자 상관없음)
-// 계정 없이 코드만 알면 받는다. 3일 뒤 못 받고, 다음 올리기 때 지운다. 설치마다 한 시간에 20 번 올리기.
+// 계정 없이 코드만 알면 받는다. 3일 뒤 못 받고, 다음 올리기 때 지운다. 올리기 제한은 아래 SAVE_* (fb-90).
 // 게임은 src/Fd2/GameWindow.SaveCode.cs.
 
-const SAVE_MAX_BODY = 96 * 1024, SAVE_DAYS = 3, SAVE_PER_HOUR = 20, SAVE_ALL_PER_HOUR = 2000;
+// 제한(fb-90): 설치마다 한 시간 20 · 하루 50 번, 모두 합쳐 한 시간 500 번, 서버에 살아 있는 코드는 5000 개까지
+// (한 개 ≈ 31KB — 5000 개면 ≈ 155MB, 무료 D1 500MB 안). 설치 번호는 게임이 만든 것이라 속일 수 있어 모두 합친 상한이 마지막 둑이다.
+const SAVE_MAX_BODY = 96 * 1024, SAVE_DAYS = 3, SAVE_PER_HOUR = 20, SAVE_PER_DAY = 50, SAVE_ALL_PER_HOUR = 500, SAVE_LIVE_MAX = 5000;
 const CODE_ABC = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ', CODE_LEN = 6;
 const KINDS = new Set(['battle', 'slot']);
 
@@ -170,11 +172,15 @@ async function postSave(request, env) {
     return json({ error: 'bad save' }, 400);
   const shared = typeof b.shared === 'string' && b.shared.length <= 16 * 1024 ? b.shared : null;
 
-  const now = new Date(), hourAgo = new Date(now - 3600_000).toISOString();
+  const now = new Date(), hourAgo = new Date(now - 3600_000).toISOString(), dayAgo = new Date(now - 86400_000).toISOString();
   await env.DB.prepare(`DELETE FROM save_shares WHERE expires_at < ?`).bind(now.toISOString()).run();
-  const recent = await env.DB.prepare(
-    `SELECT COUNT(*) AS n, SUM(install = ?) AS mine FROM save_shares WHERE created_at > ?`).bind(b.install, hourAgo).first();
-  if ((recent?.mine ?? 0) >= SAVE_PER_HOUR || (recent?.n ?? 0) >= SAVE_ALL_PER_HOUR) return json({ error: 'rate limited' }, 429);
+  // 지난 것을 지웠으니 남은 줄 수 = 살아 있는 코드 수
+  const c = await env.DB.prepare(
+    `SELECT COUNT(*) AS live, SUM(created_at > ?) AS hour, SUM(install = ? AND created_at > ?) AS mineHour, SUM(install = ? AND created_at > ?) AS mineDay
+     FROM save_shares`).bind(hourAgo, b.install, hourAgo, b.install, dayAgo).first();
+  if ((c?.mineDay ?? 0) >= SAVE_PER_DAY) return json({ error: 'daily limit', limit: SAVE_PER_DAY }, 429);
+  if ((c?.mineHour ?? 0) >= SAVE_PER_HOUR || (c?.hour ?? 0) >= SAVE_ALL_PER_HOUR) return json({ error: 'rate limited' }, 429);
+  if ((c?.live ?? 0) >= SAVE_LIVE_MAX) return json({ error: 'full' }, 503);
 
   const expires = new Date(now.getTime() + SAVE_DAYS * 86400_000).toISOString();
   for (let tries = 0; tries < 5; tries++) {

@@ -36,8 +36,7 @@ internal sealed partial class GameWindow
     private const string CodeGuide =
         "• 서버에 3일 동안만 보관됩니다 — 3일이 지나면 지워지니 얼른 받으세요.\n" +
         "• 받는 기기: 불러오기 → 세이브 옮기기 → 코드로 받기에 이 코드를 넣으세요(PC · 폰 어느 쪽이든).\n" +
-        "• 올려도 이 기기의 기록은 지워지지 않습니다.\n" +
-        "• 코드를 아는 사람은 누구나 받을 수 있습니다.";
+        "• 올려도 이 기기의 기록은 지워지지 않습니다.";
 
     private void OpenSaveMove()
     {
@@ -76,7 +75,12 @@ internal sealed partial class GameWindow
                 using var content = new StringContent(json, Encoding.UTF8, "application/json");
                 using var res = await http.PostAsync($"{url}/v1/save", content);
                 string text = await res.Content.ReadAsStringAsync();
-                if ((int)res.StatusCode == 429) { Toast("한 시간에 올릴 수 있는 수를 넘었습니다 — 나중에 다시"); return; }
+                if ((int)res.StatusCode == 429)
+                {
+                    Toast(text.Contains("daily") ? "하루에 올릴 수 있는 수(50번)를 넘었습니다 — 내일 다시" : "잠깐 사이 너무 많이 올렸습니다 — 조금 뒤에 다시");
+                    return;
+                }
+                if ((int)res.StatusCode == 503) { Toast("서버에 맡긴 세이브가 가득 찼습니다 — 나중에 다시"); return; }
                 if (!res.IsSuccessStatusCode) { Toast($"올리지 못했습니다 — {(int)res.StatusCode}"); return; }
                 using var doc = JsonDocument.Parse(text);
                 string code = doc.RootElement.GetProperty("code").GetString() ?? "";
