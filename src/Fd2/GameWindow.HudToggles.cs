@@ -68,9 +68,8 @@ internal sealed partial class GameWindow
         if (_touchMiniBig && _touchMini.W > 0) return TouchMinimapClick(mx, my);   // 큰 미니맵은 어디를 눌러도 닫는다(w-122)
         if (In(_escIcon, mx, my) || In(_escIcon2, mx, my)) { _mouseMoved = false; PlaySfx(Sound.UiBank, Sound.Cursor); BattleKey(Win32.VK_ESCAPE); return true; }
         if (In(_menuIcon, mx, my)) { OpenTouchMenu(); return true; }
-        // 지도 아래 안 움직인 아군 줄 — 누르면 커서가 그 사람에게(지도가 따라간다, w-166)
-        foreach (var (r, who) in _readyBelow)
-            if (In(r, mx, my) && who.Hp > 0) { _cursor = (who.X, who.Y); _centerCursor = true; _mouseMoved = false; PlaySfx(Sound.UiBank, Sound.Cursor); return true; }
+        // 지도 아래 안 움직인 아군 줄 — 누르기 · 끌기는 ReadyPress · ReadyRelease 가 받는다(fb-92)
+        if (InRect(_readyArea, mx, my)) return true;
         if (In(_rotIcon, mx, my)) { PlaySfx(Sound.UiBank, Sound.Cursor); RotateTown(); return true; }
         if (In(_townEnter, mx, my)) { _mouseMoved = false; PlaySfx(Sound.UiBank, Sound.Cursor); BattleKey(Win32.VK_RETURN); return true; }
         if (In(_townPrev, mx, my) || In(_townNext, mx, my))
@@ -787,50 +786,119 @@ internal sealed partial class GameWindow
 
 /// <summary>
 /// 지도 아래 빈 곳의 안 움직인 아군(모드 「지도 아래 남은 아군」, 기본 켬, w-166) — 지도를 줄여 아래가 까맣게 비면
-/// 그 띠에 아직 안 움직인 우리 편을 지도 그림 · 원작 글꼴 이름 · HP 로 줄지어 보인다. 누르면 커서가 그 사람에게.
-/// 띠가 사람 한 줄보다 낮으면 그리지 않는다. 우리 차례에 고르는 동안만.
+/// 그 띠에 아직 안 움직인 우리 편을 작은 카드(지도 그림 · 원작 글꼴 이름 · 아래 얇은 체력 막대)로 한 줄에 넷까지 보인다.
+/// 더 있으면 좌우로 끌어 넘긴다(fb-92 — 예전엔 큰 카드라 한 명만 보였다). 누르면 커서가 그 사람에게.
+/// 띠가 카드 하나보다 낮으면 그리지 않는다. 우리 차례에 고르는 동안만.
 /// </summary>
 internal sealed partial class GameWindow
 {
     private readonly List<((int X, int Y, int W, int H) Rect, Unit Who)> _readyBelow = new();
 
+    /// <summary>한 번에 보이는 카드 수.</summary>
+    private const int ReadyPage = 4;
+
+    /// <summary>맨 왼쪽에 보이는 카드 번호 · 띠 자리(누르기 받는 곳) · 카드 한 칸 폭(사이 포함) · 남은 아군 수.</summary>
+    private int _readyFirst, _readyStep = 1, _readyCount;
+    private (int X, int Y, int W, int H) _readyArea;
+
+    /// <summary>띠를 누른 자리와 그때의 맨 왼쪽 카드 · 끌었나.</summary>
+    private (int X, int Y, int First)? _readyPress;
+    private bool _readyDragged;
+
     private void DrawReadyBelow(int fs)
     {
         _readyBelow.Clear();
+        _readyArea = default;
         if (!_settings.ReadyBelowMap || !InBattle || InTownView || _enemyPhase || _bs is not (BattleState.Select or BattleState.Target)) return;
         // 지도 아래 끝(화면 점) — 그 밑이 빈 띠
         int mapBottom = _offY + (_scene.Height * T - _camY) * _zoom;
         int top = Math.Max(0, mapBottom) + 4, band = _clientH - top - 4;
         var ready = Controlled.Where(u => u.Hp > 0 && Ready(u)).OrderBy(u => u.Slot).ToList();
+        _readyCount = ready.Count;
         if (ready.Count == 0) return;
-        int icon = Math.Clamp(band - fs / 2, T, T * 3);   // 사람 그림 한 변
-        int g = Math.Max(1, fs / Font16.Size), small = Math.Max(11, fs * 3 / 4);
-        if (band < Math.Max(T, fs * 2)) return;
-        int pad = Math.Max(4, fs / 3), x = 12, y = top;
+        int small = Math.Max(11, fs * 3 / 4), pad = Math.Max(3, fs / 4), gap = Math.Max(4, fs / 3);
+        int left = 8, stripW = _clientW - 16;
         var title = Text.Render($"남은 아군 {ready.Count}", small, 0xFFA8C8FF);
-        int rowH = Math.Max(icon, fs * 2) + pad;
-        DrawText(title, x, y + (Math.Min(rowH, band) - title.H) / 2);
-        x += title.W + pad * 2;
-        foreach (var u in ready)
+        int cw = (stripW - gap * (ReadyPage - 1)) / ReadyPage, bar = Math.Max(3, fs / 5);
+        int g = Math.Max(1, small / Font16.Size);
+        int nameH = NameImage(Battle.NameLine(ready[0]), g, 0xFFFFFFFF)?.H ?? Text.Render("가", small, 0xFFFFFFFF).H;
+        int cardsTop = top + title.H + 2;
+        // 그림 한 변 — 카드 폭과 띠 높이 둘 다에 들게, 지도 칸 셋을 넘지 않게
+        int icon = Math.Min(Math.Min(cw - 2 * pad, _clientH - 4 - cardsTop - (pad * 2 + 2 + nameH + 2 + bar)), T * 3 * Math.Max(1, _zoom) / 2);
+        if (icon < T) return;   // 띠가 너무 낮다
+        int ch = pad + icon + 2 + nameH + 2 + bar + pad;
+        _readyStep = cw + gap;
+        _readyFirst = Math.Clamp(_readyFirst, 0, Math.Max(0, ready.Count - ReadyPage));
+        _readyArea = (left, top, stripW, cardsTop + ch - top);
+        DrawText(title, left, top);
+        // 더 있으면 제목 옆에 「◀ 1~4 / 6 ▶」 — 끌어서 넘긴다는 표시(단추 아님)
+        if (ready.Count > ReadyPage)
         {
-            var name = NameImage(Battle.NameLine(u), g, 0xFFFFFFFF) ?? Text.Render(CharacterNames.Of(u.Form >= 0 ? u.Form : u.Icon), fs, 0xFFFFFFFF);
-            var hp = Text.Render($"HP {u.Hp}/{u.MaxHp}", small, u.Hp * 3 < u.MaxHp ? 0xFFFF8080 : 0xFFB8F0B8);
-            int textW = Math.Max(name.W, hp.W), w = pad + icon + pad + textW + pad, h = Math.Max(icon, name.H + hp.H) + pad;
-            if (x + w > _clientW - 8) { x = 12 + title.W + pad * 2; y += h + 4; }
-            if (y + h > _clientH - 2) break;   // 띠를 넘으면 그만(몇 명은 안 보일 수 있다 — 위 「남은 아군」 수는 다 센다)
-            bool here = _cursor == (u.X, u.Y);
-            FillRect(x, y, w, h, here ? 0xC0344480 : 0xA0101020);
-            uint edge = here ? 0xFFFFE070 : 0x80FFFFFF;
-            FillRect(x, y, w, 1, edge); FillRect(x, y + h - 1, w, 1, edge);
-            FillRect(x, y, 1, h, edge); FillRect(x + w - 1, y, 1, h, edge);
-            var hi = HiIcon(u.Icon, (int)Dir.Down * 3);
-            if (hi != null) BlitFit(hi, T * 4, T * 4, x + pad, y + (h - icon) / 2, icon, icon);
-            else BlitFit(_icons.Frame(u.Icon, (int)Dir.Down * 3), T, T, x + pad, y + (h - icon) / 2, icon, icon);
-            int tx = x + pad + icon + pad, ty = y + (h - name.H - hp.H) / 2;
-            DrawText(name, tx, ty);
-            DrawText(hp, tx, ty + name.H);
-            _readyBelow.Add(((x, y, w, h), u));
-            x += w + 6;
+            var more = Text.Render($"{(_readyFirst > 0 ? "◀ " : "")}{_readyFirst + 1}~{Math.Min(ready.Count, _readyFirst + ReadyPage)} / {ready.Count}{(_readyFirst + ReadyPage < ready.Count ? " ▶" : "")}  밀어서 넘기기",
+                                     Math.Max(10, small * 4 / 5), 0xFF8090C0, bold: false);
+            DrawText(more, left + title.W + gap * 2, top + (title.H - more.H) / 2);
         }
+        for (int i = 0; i < ReadyPage && _readyFirst + i < ready.Count; i++)
+        {
+            var u = ready[_readyFirst + i];
+            int x = left + i * _readyStep, y = cardsTop;
+            bool here = _cursor == (u.X, u.Y);
+            FillRect(x, y, cw, ch, here ? 0xC0344480 : 0xA0101020);
+            uint edge = here ? 0xFFFFE070 : 0x80FFFFFF;
+            FillRect(x, y, cw, 1, edge); FillRect(x, y + ch - 1, cw, 1, edge);
+            FillRect(x, y, 1, ch, edge); FillRect(x + cw - 1, y, 1, ch, edge);
+            int ix = x + (cw - icon) / 2, iy = y + pad;
+            var hi = HiIcon(u.Icon, (int)Dir.Down * 3);
+            if (hi != null) BlitFit(hi, T * 4, T * 4, ix, iy, icon, icon);
+            else BlitFit(_icons.Frame(u.Icon, (int)Dir.Down * 3), T, T, ix, iy, icon, icon);
+            // 이름 — 카드 폭에 안 들면 작게
+            var name = NameImage(Battle.NameLine(u), g, 0xFFFFFFFF);
+            if (name == null || name.W > cw - 2 * pad)
+            {
+                string n = CharacterNames.Of(u.Form >= 0 ? u.Form : u.Icon);
+                name = Text.Render(n, small, 0xFFFFFFFF);
+                if (name.W > cw - 2 * pad) name = Text.Render(n, Math.Max(9, small * (cw - 2 * pad) / Math.Max(1, name.W)), 0xFFFFFFFF);
+            }
+            DrawText(name, x + (cw - name.W) / 2, iy + icon + 2 + (nameH - name.H) / 2);
+            // 체력 막대 — 숫자 대신(많이 깎이면 노랑 · 빨강)
+            int bx = x + pad, bw = cw - 2 * pad, by = y + ch - pad - bar;
+            FillRect(bx, by, bw, bar, 0xFF401010);
+            int fill = u.MaxHp > 0 ? Math.Max(1, bw * u.Hp / u.MaxHp) : 0;
+            FillRect(bx, by, fill, bar, u.Hp * 3 < u.MaxHp ? 0xFFE04040 : u.Hp * 3 < u.MaxHp * 2 ? 0xFFF0C030 : 0xFF58C040);
+            _readyBelow.Add(((x, y, cw, ch), u));
+        }
+    }
+
+    /// <summary>띠를 눌렀다 — 끌면 넘기고, 안 끌고 떼면 그 카드를 고른다(<see cref="ReadyRelease"/>).</summary>
+    private bool ReadyPress(int x, int y)
+    {
+        if (_screen != Screen.Game || !InBattle || InTownView || _enemyPhase || _bs is not (BattleState.Select or BattleState.Target)
+            || !_settings.ReadyBelowMap || !InRect(_readyArea, x, y)) return false;
+        (_readyPress, _readyDragged) = ((x, y, _readyFirst), false);
+        return true;
+    }
+
+    private bool ReadyMove(int x, int y)
+    {
+        if (_readyPress is not { } p) return false;
+        if (!_readyDragged && Math.Abs(x - p.X) + Math.Abs(y - p.Y) < DragSlop) return true;
+        _readyDragged = true;
+        _readyFirst = Math.Clamp(p.First - (int)Math.Round((x - p.X) / (double)Math.Max(1, _readyStep)), 0, Math.Max(0, _readyCount - ReadyPage));
+        return true;
+    }
+
+    private bool ReadyRelease(int x, int y)
+    {
+        if (_readyPress is not { } p) return false;
+        _readyPress = null;
+        if (_readyDragged) return true;
+        foreach (var (r, who) in _readyBelow)
+            if (InRect(r, p.X, p.Y) && who.Hp > 0)
+            {
+                _cursor = (who.X, who.Y); _centerCursor = true; _mouseMoved = false;
+                PlaySfx(Sound.UiBank, Sound.Cursor);
+                break;
+            }
+        return true;
     }
 }

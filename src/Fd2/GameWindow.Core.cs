@@ -165,6 +165,7 @@ internal sealed partial class GameWindow
         if (HudHoldMove(x, y)) return;
         if (NotesDrag(y)) return;   // 릴리즈 노트를 끌어 넘긴다
         if (LoadDrag(y)) return;   // 불러오기 목록을 끌어 넘긴다
+        if (ReadyMove(x, y)) return;   // 지도 아래 남은 아군 띠를 좌우로 넘긴다(fb-92)
         if (PartyMove(x, y) || VolumeMove(x, y) || SetupMove(x, y) || MenuMove(y)) return;
         if (DragMap(x, y)) return;
         if (_versionsOpen) VersionsHover(_mouseX, _mouseY);
@@ -215,18 +216,20 @@ internal sealed partial class GameWindow
     {
         if (_tutorOpen || _notesOpen) { (_press, _pressCam, _dragging) = ((x, y), (_camX, _camY), false); return; }   // 안내 — 뗄 때 다음 장 · 노트 — 끌면 넘기고 뗄 때 닫기
         if (HudHoldPress(x, y)) return;
+        if (ReadyPress(x, y)) return;
         if (PartyPress(x, y) || VolumePress(x, y) || SetupPress(x, y) || MenuPress(x, y)) return;
         if (!defer && (!CanDragMap || InBattle && HudHit(x, y))) { PointerDown(x, y); return; }
         (_press, _pressCam, _dragging) = ((x, y), (_camX, _camY), false);
     }
 
     /// <summary>누르기를 버린다(안드로이드 길게 누르기로 물렸을 때).</summary>
-    internal void PointerAbort() => (_press, _dragging, _partyDrag, _volumeDrag, _menuPress, _menuDragging, _hudHoldKey, _hudMoving) = (null, false, null, -1, null, false, null, null);
+    internal void PointerAbort() => (_press, _dragging, _partyDrag, _volumeDrag, _menuPress, _menuDragging, _hudHoldKey, _hudMoving, _readyPress) = (null, false, null, -1, null, false, null, null, null);
 
     /// <summary>뗐다 — 끌지 않았으면 그 자리를 누른 것으로.</summary>
     internal void PointerRelease(int x, int y)
     {
         if (HudHoldRelease()) return;
+        if (ReadyRelease(x, y)) return;
         if (PartyRelease() || VolumeRelease() || SetupRelease()) { _press = null; return; }
         if (MenuRelease(x, y)) return;
         if (_press is not { } p) return;
