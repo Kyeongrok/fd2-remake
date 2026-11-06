@@ -56,6 +56,7 @@ public partial class MainActivity : Activity
         base.OnCreate(state);
         Window?.AddFlags(WindowManagerFlags.KeepScreenOn);
         HideBars();
+        HookBack();
         GameWindow.VersionsProvider = Versions;
         GameWindow.VersionSwitcher = dir => RunOnUiThread(() => StartGame(dir));
         GameWindow.ScreenLocker = kind => RunOnUiThread(() => LockScreen(kind));
@@ -255,8 +256,34 @@ public partial class MainActivity : Activity
         _view.RequestFocus();
     }
 
-    public override bool OnKeyDown(Keycode keyCode, KeyEvent? e) => _view?.Key(keyCode, true) == true || base.OnKeyDown(keyCode, e);
-    public override bool OnKeyUp(Keycode keyCode, KeyEvent? e) => _view?.Key(keyCode, false) == true || base.OnKeyUp(keyCode, e);
+    public override bool OnKeyDown(Keycode keyCode, KeyEvent? e) => keyCode == Keycode.Back && BackJustDone() || _view?.Key(keyCode, true) == true || base.OnKeyDown(keyCode, e);
+    public override bool OnKeyUp(Keycode keyCode, KeyEvent? e) => keyCode == Keycode.Back && BackJustDone() || _view?.Key(keyCode, false) == true || base.OnKeyUp(keyCode, e);
+
+    // ── 폰의 뒤로 가기 = Esc(w-172) ──
+    // 안드로이드 16(S25 One UI 8 …)에 새 SDK 로 빌드한 앱은 뒤로 가기가 키(KEYCODE_BACK)로 오지 않고 OnBackInvokedCallback 으로만 온다
+    // — 그래서 뒤로 가기가 듣지 않았다(제보: 세로 화면 파티 · 설정 창을 닫을 여백이 없다). 13 부터 콜백을 걸고, 옛 방식 키와 겹치면 한 번만.
+
+    private long _backAt = -10_000;
+
+    /// <summary>방금 콜백으로 뒤로 가기를 했나 — 같은 누르기가 키로도 오면 버린다.</summary>
+    private bool BackJustDone() => Environment.TickCount64 - _backAt < 400;
+
+    private void HookBack()
+    {
+        if (!OperatingSystem.IsAndroidVersionAtLeast(33)) return;   // 그 아래는 키로 온다(OnKeyDown)
+        OnBackInvokedDispatcher.RegisterOnBackInvokedCallback(0, new BackToEsc(this));   // 0 = PRIORITY_DEFAULT
+    }
+
+    private sealed class BackToEsc(MainActivity a) : Java.Lang.Object, Android.Window.IOnBackInvokedCallback
+    {
+        public void OnBackInvoked()
+        {
+            if (a._view == null) { a.MoveTaskToBack(true); return; }   // 게임 전(자료 받기 · 폴더 고르기)은 보통 뒤로 가기처럼
+            a._view.Key(Keycode.Back, true);
+            a._view.Key(Keycode.Back, false);
+            a._backAt = Environment.TickCount64;
+        }
+    }
 
     protected override void OnPause()
     {
