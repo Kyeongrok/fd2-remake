@@ -8,6 +8,9 @@
 //   GET  /v1/stats?days=30                     플레이 통계 집계(누구나)
 //   GET  /dashboard                            플레이 통계 대시보드(누구나 — PC · 폰 · 장별 판 수 · 턴 수 · 시간)
 //
+//   POST /v1/save                              세이브 코드 — 기록 하나를 올리고 짧은 코드를 받는다(3일 보관)
+//   GET  /v1/save/<code>                       코드로 그 기록을 받는다
+//
 // 누가 보냈는지는 설치할 때 만든 무작위 번호(install)뿐이다. IP 는 적지 않는다.
 
 import DASHBOARD from './dashboard.html';
@@ -141,6 +144,59 @@ async function playStats(url, env) {
   });
 }
 
+// ── 세이브 코드(w-171) ─────────────────────────────────────────────────────
+// POST /v1/save {v:1, install, version, game, gameName, label, kind, save(base64), shared?} → {code, expires}
+// GET  /v1/save/<code>                                                                 → 같은 것(코드는 대시 · 소문자 상관없음)
+// 계정 없이 코드만 알면 받는다. 3일 뒤 못 받고, 다음 올리기 때 지운다. 설치마다 한 시간에 20 번 올리기.
+// 게임은 src/Fd2/GameWindow.SaveCode.cs.
+
+const SAVE_MAX_BODY = 96 * 1024, SAVE_DAYS = 3, SAVE_PER_HOUR = 20, SAVE_ALL_PER_HOUR = 2000;
+const CODE_ABC = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ', CODE_LEN = 6;
+const KINDS = new Set(['battle', 'slot']);
+
+function newCode() {
+  const bytes = crypto.getRandomValues(new Uint8Array(CODE_LEN));
+  return Array.from(bytes, (b) => CODE_ABC[b % CODE_ABC.length]).join('');
+}
+
+const cleanCode = (s) => (s || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+
+async function postSave(request, env) {
+  const raw = await request.text();
+  if (raw.length > SAVE_MAX_BODY) return json({ error: 'too large' }, 413);
+  let b;
+  try { b = JSON.parse(raw); } catch { return json({ error: 'bad json' }, 400); }
+  if (!b || b.v !== 1 || !isId(b.install) || !KINDS.has(b.kind) || typeof b.save !== 'string' || !/^[A-Za-z0-9+/=]{100,40000}$/.test(b.save))
+    return json({ error: 'bad save' }, 400);
+  const shared = typeof b.shared === 'string' && b.shared.length <= 16 * 1024 ? b.shared : null;
+
+  const now = new Date(), hourAgo = new Date(now - 3600_000).toISOString();
+  await env.DB.prepare(`DELETE FROM save_shares WHERE expires_at < ?`).bind(now.toISOString()).run();
+  const recent = await env.DB.prepare(
+    `SELECT COUNT(*) AS n, SUM(install = ?) AS mine FROM save_shares WHERE created_at > ?`).bind(b.install, hourAgo).first();
+  if ((recent?.mine ?? 0) >= SAVE_PER_HOUR || (recent?.n ?? 0) >= SAVE_ALL_PER_HOUR) return json({ error: 'rate limited' }, 429);
+
+  const expires = new Date(now.getTime() + SAVE_DAYS * 86400_000).toISOString();
+  for (let tries = 0; tries < 5; tries++) {
+    const code = newCode();
+    const done = await env.DB.prepare(
+      `INSERT OR IGNORE INTO save_shares (code, created_at, expires_at, install, version, game, label, kind, save, shared)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(code, now.toISOString(), expires, b.install, text(b.version, 48),
+        `${text(b.game, 32)} ${text(b.gameName, 80)}`.trim(), text(b.label, 200), b.kind, b.save, shared).run();
+    if (done.meta.changes) return json({ ok: true, code, expires });
+  }
+  return json({ error: 'busy' }, 503);
+}
+
+async function getSave(code, env) {
+  const row = await env.DB.prepare(
+    `SELECT code, created_at, expires_at, version, game, label, kind, save, shared FROM save_shares WHERE code = ?`).bind(cleanCode(code)).first();
+  if (!row) return json({ error: 'not found' }, 404);
+  if (row.expires_at < new Date().toISOString()) return json({ error: 'expired' }, 410);
+  return json({ ok: true, ...row });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -149,6 +205,9 @@ export default {
       if (request.method === 'POST' && pathname === '/v1/bug') return await postBug(request, env);
       if (request.method === 'POST' && pathname === '/v1/play') return await postPlays(request, env);
       if (request.method === 'GET' && pathname === '/v1/stats') return await playStats(url, env);
+      if (request.method === 'POST' && pathname === '/v1/save') return await postSave(request, env);
+      const save = pathname.match(/^\/v1\/save\/([0-9A-Za-z-]{4,16})$/);
+      if (request.method === 'GET' && save) return await getSave(save[1], env);
       if (request.method === 'GET' && (pathname === '/dashboard' || pathname === '/dashboard/'))
         return new Response(DASHBOARD, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'max-age=300' } });
       if (pathname === '/v1/bugs' || pathname.startsWith('/v1/bugs/')) {

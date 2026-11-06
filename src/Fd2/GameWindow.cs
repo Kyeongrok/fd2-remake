@@ -205,6 +205,7 @@ internal sealed unsafe partial class GameWindow : IDisposable
         PollPad(_time);
         PumpHiRes();
         UpdateTitleStatus();
+        PollSaveCodeNotice();   // 세이브 코드를 올렸으면 코드 창(w-171)
     }
 
     partial void ToggleFullscreen() => OnMenuCommand(MenuFullscreen);

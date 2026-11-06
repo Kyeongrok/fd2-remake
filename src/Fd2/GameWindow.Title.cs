@@ -43,7 +43,7 @@ internal sealed partial class GameWindow
 
     private (string Label, Action Do)[] TitleItems => _continueOpen
         ? [.. _continueList.Select(s => (s.Label, (Action)(() => PickSlot(s.Label, s.Campaign)))),
-           .. (SaveSharer != null && _continueList.Count > 0 ? [(_shareMode ? "보내기 그만" : "세이브 보내기", (Action)ToggleShareMode)] : Array.Empty<(string, Action)>()),
+           (_shareMode ? "고르기 그만" : "세이브 옮기기", OpenSaveMove),   // 코드로 올리기 · 받기, (폰) 파일로 보내기(w-169 · w-171)
            ("세이브 연동(구글 · 개발중)", OpenCloudDialog), ("돌아가기", CloseContinue)]
         : [
         ("Start", StartGame),
@@ -368,6 +368,7 @@ internal sealed partial class GameWindow
 
     private void DrawLoadScreen(int fs)
     {
+        if (_continueDirty) { _continueDirty = false; _continueList = ContinueSlots(); }   // 코드로 받은 기록(w-171)
         var items = TitleItems;
         int n = _continueList.Count;
         FillRect(0, 0, _clientW, _clientH, 0xD8080A14);
@@ -381,7 +382,7 @@ internal sealed partial class GameWindow
         // 머리 — 제목과 도움말
         var head = Text.Render("불러오기", fs * 3 / 2, 0xFFFFE070);
         var hint = _shareMode
-            ? Text.Render("보낼 기록을 고르세요", Math.Max(12, fs * 3 / 4), 0xFFFFE070)
+            ? Text.Render(_pickForCode ? "코드로 올릴 기록을 고르세요" : "보낼 기록을 고르세요", Math.Max(12, fs * 3 / 4), 0xFFFFE070)
             : Text.Render(n == 0 ? "이어 할 기록이 없습니다" : $"기록 {n}개 — 고르면 그 자리에서 이어 합니다", Math.Max(12, fs * 3 / 4), FdEdgeLit, bold: false);
         int y = pad + 4;
         DrawText(head, cx, y);

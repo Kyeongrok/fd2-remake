@@ -37,6 +37,15 @@ internal static class Rules
             Same("불기둥 왼쪽으로 돌림 — 크기 · 발 · 닿는 길이", (left.Frames[0].W, left.Frames[0].H, left.PivotX, left.PivotY, left.Reach(FxDir.Left)),
                  (pillar.Frames[0].H, pillar.Frames[0].W, pillar.PivotY, pillar.Frames[0].W - 1 - pillar.PivotX, pillar.Reach(FxDir.Up)));
         }
+        // 세이브 코드(w-171) — 기록 하나만 든 세이브를 바이트로 올렸다 받아도 같은 기록 · 공통 가방
+        var one = SaveFile.New();
+        var camp = new Campaign { NextScene = 7, Gold = 12345 };
+        camp.Party.Add(new byte[HeroRecord.Size]);
+        camp.Shared.AddRange([192, 193]);
+        one.WriteSlot(0, camp);
+        var back1 = SaveFile.FromBytes(one.ToBytes(), one.SharedJson)?.ReadSlot(0);
+        Same("세이브 코드 바이트 왕복 — 다음 장 · 돈 · 동료 수 · 공통 가방", back1 is { } bc ? (bc.NextScene, bc.Gold, bc.Party.Count, string.Join(",", bc.Shared)) : default,
+             (7, 12345, 1, "192,193"));
         Same("25장 화룡(유닛 표 1) 자리",s25.Units.Find(u => u.Form == 104) is { } dragon ? (dragon.X, dragon.Y) : (-1, -1), (10, 0));
 
         // 등장 차례 1 의 도적(몬스터 96, Lv 2) — 유닛 표 0 번은 배열 4 번

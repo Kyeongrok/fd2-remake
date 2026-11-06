@@ -368,10 +368,11 @@ internal sealed partial class GameWindow
     }
 
     // ── 세이브 보내기(폰, 사용자 요청 w-169) — 불러오기 화면 아래 「세이브 보내기」를 누르고 카드를 고르면
-    // 그 기록이 든 파일(+ 공통 가방 옆 파일)을 .zip 하나로 묶어 안드로이드 공유 창(카톡 · 이메일 · 메신저 …)에 넘긴다 ──
+    // 그 기록이 든 파일(+ 공통 가방 옆 파일)을 압축 없이 그대로 안드로이드 공유 창(카톡 · 이메일 · 메신저 …)에 넘긴다
+    // (처음엔 .zip 으로 묶었다 — 받는 쪽이 풀어야 해서 파일 그대로, fb-89) ──
 
-    /// <summary>파일 공유 창 띄우기(zip 경로, 제목) — 안드로이드 MainActivity 가 채운다. PC 는 없음(단추도 안 보인다).</summary>
-    internal static Action<string, string>? SaveSharer = null;
+    /// <summary>파일 공유 창 띄우기(파일들, 제목, 함께 갈 글) — 안드로이드 MainActivity 가 채운다. PC 는 없음(단추도 안 보인다).</summary>
+    internal static Action<string[], string, string>? SaveSharer = null;
 
     /// <summary>불러오기 카드마다 그 기록이 든 파일.</summary>
     private readonly Dictionary<Campaign, string> _slotFiles = new(ReferenceEqualityComparer.Instance);
@@ -379,37 +380,30 @@ internal sealed partial class GameWindow
     /// <summary>보낼 기록 고르기 중 — 카드를 누르면 불러오지 않고 보낸다.</summary>
     private bool _shareMode;
 
-    private void ToggleShareMode()
-    {
-        _shareMode = !_shareMode;
-        PlaySfx(Sound.UiBank, Sound.Menu);
-    }
 
     private void PickSlot(string label, Campaign c)
     {
         if (!_shareMode) { ContinueFrom(c); return; }
         _shareMode = false;
+        if (_pickForCode) { UploadSaveCode(label, c); return; }   // 코드로 올리기(w-171, GameWindow.SaveCode.cs)
         if (!_slotFiles.TryGetValue(c, out var path) || !File.Exists(path)) { Toast("보낼 파일을 찾지 못했습니다"); return; }
         try
         {
+            // 다른 앱에 내는 곳(안드로이드 SaveShare.Files 가 이 폴더만 낸다)에 원래 이름 그대로 베낀다 — 받은 쪽은 기록 폴더에 넣기만
             string dir = Path.Combine(Path.GetTempPath(), "fd2-share");
             Directory.CreateDirectory(dir);
             foreach (var old in Directory.GetFiles(dir)) try { File.Delete(old); } catch (IOException) { }
-            int dash = label.IndexOf(" — ", StringComparison.Ordinal);
-            string what = System.Text.RegularExpressions.Regex.Replace((dash >= 0 ? label[..dash] : label) + "_" + Path.GetFileNameWithoutExtension(path), @"[^\w가-힣]+", "_").Trim('_');
-            string zip = Path.Combine(dir, $"용의기사2_세이브_{what}_{DateTime.Now:MMdd-HHmm}.zip");
-            using (var z = System.IO.Compression.ZipFile.Open(zip, System.IO.Compression.ZipArchiveMode.Create))
-            {
-                System.IO.Compression.ZipFileExtensions.CreateEntryFromFile(z, path, Path.GetFileName(path));
-                string shared = path + ".공통가방.json";
-                if (File.Exists(shared)) System.IO.Compression.ZipFileExtensions.CreateEntryFromFile(z, shared, Path.GetFileName(shared));
-                var readme = z.CreateEntry("읽어보기.txt");
-                using var w = new StreamWriter(readme.Open());
-                w.WriteLine($"용의기사2 리메이크 세이브 — {label}");
-                w.WriteLine($"버전: {VersionName} · 게임 {AppVersion}");
-                w.WriteLine($"넣는 곳: 기록 폴더(saves\\{VersionName}\\)에 같은 이름으로. 같은 이름 파일이 있으면 덮어씁니다.");
-            }
-            SaveSharer?.Invoke(zip, $"용의기사2 세이브 — {label}");
+            var files = new List<string>();
+            foreach (var f in new[] { path, path + ".공통가방.json" })
+                if (File.Exists(f))
+                {
+                    string to = Path.Combine(dir, Path.GetFileName(f));
+                    File.Copy(f, to, true);
+                    files.Add(to);
+                }
+            string title = $"용의기사2 세이브 — {label}";
+            string note = $"{title}\n버전 {VersionName} · 게임 {AppVersion}\n받은 파일을 같은 이름 그대로 기록 폴더(saves/{VersionName}/)에 넣으면 됩니다.";
+            SaveSharer?.Invoke(files.ToArray(), title, note);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {

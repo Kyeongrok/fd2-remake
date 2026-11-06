@@ -76,6 +76,38 @@ public sealed class SaveFile
         else if (File.Exists(SharedPath(path))) File.Delete(SharedPath(path));
     }
 
+    /// <summary>파일에 쓸 바이트(검사합 · 걸기까지) — 세이브 코드로 올릴 때(w-171).</summary>
+    public byte[] ToBytes()
+    {
+        BinaryPrimitives.WriteUInt32LittleEndian(Data.AsSpan(SumAt), Sum(Data));
+        var raw = (byte[])Data.Clone();
+        Crypt(raw);
+        return raw;
+    }
+
+    /// <summary>공통 가방 옆 파일 내용 — 비었으면 null.</summary>
+    public string? SharedJson
+    {
+        get
+        {
+            var keep = _shared.Where(kv => kv.Value.Count > 0).ToDictionary(kv => kv.Key, kv => kv.Value);
+            return keep.Count > 0 ? JsonSerializer.Serialize(keep) : null;
+        }
+    }
+
+    /// <summary>파일 바이트와 공통 가방 옆 파일 내용에서 — 크기가 다르면 null.</summary>
+    public static SaveFile? FromBytes(byte[] raw, string? sharedJson)
+    {
+        if (raw.Length != Size) return null;
+        raw = (byte[])raw.Clone();
+        Crypt(raw);
+        var f = new SaveFile(raw);
+        if (sharedJson is { Length: > 0 })
+            try { f._shared = JsonSerializer.Deserialize<Dictionary<string, List<int>>>(sharedJson) ?? new(); }
+            catch (JsonException) { }
+        return f;
+    }
+
     /// <summary>XOR — 열쇠 165 에서 바이트마다 k = rol16(k − 28652, 3), b ^= k &amp; 0xFF. 걸기 = 풀기.</summary>
     public static void Crypt(byte[] b)
     {

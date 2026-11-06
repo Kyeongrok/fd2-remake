@@ -114,6 +114,20 @@ internal sealed partial class GameWindow
     /// <summary>글 줄 고르기 창 — MainActivity 가 채운다.</summary>
     internal static Action<string, string[], Action<int>>? ChoiceAsker;
 
+    // ── 세이브 옮기기 창들(w-171) — MainActivity 가 채운다 ──
+
+    /// <summary>한 줄 글 넣기(제목, 안내, 힌트, 확인) — 안드로이드 대화 상자.</summary>
+    internal static Action<string, string, string, Action<string>>? LineAsker;
+
+    /// <summary>코드 알림(코드, 안내) — 복사 · 코드 보내기 · 닫기.</summary>
+    internal static Action<string, string>? CodeShower;
+
+    private partial void AskChoice(string title, string[] items, Action<int> pick) => ChoiceAsker?.Invoke(title, items, pick);
+
+    private partial void AskLine(string title, string message, string hint, Action<string> done) => LineAsker?.Invoke(title, message, hint, done);
+
+    private partial void ShowSaveCode(string code, string message) => CodeShower?.Invoke(code, message);
+
     private partial void OpenCloudDialog()
     {
         if (!CloudSave.Configured) { Toast("세이브 연동이 아직 설정되지 않았습니다"); return; }

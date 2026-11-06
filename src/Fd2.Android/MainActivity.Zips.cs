@@ -135,6 +135,47 @@ public partial class MainActivity
             .Show();
     }
 
+    /// <summary>한 줄 글 넣기 — 세이브 코드 받기(w-171). 영문 대문자 · 숫자 자판.</summary>
+    private void AskLine(string title, string message, string hint, Action<string> done)
+    {
+        var box = new EditText(this) { Hint = hint };
+        box.SetSingleLine(true);
+        box.InputType = Android.Text.InputTypes.ClassText | Android.Text.InputTypes.TextFlagCapCharacters | Android.Text.InputTypes.TextFlagNoSuggestions;
+        box.TextSize = 24;
+        new AlertDialog.Builder(this)
+            .SetTitle(title)!
+            .SetMessage(message)!
+            .SetView(box)!
+            .SetPositiveButton("받기", (_, _) => { if (box.Text is { Length: > 0 } t) done(t); })!
+            .SetNegativeButton("취소", (_, _) => { })!
+            .Show();
+    }
+
+    /// <summary>세이브 코드 알림 — 코드를 크게, 안내, 「복사」 · 「코드 보내기」(카톡 · 문자) · 「닫기」.</summary>
+    private void ShowCode(string code, string message)
+    {
+        var big = new TextView(this) { Text = code, TextSize = 40, Gravity = GravityFlags.Center };
+        big.SetTextIsSelectable(true);
+        big.SetPadding(0, 32, 0, 8);
+        new AlertDialog.Builder(this)
+            .SetTitle("세이브 코드")!
+            .SetMessage(message)!
+            .SetView(big)!
+            .SetPositiveButton("복사", (_, _) =>
+            {
+                (GetSystemService(ClipboardService) as ClipboardManager)?.SetPrimaryClip(ClipData.NewPlainText("세이브 코드", code));
+                Toast.MakeText(this, $"복사했습니다 — {code}", ToastLength.Short)?.Show();
+            })!
+            .SetNeutralButton("코드 보내기", (_, _) =>
+            {
+                var send = new Intent(Intent.ActionSend).SetType("text/plain")!
+                    .PutExtra(Intent.ExtraText, $"용의기사2 세이브 코드 {code}\n불러오기 → 세이브 옮기기 → 코드로 받기에 넣으세요. 3일 동안만 받을 수 있습니다.")!;
+                StartActivity(Intent.CreateChooser(send, "코드 보내기"));
+            })!
+            .SetNegativeButton("닫기", (_, _) => { })!
+            .Show();
+    }
+
     /// <summary>파일 앱에서 「용의기사2로 열기」 한 .zip 이면 가져오고 true.</summary>
     private bool OpenedZip(Intent? intent)
     {

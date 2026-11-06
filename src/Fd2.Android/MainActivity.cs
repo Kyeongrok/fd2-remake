@@ -62,7 +62,9 @@ public partial class MainActivity : Activity
         LockScreen(Settings.Load().ScreenLock);
         GameWindow.VersionAdder = () => RunOnUiThread(ShowAddVersion);
         GameWindow.BugAsker = (summary, send) => RunOnUiThread(() => AskBug(summary, send));
-        GameWindow.SaveSharer = (zip, title) => RunOnUiThread(() => SaveShare.Share(this, zip, title));   // 불러오기 「세이브 보내기」(w-169)
+        GameWindow.SaveSharer = (files, title, note) => RunOnUiThread(() => SaveShare.Share(this, files, title, note));   // 불러오기 「세이브 보내기」(w-169)
+        GameWindow.LineAsker = (title, message, hint, done) => RunOnUiThread(() => AskLine(title, message, hint, done));   // 코드로 받기(w-171)
+        GameWindow.CodeShower = (code, message) => RunOnUiThread(() => ShowCode(code, message));
         GameWindow.ChoiceAsker = (title, items, pick) => RunOnUiThread(() =>
             new AlertDialog.Builder(this).SetTitle(title)!.SetItems(items, (_, e) => pick(e.Which))!.SetNegativeButton("닫기", (_, _) => { })!.Show());
         if (OpenedZip(Intent)) return;
