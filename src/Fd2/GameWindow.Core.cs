@@ -251,6 +251,35 @@ internal sealed partial class GameWindow
         return true;
     }
 
+    /// <summary>
+    /// 휠로 지도를 민다(PC, w-176) — 한 칸 굴리면 두 칸. 위로 굴리면 위쪽(sideways 면 왼쪽)이 보인다.
+    /// 지도를 끌 수 있는 때(전투 우리 차례에 고르는 중)만. 커서는 마우스 밑 칸으로 따라온다.
+    /// </summary>
+    private void WheelMap(int notches, bool sideways)
+    {
+        if (!CanDragMap || _press != null || notches == 0) return;
+        int mapW = _scene.Width * T, mapH = _scene.Height * T, step = 2 * T * notches;
+        if (sideways) { if (mapW > _boardW) _camX = Math.Clamp(_camX - step, -CamOver, mapW - _boardW + CamOver); }
+        else if (mapH > _boardH) _camY = Math.Clamp(_camY - step, -CamOver, mapH - _boardH + CamOver);
+        MouseToCursor();
+    }
+
+    /// <summary>
+    /// PC 오른쪽 단추(w-177) — 전투 우리 차례에 아무도 고르지 않았으면 누른 칸에 시스템 메뉴(기록 · 행군 · 설정 · 턴 끝).
+    /// 메뉴 · 창이 떠 있거나 고르는 중이면 false — 그때는 Esc 처럼 물린다.
+    /// </summary>
+    private bool ContextMenuAt(int x, int y)
+    {
+        if (_screen != Screen.Game || !InBattle || _enemyPhase || Talking || _bs != BattleState.Select) return false;
+        if (_actor != null || _reach != null || _choosingMove || _tutorOpen || _notesOpen || _partyOpen || _volumeOpen || _setupOpen || _keysOpen || _helpOpen || _versionsOpen) return false;
+        if (HudHit(x, y)) return false;
+        (_mouseX, _mouseY) = (x, y);
+        MouseToCursor();
+        ClearSelection();
+        OpenSystemMenu();
+        return true;
+    }
+
     /// <summary>오른쪽 단추(안드로이드는 길게 누르기) — 전투에서 한 단계 물리기.</summary>
     internal void PointerCancel()
     {

@@ -32,16 +32,14 @@ internal sealed partial class GameWindow
 
     private static string BugQueue => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fd2", "bug-queue");
 
-    /// <summary>게임 버전(「0.14.6-dev+01ac97e」) — 빌드 때 넣은 버전에서 커밋 꼬리를 7 자리로 줄인다(받는 곳에서 어느 커밋인지 보려고).</summary>
+    /// <summary>게임 버전(「0.14.67」) — 빌드 때 붙는 커밋 꼬리(+해시)는 뺀다. 버전으로 충분하고 보기만 불편했다(fb-95).</summary>
     private static string AppVersion
     {
         get
         {
             string v = typeof(GameWindow).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "?";
             int plus = v.IndexOf('+');
-            if (plus < 0) return v;
-            string tail = v[(plus + 1)..].Split('.')[0];
-            return tail.Length == 0 ? v[..plus] : $"{v[..plus]}+{tail[..Math.Min(7, tail.Length)]}";
+            return plus < 0 ? v : v[..plus];
         }
     }
 

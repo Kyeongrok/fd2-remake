@@ -169,12 +169,16 @@ internal sealed unsafe partial class GameWindow : IDisposable
             case Win32.WM_MOUSEMOVE:
                 PointerMove(Win32.LowWord(lParam), Win32.HighWord(lParam) - _barH);
                 return IntPtr.Zero;
-            case 0x020A:   // WM_MOUSEWHEEL — 위로 굴리면 +1, 아래로 −1
-                PointerWheel(Math.Sign((short)((long)wParam >> 16)));
+            case 0x020A:   // WM_MOUSEWHEEL — 위로 굴리면 +1, 아래로 −1. Shift 를 누르고 굴리면 지도를 좌우로(w-176), Ctrl 은 확대 · 축소
+                PointerWheel(Math.Sign((short)((long)wParam >> 16)), sideways: ((long)wParam & 0x0004) != 0, zoom: ((long)wParam & 0x0008) != 0);
+                return IntPtr.Zero;
+            case 0x020E:   // WM_MOUSEHWHEEL — 가로 휠 · 터치패드 좌우(오른쪽이 +) — 지도를 좌우로
+                PointerWheel(-Math.Sign((short)((long)wParam >> 16)), sideways: true);
                 return IntPtr.Zero;
             case Win32.WM_RBUTTONDOWN:
                 // 오른쪽 단추는 Esc 를 누른 것과 같게(사용자 요청) — 메뉴 물리기 · 대사 넘기기 · 다음 안 움직인 아군 등 Esc 가 하는 일 그대로
                 if (_screen == Screen.Title && !_continueOpen && !_setupOpen && !_volumeOpen && !_notesOpen) return IntPtr.Zero;   // 타이틀 첫 메뉴의 Esc 는 게임 끝내기 — 잘못 누른 우클릭으로 꺼지지 않게
+                if (ContextMenuAt(Win32.LowWord(lParam), Win32.HighWord(lParam) - _barH)) return IntPtr.Zero;   // 고르는 것이 없을 때 — 그 자리에 시스템 메뉴(w-177)
                 KeyDown(Win32.VK_ESCAPE);
                 KeyUp(Win32.VK_ESCAPE);
                 return IntPtr.Zero;

@@ -216,16 +216,18 @@ internal sealed partial class GameWindow
         return true;
     }
 
-    /// <summary>마우스 휠(+ 위로) — 열린 창이 받는다.</summary>
-    internal void PointerWheel(int notches)
+    /// <summary>마우스 휠(+ 위로 · 왼쪽) — 열린 창이 받고, 없으면 전투 지도를 민다(sideways 면 좌우, w-176).</summary>
+    internal void PointerWheel(int notches, bool sideways = false, bool zoom = false)
     {
+        if (sideways && !_notesOpen && !_partyOpen && !_volumeOpen && !_setupOpen) { WheelMap(notches, true); return; }
         if (_notesOpen) NotesScroll(-notches * _notesStep * 3);
         else if (_partyOpen) PartySelect(_partyIndex - notches);
         else if (_volumeOpen) VolumeStep(notches * 5);
         else if (_setupOpen) SetupStep(_setupRow, notches * 5);
         else if (MenuWheel(notches)) { }
         else if (LoadWheel(notches)) { }
-        else if (TouchUi && InBattle && _bs is BattleState.Select or BattleState.Target) PinchZoom(notches);   // 모바일 화면(PC): 휠은 두 손가락 벌리기 · 오므리기
+        else if (zoom) { if (TouchUi && InBattle && _bs is BattleState.Select or BattleState.Target) PinchZoom(notches); }   // 모바일 화면(PC): Ctrl+휠은 두 손가락 벌리기 · 오므리기
+        else WheelMap(notches, false);
     }
 
     private static Text.Image HJoin(params Text.Image?[] parts)

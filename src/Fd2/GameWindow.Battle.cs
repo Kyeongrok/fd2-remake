@@ -448,13 +448,16 @@ internal sealed partial class GameWindow
     private HashSet<(int X, int Y)>? _magicTiles;
 
     /// <summary>
-    /// u 가 이번 차례에 갈 수 있는 칸에서 지금 MP 로 걸 수 있는 공격 마법(편 0)이 맞힐 수 있는 칸 — 사거리 안 가운데 칸 둘레의 범위까지.
+    /// u 가 이번 차례에 갈 수 있는 칸에서 지금 MP 로 걸 수 있는 공격 마법(편 0) 가운데 가장 센 것(위력이 큰 것, 같으면 범위가 넓은 것)이
+    /// 맞힐 수 있는 칸 — 사거리 안 가운데 칸 둘레의 범위까지. 여러 마법을 합치면 약한 넓은 마법 범위가 나와 위험한 칸을 잘못 보였다(fb-94).
     /// 공격 마법이 없으면(법사가 아니면) 빈 칸.
     /// </summary>
     private HashSet<(int X, int Y)> MagicTiles(Unit u)
     {
         var set = new HashSet<(int X, int Y)>();
-        var spells = _battle.KnownSpells(u).Where(m => _battle.CanCast(u, m) && _battle.SpellOf(m) is { Side: 0, Power: > 0 }).ToList();
+        var spells = _battle.KnownSpells(u).Where(m => _battle.CanCast(u, m) && _battle.SpellOf(m) is { Side: 0, Power: > 0 })
+                            .OrderByDescending(m => _battle.SpellOf(m)!.Power).ThenByDescending(m => _battle.SpellOf(m)!.Range * 16 + _battle.SpellOf(m)!.Area % 16)
+                            .Take(1).ToList();
         if (spells.Count == 0) return set;
         var stops = _scene.Stops(_battle.Reach(u), u).ToList();
         foreach (int m in spells)
