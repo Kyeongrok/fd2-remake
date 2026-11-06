@@ -42,7 +42,9 @@ internal sealed partial class GameWindow
     private readonly List<(int X, int Y, int W, int H)> _titleRects = new();
 
     private (string Label, Action Do)[] TitleItems => _continueOpen
-        ? [.. _continueList.Select(s => (s.Label, (Action)(() => ContinueFrom(s.Campaign)))), ("세이브 연동(구글 · 개발중)", OpenCloudDialog), ("돌아가기", CloseContinue)]
+        ? [.. _continueList.Select(s => (s.Label, (Action)(() => PickSlot(s.Label, s.Campaign)))),
+           .. (SaveSharer != null && _continueList.Count > 0 ? [(_shareMode ? "보내기 그만" : "세이브 보내기", (Action)ToggleShareMode)] : Array.Empty<(string, Action)>()),
+           ("세이브 연동(구글 · 개발중)", OpenCloudDialog), ("돌아가기", CloseContinue)]
         : [
         ("Start", StartGame),
         ("Load", () => { OpenContinue(); _titleIndex = 0; }),
@@ -378,7 +380,9 @@ internal sealed partial class GameWindow
 
         // 머리 — 제목과 도움말
         var head = Text.Render("불러오기", fs * 3 / 2, 0xFFFFE070);
-        var hint = Text.Render(n == 0 ? "이어 할 기록이 없습니다" : $"기록 {n}개 — 고르면 그 자리에서 이어 합니다", Math.Max(12, fs * 3 / 4), FdEdgeLit, bold: false);
+        var hint = _shareMode
+            ? Text.Render("보낼 기록을 고르세요", Math.Max(12, fs * 3 / 4), 0xFFFFE070)
+            : Text.Render(n == 0 ? "이어 할 기록이 없습니다" : $"기록 {n}개 — 고르면 그 자리에서 이어 합니다", Math.Max(12, fs * 3 / 4), FdEdgeLit, bold: false);
         int y = pad + 4;
         DrawText(head, cx, y);
         DrawText(hint, cx + cw - hint.W, y + head.H - hint.H);
@@ -386,13 +390,14 @@ internal sealed partial class GameWindow
         FillRect(cx, y, cw, 3, FdEdge);
         y += gap + 2;
 
-        // 아래 단추 줄 — 세이브 연동 · 돌아가기
+        // 아래 단추 줄 — (폰) 세이브 보내기 · 세이브 연동 · 돌아가기
+        int buttons = items.Length - n;
         int bfs = fs, bh = Text.Render("가", bfs, 0xFFFFFFFF).H + pad * 2, by = _clientH - bh - pad;
-        int bw = (cw - gap) / 2;
-        for (int k = 0; k < 2; k++)
+        int bw = (cw - gap * (buttons - 1)) / buttons;
+        for (int k = 0; k < buttons; k++)
         {
             int i = n + k, bx = cx + k * (bw + gap);
-            bool sel = i == _titleIndex;
+            bool sel = i == _titleIndex || (_shareMode && k == 0);   // 보내기 단추가 맨 앞 — 고르는 중엔 밝게
             var label = Text.Render(items[i].Label, bfs, sel ? 0xFFFFE070 : 0xFFFFFFFF);
             if (label.W > bw - pad) label = Text.Render(items[i].Label, Math.Max(12, bfs * (bw - pad) / Math.Max(1, label.W)), sel ? 0xFFFFE070 : 0xFFFFFFFF);
             FillRect(bx, by, bw, bh, sel ? FdBlueLit : FdBlue);

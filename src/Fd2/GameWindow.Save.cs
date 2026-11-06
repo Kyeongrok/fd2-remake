@@ -315,23 +315,25 @@ internal sealed partial class GameWindow
     private List<(string Label, Campaign Campaign)> ContinueSlots()
     {
         var list = new List<(string, Campaign)>();
+        _slotFiles.Clear();
+        void Add(string label, Campaign c, string file) { list.Add((label, c)); _slotFiles[c] = file; }
         // 카드 큰 글은 장(전황은 「3장」, 기록은 「3장 앞」), 아랫줄에 어느 칸인지 · 턴 · 동료 · 돈(사용자 요청 w-105)
         var mine = SaveFile.Load(SavePath);
         for (int k = 0; k < BattleSlots; k++)
             if (ReadBattleAt(BattleSlotPath(false, k)) is { } b && b.Scene < _sceneCount)
-                list.Add(($"{ChapterName(b.Scene)} — 전황 {k + 1} · {b.Turn}턴 · {SavedAt(BattleSlotPath(false, k))}", BattleCampaign(b)));
+                Add($"{ChapterName(b.Scene)} — 전황 {k + 1} · {b.Turn}턴 · {SavedAt(BattleSlotPath(false, k))}", BattleCampaign(b), BattleSlotPath(false, k));
         var autos = Enumerable.Range(0, AutoSlots).Select(k => (k, b: ReadBattleAt(BattleSlotPath(true, k))))
             .Where(x => x.b != null && x.b.Scene < _sceneCount).OrderByDescending(x => File.GetLastWriteTime(BattleSlotPath(true, x.k)));
         foreach (var (k, b) in autos)
-            list.Add(($"{ChapterName(b!.Scene)} — 자동 · {b.Turn}턴 · {SavedAt(BattleSlotPath(true, k))}", BattleCampaign(b)));
+            Add($"{ChapterName(b!.Scene)} — 자동 · {b.Turn}턴 · {SavedAt(BattleSlotPath(true, k))}", BattleCampaign(b), BattleSlotPath(true, k));
         for (int k = 0; k < SaveFile.Slots; k++)
-            if (mine.ReadSlot(k) is { } c && c.NextScene < _sceneCount) list.Add(($"{ChapterName(c.NextScene)} 앞 — 기록 {k + 1} · {SlotDetail(c)}", c));
+            if (mine.ReadSlot(k) is { } c && c.NextScene < _sceneCount) Add($"{ChapterName(c.NextScene)} 앞 — 기록 {k + 1} · {SlotDetail(c)}", c, SavePath);
         if (File.Exists(OriginalSavePath))
         {
             var orig = SaveFile.Load(OriginalSavePath);
-            if (orig.ReadBattle() is { } ob && ob.Scene < _sceneCount) list.Add(($"{ChapterName(ob.Scene)} — 원작 전황 · {ob.Turn}턴", BattleCampaign(ob)));
+            if (orig.ReadBattle() is { } ob && ob.Scene < _sceneCount) Add($"{ChapterName(ob.Scene)} — 원작 전황 · {ob.Turn}턴", BattleCampaign(ob), OriginalSavePath);
             for (int k = 0; k < SaveFile.Slots; k++)
-                if (orig.ReadSlot(k) is { } c && c.NextScene < _sceneCount) list.Add(($"{ChapterName(c.NextScene)} 앞 — 원작 기록 {k + 1} · {SlotDetail(c)}", c));
+                if (orig.ReadSlot(k) is { } c && c.NextScene < _sceneCount) Add($"{ChapterName(c.NextScene)} 앞 — 원작 기록 {k + 1} · {SlotDetail(c)}", c, OriginalSavePath);
         }
         return list;
     }
@@ -359,13 +361,65 @@ internal sealed partial class GameWindow
     /// <summary>불러오기 화면을 닫는다 — 싸움에서 왔으면 싸움으로, 아니면 타이틀 첫 메뉴로.</summary>
     private void CloseContinue()
     {
+        if (_shareMode) { _shareMode = false; return; }   // 보낼 기록 고르기 중이면 그것만 그만
         _continueOpen = false;
         _titleIndex = 0;
         if (_loadFromGame) { _loadFromGame = false; _screen = Screen.Game; }
     }
 
+    // ── 세이브 보내기(폰, 사용자 요청 w-169) — 불러오기 화면 아래 「세이브 보내기」를 누르고 카드를 고르면
+    // 그 기록이 든 파일(+ 공통 가방 옆 파일)을 .zip 하나로 묶어 안드로이드 공유 창(카톡 · 이메일 · 메신저 …)에 넘긴다 ──
+
+    /// <summary>파일 공유 창 띄우기(zip 경로, 제목) — 안드로이드 MainActivity 가 채운다. PC 는 없음(단추도 안 보인다).</summary>
+    internal static Action<string, string>? SaveSharer = null;
+
+    /// <summary>불러오기 카드마다 그 기록이 든 파일.</summary>
+    private readonly Dictionary<Campaign, string> _slotFiles = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>보낼 기록 고르기 중 — 카드를 누르면 불러오지 않고 보낸다.</summary>
+    private bool _shareMode;
+
+    private void ToggleShareMode()
+    {
+        _shareMode = !_shareMode;
+        PlaySfx(Sound.UiBank, Sound.Menu);
+    }
+
+    private void PickSlot(string label, Campaign c)
+    {
+        if (!_shareMode) { ContinueFrom(c); return; }
+        _shareMode = false;
+        if (!_slotFiles.TryGetValue(c, out var path) || !File.Exists(path)) { Toast("보낼 파일을 찾지 못했습니다"); return; }
+        try
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "fd2-share");
+            Directory.CreateDirectory(dir);
+            foreach (var old in Directory.GetFiles(dir)) try { File.Delete(old); } catch (IOException) { }
+            int dash = label.IndexOf(" — ", StringComparison.Ordinal);
+            string what = System.Text.RegularExpressions.Regex.Replace((dash >= 0 ? label[..dash] : label) + "_" + Path.GetFileNameWithoutExtension(path), @"[^\w가-힣]+", "_").Trim('_');
+            string zip = Path.Combine(dir, $"용의기사2_세이브_{what}_{DateTime.Now:MMdd-HHmm}.zip");
+            using (var z = System.IO.Compression.ZipFile.Open(zip, System.IO.Compression.ZipArchiveMode.Create))
+            {
+                System.IO.Compression.ZipFileExtensions.CreateEntryFromFile(z, path, Path.GetFileName(path));
+                string shared = path + ".공통가방.json";
+                if (File.Exists(shared)) System.IO.Compression.ZipFileExtensions.CreateEntryFromFile(z, shared, Path.GetFileName(shared));
+                var readme = z.CreateEntry("읽어보기.txt");
+                using var w = new StreamWriter(readme.Open());
+                w.WriteLine($"용의기사2 리메이크 세이브 — {label}");
+                w.WriteLine($"버전: {VersionName} · 게임 {AppVersion}");
+                w.WriteLine($"넣는 곳: 기록 폴더(saves\\{VersionName}\\)에 같은 이름으로. 같은 이름 파일이 있으면 덮어씁니다.");
+            }
+            SaveSharer?.Invoke(zip, $"용의기사2 세이브 — {label}");
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Toast($"보내지 못했습니다 — {e.Message}");
+        }
+    }
+
     private void OpenContinue()
     {
+        _shareMode = false;
         _continueList = ContinueSlots();
         _continueRow = 0;
         _loadTop = 0;
