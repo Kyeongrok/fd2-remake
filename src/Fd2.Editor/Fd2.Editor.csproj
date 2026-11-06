@@ -14,6 +14,8 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Fd2.Data\Fd2.Data.csproj" />
+        <!-- 게임(Vortice → SharpGen)과 같은 System.Text.Json — 설치판은 둘이 한 폴더라 dll 이 하나뿐이다. -->
+        <PackageReference Include="System.Text.Json" Version="9.0.1" />
     </ItemGroup>
 
 </Project>
