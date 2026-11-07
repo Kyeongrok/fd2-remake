@@ -6,7 +6,7 @@ using Fd2.Data;
 namespace Fd2;
 
 /// <summary>
-/// 세이브 옮기기(w-169 · w-171) — 불러오기 화면 아래 「세이브 옮기기」.
+/// 세이브 공유(w-169 · w-171) — 불러오기 화면 아래 「세이브 공유」.
 /// <list type="bullet">
 /// <item>코드로 올리기 — 기록 하나를 버그 리포트 받는 곳(Cloudflare, <c>tools/bug-worker</c> 의 <c>POST /v1/save</c>)에 올리고 짧은 코드(「K7Q-29M」)를 받는다. 계정 없음, 3일 보관.</item>
 /// <item>코드로 받기 — 다른 기기(PC · 폰 어느 쪽이든)에서 그 코드를 넣으면 빈 기록 칸에 들어온다.</item>
@@ -35,7 +35,7 @@ internal sealed partial class GameWindow
 
     private const string CodeGuide =
         "• 서버에 3일 동안만 보관됩니다 — 3일이 지나면 지워지니 얼른 받으세요.\n" +
-        "• 받는 기기: 불러오기 → 세이브 옮기기 → 코드로 받기에 이 코드를 넣으세요(PC · 폰 어느 쪽이든).\n" +
+        "• 받는 기기: 불러오기 → 세이브 공유 → 코드로 받기에 이 코드를 넣으세요(PC · 폰 어느 쪽이든).\n" +
         "• 올려도 이 기기의 기록은 지워지지 않습니다.";
 
     private void OpenSaveMove()
@@ -46,7 +46,7 @@ internal sealed partial class GameWindow
         if (_continueList.Count > 0) items.Add(("코드로 올리기 — 다른 기기(PC · 폰)에서 코드로 받기", () => { _pickForCode = true; _shareMode = true; }));
         items.Add(("코드로 받기", AskCodeToReceive));
         if (SaveSharer != null && _continueList.Count > 0) items.Add(("파일로 보내기 — 카톡 · 이메일 · 메신저", () => { _pickForCode = false; _shareMode = true; }));
-        AskChoice("세이브 옮기기", items.Select(i => i.Label).ToArray(), i => { if (i >= 0 && i < items.Count) items[i].Do(); });
+        AskChoice("세이브 공유", items.Select(i => i.Label).ToArray(), i => { if (i >= 0 && i < items.Count) items[i].Do(); });
     }
 
     // ── 올리기 ──

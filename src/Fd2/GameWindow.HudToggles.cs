@@ -700,7 +700,6 @@ internal sealed partial class GameWindow
                 _menu.Add(("설정", () => OpenTouchMenu(0, 2), default));
                 if (!_touchFromTown) _menu.Add(("시스템 메뉴", OpenSystemMenu, default));   // 턴 끝 · 전황 기록은 싸움 것
                 _menu.Add(("에디트 — 돈 · 경험치 · 아이템", () => OpenTouchMenu(0, 3), default));
-                _menu.Add(("세이브 연동(구글 · 개발중)", () => { Close(); OpenCloudDialog(); }, default));
                 _menu.Add(("버그 리포트", () => { Close(); OpenBugReport(); }, default));
                 _menu.Add(("타이틀로", () => OpenTouchMenu(1, 5), default));   // 메뉴에서 타이틀로 갈 길이 없었다(사용자 요청) — 한 번 묻는다
                 break;
@@ -805,11 +804,34 @@ internal sealed partial class GameWindow
     private (int X, int Y, int First)? _readyPress;
     private bool _readyDragged;
 
+    /// <summary>
+    /// 폰 — 지도 아래 자리가 없어 띠가 안 나올 때, 빨리 위로 쓸면 화면 아래에 덮어 띄운다(아래로 쓸면 닫기, w-178).
+    /// _readyFits 는 이번 틀에 띠가 지도 아래 제자리에 들었나(그러면 쓸어올리기는 그냥 지도 밀기).
+    /// </summary>
+    private bool _readyPeek, _readyFits;
+
+    private bool ReadyShowable => _settings.ReadyBelowMap && InBattle && !InTownView && !_enemyPhase && _bs is BattleState.Select or BattleState.Target;
+
+    /// <summary>손을 뗐다 — 짧고 빠르게 세로로 쓸었으면 덮은 띠를 열거나(위로) 닫는다(아래로). 그랬으면 지도는 누르기 전 자리로.</summary>
+    private bool ReadyFlick((int X, int Y) from, int x, int y)
+    {
+        if (!TouchUi || _screen != Screen.Game || !ReadyShowable || _time - _pressAt > 0.35) return false;
+        int up = from.Y - y, side = Math.Abs(x - from.X);
+        if (Math.Abs(up) < Math.Max(DragSlop * 4, _clientH / 12) || side * 2 > Math.Abs(up)) return false;
+        bool open = up > 0;
+        if (open == _readyPeek || open && _readyFits) return false;   // 이미 그렇다 · 띠가 제자리에 보인다 — 지도 밀기 그대로
+        _readyPeek = open;
+        (_camX, _camY) = _pressCam;
+        PlaySfx(Sound.UiBank, Sound.Cursor);
+        return true;
+    }
+
     private void DrawReadyBelow(int fs)
     {
         _readyBelow.Clear();
         _readyArea = default;
-        if (!_settings.ReadyBelowMap || !InBattle || InTownView || _enemyPhase || _bs is not (BattleState.Select or BattleState.Target)) return;
+        _readyFits = false;
+        if (!ReadyShowable) { _readyPeek = false; return; }
         // 지도 아래 끝(화면 점) — 그 밑이 빈 띠
         int mapBottom = _offY + (_scene.Height * T - _camY) * _zoom;
         int top = Math.Max(0, mapBottom) + 4, band = _clientH - top - 4;
@@ -825,7 +847,17 @@ internal sealed partial class GameWindow
         int cardsTop = top + title.H + 2;
         // 그림 한 변 — 카드 폭과 띠 높이 둘 다에 들게, 지도 칸 셋을 넘지 않게
         int icon = Math.Min(Math.Min(cw - 2 * pad, _clientH - 4 - cardsTop - (pad * 2 + 2 + nameH + 2 + bar)), T * 3 * Math.Max(1, _zoom) / 2);
-        if (icon < T) return;   // 띠가 너무 낮다
+        if (icon < T)   // 띠가 너무 낮다 — 쓸어올렸으면 화면 아래에 덮어서
+        {
+            if (!_readyPeek) return;
+            icon = Math.Max(T, Math.Min(cw - 2 * pad, _clientH / 7));
+            top = _clientH - 8 - (pad + icon + 2 + nameH + 2 + bar + pad) - title.H - 2;
+            cardsTop = top + title.H + 2;
+            var shut = Text.Render("아래로 쓸면 닫기", Math.Max(10, small * 4 / 5), 0xFF8090C0, bold: false);   // 띠 위 오른쪽 — 제목 줄의 「밀어서 넘기기」와 안 겹치게
+            FillRect(0, top - 10 - shut.H, _clientW, _clientH - top + 10 + shut.H, 0xE0080810);
+            DrawText(shut, _clientW - 8 - shut.W, top - 6 - shut.H);
+        }
+        else { _readyFits = true; _readyPeek = false; }
         int ch = pad + icon + 2 + nameH + 2 + bar + pad;
         _readyStep = cw + gap;
         _readyFirst = Math.Clamp(_readyFirst, 0, Math.Max(0, ready.Count - ReadyPage));
@@ -872,8 +904,7 @@ internal sealed partial class GameWindow
     /// <summary>띠를 눌렀다 — 끌면 넘기고, 안 끌고 떼면 그 카드를 고른다(<see cref="ReadyRelease"/>).</summary>
     private bool ReadyPress(int x, int y)
     {
-        if (_screen != Screen.Game || !InBattle || InTownView || _enemyPhase || _bs is not (BattleState.Select or BattleState.Target)
-            || !_settings.ReadyBelowMap || !InRect(_readyArea, x, y)) return false;
+        if (_screen != Screen.Game || !ReadyShowable || !InRect(_readyArea, x, y)) return false;
         (_readyPress, _readyDragged) = ((x, y, _readyFirst), false);
         return true;
     }
@@ -891,6 +922,7 @@ internal sealed partial class GameWindow
     {
         if (_readyPress is not { } p) return false;
         _readyPress = null;
+        if (_readyPeek && y - p.Y > Math.Max(DragSlop * 4, _clientH / 12) && Math.Abs(x - p.X) * 2 < y - p.Y) { _readyPeek = false; _readyFirst = p.First; return true; }   // 띠를 아래로 쓸어 닫기
         if (_readyDragged) return true;
         foreach (var (r, who) in _readyBelow)
             if (InRect(r, p.X, p.Y) && who.Hp > 0)

@@ -47,7 +47,6 @@ internal sealed partial class GameWindow
         Win32.AppendMenuW(tools, Win32.MF_STRING, MenuEditor, "편집기 열기(&E)...");
         Win32.AppendMenuW(bar, Win32.MF_POPUP, (nuint)tools, "도구(&T)");
         Win32.AppendMenuW(bar, Win32.MF_SEPARATOR, 0, null);
-        Win32.AppendMenuW(bar, Win32.MF_STRING, MenuCloud, "세이브 연동(개발중)(&C)...");
         Win32.AppendMenuW(bar, Win32.MF_STRING, MenuBugReport, "버그 리포트(&B)...");
         Win32.AppendMenuW(bar, Win32.MF_STRING, MenuExit, "끝내기(&X)");
         return bar;

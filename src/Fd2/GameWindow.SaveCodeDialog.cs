@@ -3,7 +3,7 @@ using System.Windows.Forms;
 
 namespace Fd2;
 
-/// <summary>PC 의 세이브 옮기기 창들(w-171) — 줄 고르기 · 코드 넣기 · 코드 알림. 게임 꼴 창(<see cref="GameDialog"/>).</summary>
+/// <summary>PC 의 세이브 공유 창들(w-171) — 줄 고르기 · 코드 넣기 · 코드 알림. 게임 꼴 창(<see cref="GameDialog"/>).</summary>
 internal sealed partial class GameWindow
 {
     /// <summary>다른 스레드(올리기가 끝난 뒤)에서 띄울 코드 알림 — 게임 스레드가 다음 틀에 띄운다.</summary>

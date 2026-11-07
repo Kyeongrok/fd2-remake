@@ -200,6 +200,9 @@ internal sealed partial class GameWindow
     private (int X, int Y) _pressCam;
     private bool _dragging;
 
+    /// <summary>누른 때(_time) — 빨리 쓸었나를 본다.</summary>
+    private double _pressAt;
+
     /// <summary>이 몇 점 넘게 움직여야 끌기 — 손떨림 · 살짝 미끄러진 누르기는 누르기로.</summary>
     private const int DragSlop = 8;
 
@@ -214,7 +217,9 @@ internal sealed partial class GameWindow
     /// </summary>
     internal void PointerPress(int x, int y, bool defer = false)
     {
+        _pressAt = _time;
         if (_tutorOpen || _notesOpen) { (_press, _pressCam, _dragging) = ((x, y), (_camX, _camY), false); return; }   // 안내 — 뗄 때 다음 장 · 노트 — 끌면 넘기고 뗄 때 닫기
+        if (_readyPeek && ReadyPress(x, y)) return;   // 덮어 띄운 남은 아군 띠가 밑의 화면 단추보다 먼저(w-178)
         if (HudHoldPress(x, y)) return;
         if (ReadyPress(x, y)) return;
         if (PartyPress(x, y) || VolumePress(x, y) || SetupPress(x, y) || MenuPress(x, y)) return;
@@ -235,6 +240,7 @@ internal sealed partial class GameWindow
         if (_press is not { } p) return;
         bool dragged = _dragging;
         (_press, _dragging) = (null, false);
+        if (ReadyFlick(p, x, y)) return;   // 빨리 위로 쓸기 — 남은 아군 띠 덮어 띄우기 · 아래로 닫기(w-178)
         // 끌다가 뗀 것은 누르기가 아니다(사용자 요청 — 넘기다 손을 떼면 그 자리가 눌렸다). 지도를 못 끄는 화면에서도
         if (!dragged && Math.Abs(x - p.X) + Math.Abs(y - p.Y) <= DragSlop * 2) PointerDown(p.X, p.Y);
     }

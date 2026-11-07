@@ -169,7 +169,7 @@ public partial class MainActivity
             .SetNeutralButton("코드 보내기", (_, _) =>
             {
                 var send = new Intent(Intent.ActionSend).SetType("text/plain")!
-                    .PutExtra(Intent.ExtraText, $"용의기사2 세이브 코드 {code}\n불러오기 → 세이브 옮기기 → 코드로 받기에 넣으세요. 3일 동안만 받을 수 있습니다.")!;
+                    .PutExtra(Intent.ExtraText, $"용의기사2 세이브 코드 {code}\n불러오기 → 세이브 공유 → 코드로 받기에 넣으세요. 3일 동안만 받을 수 있습니다.")!;
                 StartActivity(Intent.CreateChooser(send, "코드 보내기"));
             })!
             .SetNegativeButton("닫기", (_, _) => { })!

@@ -114,7 +114,7 @@ internal sealed partial class GameWindow
     /// <summary>글 줄 고르기 창 — MainActivity 가 채운다.</summary>
     internal static Action<string, string[], Action<int>>? ChoiceAsker;
 
-    // ── 세이브 옮기기 창들(w-171) — MainActivity 가 채운다 ──
+    // ── 세이브 공유 창들(w-171) — MainActivity 가 채운다 ──
 
     /// <summary>한 줄 글 넣기(제목, 안내, 힌트, 확인) — 안드로이드 대화 상자.</summary>
     internal static Action<string, string, string, Action<string>>? LineAsker;

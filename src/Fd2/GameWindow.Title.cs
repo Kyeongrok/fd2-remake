@@ -43,8 +43,8 @@ internal sealed partial class GameWindow
 
     private (string Label, Action Do)[] TitleItems => _continueOpen
         ? [.. _continueList.Select(s => (s.Label, (Action)(() => PickSlot(s.Label, s.Campaign)))),
-           (_shareMode ? "고르기 그만" : "세이브 옮기기", OpenSaveMove),   // 코드로 올리기 · 받기, (폰) 파일로 보내기(w-169 · w-171)
-           ("세이브 연동(구글 · 개발중)", OpenCloudDialog), ("돌아가기", CloseContinue)]
+           (_shareMode ? "고르기 그만" : "세이브 공유", OpenSaveMove),   // 코드로 올리기 · 받기, (폰) 파일로 보내기(w-169 · w-171)
+           ("돌아가기", CloseContinue)]   // 세이브 연동(구글)은 뺐다(fb-97) — 코드 공유로 충분
         : [
         ("Start", StartGame),
         ("Load", () => { OpenContinue(); _titleIndex = 0; }),
@@ -313,7 +313,7 @@ internal sealed partial class GameWindow
 
     // ── 불러오기 화면(사용자 요청 — 제목 그림 위 한 줄 글은 읽기 어려웠다) ─────────────────────────────
     // 그림을 어둡게 덮고, 기록마다 카드 한 장: 왼쪽 색 띠(전황 파랑 · 자동 청록 · 기록 금 · 원작 보라), 위 줄 이름 · 시각, 아래 줄 장 · 동료 · 돈.
-    // 넘치면 고른 카드가 보이게 밀고, 위 · 아래 끝의 「▲ · ▼」 띠를 누르면 한 쪽씩 넘긴다. 세이브 연동 · 돌아가기는 맨 아래 단추 줄.
+    // 넘치면 고른 카드가 보이게 밀고, 위 · 아래 끝의 「▲ · ▼」 띠를 누르면 한 쪽씩 넘긴다. 세이브 공유 · 돌아가기는 맨 아래 단추 줄.
 
     private int _loadTop;
     private (int X, int Y, int W, int H) _loadUp, _loadDown;
@@ -391,7 +391,7 @@ internal sealed partial class GameWindow
         FillRect(cx, y, cw, 3, FdEdge);
         y += gap + 2;
 
-        // 아래 단추 줄 — (폰) 세이브 보내기 · 세이브 연동 · 돌아가기
+        // 아래 단추 줄 — 세이브 공유 · 돌아가기
         int buttons = items.Length - n;
         int bfs = fs, bh = Text.Render("가", bfs, 0xFFFFFFFF).H + pad * 2, by = _clientH - bh - pad;
         int bw = (cw - gap * (buttons - 1)) / buttons;
