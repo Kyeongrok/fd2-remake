@@ -59,6 +59,7 @@ internal static class Rules
         Same("세이브 코드 바이트 왕복 — 다음 장 · 돈 · 동료 수 · 공통 가방", back1 is { } bc ? (bc.NextScene, bc.Gold, bc.Party.Count, string.Join(",", bc.Shared)) : default,
              (7, 12345, 1, "192,193"));
         Same("25장 화룡(유닛 표 1) 자리",s25.Units.Find(u => u.Form == 104) is { } dragon ? (dragon.X, dragon.Y) : (-1, -1), (10, 0));
+        Scene30(dir, pal, icons);
 
         // 등장 차례 1 의 도적(몬스터 96, Lv 2) — 유닛 표 0 번은 배열 4 번
         var e0 = scene.Roster[0];
@@ -160,6 +161,50 @@ internal static class Rules
             b.Drops([thief], saul, full, shared: true);
             Same("공통 가방 켬 — 빈 동료가 받음", full.Count == 0 && others.Any(o => o.Bag.Any(x => x.Item == 194)), true);
         }
+    }
+
+    /// <summary>
+    /// 30장 사건 82(0x362E8, 버그 리포트 #7) — 우두머리를 쓰러뜨리면 사건 81 이 깃발 16 을 올리고, 사건 82 가 다음 우두머리 24−f 를 (22,18) 로,
+    /// 등장 차례 f 졸개 2f+25 · 2f+26 을 (21,18) · (23,18) 로 전송한다(sub_33F78). f = 4 면 공마신(20) 만 옮기고 AI 11.
+    /// 대본의 warp · ai 가 셈 꼴이라 숫자만 받던 때는 다 넘어갔다.
+    /// </summary>
+    private static void Scene30(string dir, uint[] pal, IconBank icons)
+    {
+        Console.WriteLine("\n[30장 사건 82 — 다음 우두머리 · 졸개 전송]");
+        var ops = SceneEvents.Load()?.Event(82) ?? [];
+        var raws = new List<string>();
+        void Walk(IEnumerable<System.Text.Json.JsonElement> list)
+        {
+            foreach (var op in list)
+            {
+                if (op.GetArrayLength() < 2) continue;
+                if (op[0].GetString() == "raw") raws.Add(op[1].GetString() ?? "");
+                if (op[0].GetString() == "if")
+                    for (int k = 2; k < op.GetArrayLength(); k++) Walk(op[k].EnumerateArray());
+            }
+        }
+        Walk(ops);
+        var s = new Scene(dir, 29, pal, icons);
+        Seq("우두머리 유닛 24 · 23 · 22 · 21 의 떨굼 = 사건 81(깃발 16 올리고 사건 82 를 켬)",
+            new[] { 24, 23, 22, 21 }.Select(n => s.Units.Find(u => u.Slot == n)?.Entry is { DropKind: 2 } e ? e.DropValue : -1), [81, 81, 81, 81]);
+        var moved = new List<string>();
+        for (int f = 1; f <= 4; f++)
+        {
+            var born = f < 4 ? s.Roster.Where(e => e.Phase == f).Select(e => s.Spawn(e)?.Slot ?? -1).ToList() : [];
+            int? Ev(string x) => ScriptExpr.Eval(x, 0, 0, s.SlotCount, k => k == 16 ? f : 0);
+            var warps = raws.Select(r => ScriptExpr.Warp(r, Ev)).OfType<(int Unit, int X, int Y)>().ToList();
+            var boss = warps.First();
+            var bu = s.Units.Find(u => u.Slot == boss.Unit);
+            moved.Add($"{boss.Unit}:{bu?.Form}@{boss.X},{boss.Y}");
+            if (f < 4)
+            {
+                Seq($"f={f} 졸개 전송 번호 = 등장 차례 {f} 로 선 번호", warps.Skip(1).Take(2).Select(w => w.Unit), born);
+                Same($"f={f} 우두머리 AI 0 으로", ScriptExpr.Ai(raws.First(r => r.Contains("flag(16)") && r.StartsWith("ai(")), Ev), (24 - f, 24 - f, 0));
+            }
+        }
+        Seq("우두머리 전송 번호(f = 1 ~ 4)", moved.Select(m => int.Parse(m.Split(':')[0])), [23, 22, 21, 20]);
+        Console.WriteLine("  우두머리 번호:캐릭터@칸 " + string.Join(" · ", moved));
+        Same("공마신(유닛 20) 은 몬스터 126", s.Units.Find(u => u.Slot == 20)?.Form, 126);
     }
 
     /// <summary>두 사람을 평지에 나란히 — 1장 지도에서 지형 0 이 둘 이어진 첫 자리.</summary>

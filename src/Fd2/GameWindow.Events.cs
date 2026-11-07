@@ -299,41 +299,8 @@ internal sealed partial class GameWindow
         if (_flags[k] != 0) _battle.OpenedChests.Add(k); else _battle.OpenedChests.Remove(k);
     }
 
-    /// <summary>대본의 셈(정수 · turn · arg0 · nunits · flag(k) · + − × · &gt;&gt; &lt;&lt; · 괄호) — 모르는 글이면 null.</summary>
-    private int? Eval(string text)
-    {
-        int i = 0;
-        string s = text.Replace(" ", "");
-        int? Expr()
-        {
-            var a = Term();
-            while (a != null && i < s.Length)
-            {
-                if (s[i] == '+') { i++; var b = Term(); a = b == null ? null : a + b; }
-                else if (s[i] == '*') { i++; var b = Term(); a = b == null ? null : a * b; }   // 왼쪽부터(대본의 식은 turn*2-27 꼴뿐)
-                else if (s[i] == '-') { i++; var b = Term(); a = b == null ? null : a - b; }
-                else if (i + 1 < s.Length && s[i] == '>' && s[i + 1] == '>') { i += 2; var b = Term(); a = b == null ? null : a >> b; }
-                else if (i + 1 < s.Length && s[i] == '<' && s[i + 1] == '<') { i += 2; var b = Term(); a = b == null ? null : a << b; }
-                else break;
-            }
-            return a;
-        }
-        int? Term()
-        {
-            if (i >= s.Length) return null;
-            if (s[i] == '(') { i++; var v = Expr(); if (i < s.Length && s[i] == ')') i++; return v; }
-            int st = i;
-            while (i < s.Length && char.IsDigit(s[i])) i++;
-            if (i > st) return int.Parse(s[st..i]);
-            if (s.AsSpan(i).StartsWith("turn")) { i += 4; return Turn; }
-            if (s.AsSpan(i).StartsWith("arg0")) { i += 4; return _eventArg; }
-            if (s.AsSpan(i).StartsWith("nunits")) { i += 6; return _scene.SlotCount; }   // 유닛 수(n6_0)
-            if (s.AsSpan(i).StartsWith("flag(")) { i += 5; var k = Expr(); if (i < s.Length && s[i] == ')') i++; return k == null ? null : Flag(k.Value); }
-            return null;
-        }
-        var r = Expr();
-        return i == s.Length ? r : null;
-    }
+    /// <summary>대본의 셈(<see cref="ScriptExpr.Eval"/>) — 모르는 글이면 null.</summary>
+    private int? Eval(string text) => ScriptExpr.Eval(text, Turn, _eventArg, _scene.SlotCount, Flag);
 
     /// <summary>대본의 raw 가운데 옮길 수 있는 것 — ai(units a..b, m), warp(u,x,y), giveitem(i), killfrom(n), flag[k]=식. 그 밖(그림 · 팔레트 연출)은 넘긴다.</summary>
     private void RawOp(string text)
@@ -351,23 +318,20 @@ internal sealed partial class GameWindow
             if (Eval(fm.Groups[2].Value) is { } fv) SetFlag(int.Parse(fm.Groups[1].Value), fv);
             return;
         }
-        var m = Regex.Match(text, @"^ai\(units (\d+)\.\.(\d+), *(\d+)\)");
-        if (m.Success)
+        // 유닛 번호가 셈일 수 있다 — 30장 사건 82(땅마귀 · … 를 쓰러뜨리면 공마귀가 다음 우두머리 24−flag(16) 을 (22,18) 로,
+        // 새 졸개 2·flag(16)+25 · +26 을 (21,18) · (23,18) 로 전송)는 warp(flag(16)*-1+24,22,18) 꼴이라 숫자만 받던 때 넘어가
+        // 우두머리가 들어갈 수 없는 처음 자리에 남았다(버그 리포트 #7)
+        if (ScriptExpr.Ai(text, Eval) is (int aa, int ab, int av))
         {
-            int a = int.Parse(m.Groups[1].Value), b = int.Parse(m.Groups[2].Value), v = int.Parse(m.Groups[3].Value);
-            foreach (var u in _scene.Units.Where(u => u.Slot >= a && u.Slot <= b)) u.AiByte = (u.AiByte & 0xF0) | (v & 0x0F);
+            foreach (var u in _scene.Units.Where(u => u.Slot >= aa && u.Slot <= ab)) u.AiByte = (u.AiByte & 0xF0) | (av & 0x0F);
             return;
         }
-        m = Regex.Match(text, @"^warp\((\d+), *(\d+), *(\d+)\)");
-        if (m.Success)
+        if (ScriptExpr.Warp(text, Eval) is (int wu, int wx, int wy))
         {
-            if (BySlot(int.Parse(m.Groups[1].Value)) is { } w)
-            {
-                int x = int.Parse(m.Groups[2].Value), y = int.Parse(m.Groups[3].Value);
-                if (_scene.Inside(x, y)) (w.X, w.Y, w.FromX, w.FromY) = (x, y, x, y);
-            }
+            if (BySlot(wu) is { } w && _scene.Inside(wx, wy)) (w.X, w.Y, w.FromX, w.FromY) = (wx, wy, wx, wy);
             return;
         }
+        Match m;
         // 화면 · 커서 칸 쓰기 — g53aa9 · g53aad 화면 왼쪽 위 칸 x · y, g53ab1 · g53ab5 커서 칸 x · y(원작 변수)
         m = Regex.Match(text, @"^g53(aa9|aad|ab1|ab5)=(\d+)$");
         if (m.Success)
