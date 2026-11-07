@@ -833,7 +833,10 @@ internal sealed partial class GameWindow
         _readyFits = false;
         if (!ReadyShowable) { _readyPeek = false; return; }
         // 지도 아래 끝(화면 점) — 그 밑이 빈 띠
-        int mapBottom = _offY + (_scene.Height * T - _camY) * _zoom;
+        // 폰에서 지도를 끝 너머로 더 밀 수 있는 몫(CamOver)은 빼고 잰다 — 밀거나 쓸어올리는 동안 띠가 나왔다 들어갔다 깜빡이지 않게(fb-99)
+        int mapH = _scene.Height * T;
+        int camY = mapH > _boardH ? Math.Min(_camY, mapH - _boardH) : _camY;
+        int mapBottom = _offY + (mapH - camY) * _zoom;
         int top = Math.Max(0, mapBottom) + 4, band = _clientH - top - 4;
         var ready = Controlled.Where(u => u.Hp > 0 && Ready(u)).OrderBy(u => u.Slot).ToList();
         _readyCount = ready.Count;
@@ -932,6 +935,15 @@ internal sealed partial class GameWindow
         foreach (var (r, who) in _readyBelow)
             if (InRect(r, p.X, p.Y) && who.Hp > 0)
             {
+                // 커서가 이미 그 사람에게 있으면(한 번 더 누름) 지도에서 누른 것처럼 골라 이동 범위를 띄운다(w-180)
+                if (_cursor == (who.X, who.Y) && _bs == BattleState.Select && who != _actor && Ready(who))
+                {
+                    _selected = who; BeginMove(who);
+                    _readyPeek = false;   // 덮어 띄운 띠는 닫아 범위가 보이게
+                    _centerCursor = true; _mouseMoved = false;
+                    PlaySfx(Sound.UiBank, Sound.Cursor);
+                    break;
+                }
                 _cursor = (who.X, who.Y); _centerCursor = true; _mouseMoved = false;
                 PlaySfx(Sound.UiBank, Sound.Cursor);
                 break;
