@@ -223,7 +223,7 @@ internal sealed partial class GameWindow
         if (HudHoldPress(x, y)) return;
         if (ReadyPress(x, y)) return;
         if (PartyPress(x, y) || VolumePress(x, y) || SetupPress(x, y) || MenuPress(x, y)) return;
-        if (!defer && (!CanDragMap || InBattle && HudHit(x, y))) { PointerDown(x, y); return; }
+        if (!defer && (!CanDragMap || InBattle && HudHit(x, y)) && !(TownSwipeable && !HudHit(x, y))) { PointerDown(x, y); return; }   // 마을은 쓸어넘기기를 보려고 뗄 때 누른다(w-181)
         (_press, _pressCam, _dragging) = ((x, y), (_camX, _camY), false);
     }
 
@@ -241,6 +241,7 @@ internal sealed partial class GameWindow
         bool dragged = _dragging;
         (_press, _dragging) = (null, false);
         if (ReadyFlick(p, x, y)) return;   // 빨리 위로 쓸기 — 남은 아군 띠 덮어 띄우기 · 아래로 닫기(w-178)
+        if (TownSwipe(p, x, y)) return;    // 마을 — 좌우로 쓸면 옆 건물(w-181)
         // 끌다가 뗀 것은 누르기가 아니다(사용자 요청 — 넘기다 손을 떼면 그 자리가 눌렸다). 지도를 못 끄는 화면에서도
         if (!dragged && Math.Abs(x - p.X) + Math.Abs(y - p.Y) <= DragSlop * 2) PointerDown(p.X, p.Y);
     }

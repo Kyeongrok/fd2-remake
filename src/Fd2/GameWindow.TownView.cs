@@ -150,6 +150,45 @@ internal sealed partial class GameWindow
         return true;
     }
 
+    /// <summary>건물 안 네 단추가 떠 있나(사기 · 팔기 목록 같은 것이 아니라 첫 화면).</summary>
+    private bool TownInsideTop => InTownView && _stage == MenuStage.Town && !_townTop && _townButtons && _bs == BattleState.Menu && InsideBundle(_townSpot) >= 0;
+
+    /// <summary>마을에서 화면을 좌우로 쓸어 넘길 수 있나 — 첫 화면(건물 고르기) · 건물 안 첫 화면.</summary>
+    private bool TownSwipeable => _screen == Screen.Game && (TownTop || TownInsideTop);
+
+    /// <summary>
+    /// 마을 쓸어넘기기(w-181) — 첫 화면이면 옆 건물을 고르고, 건물 안이면 옆 건물로 바로 들어간다(출구는 건너뜀). 아래로 쓸면 파티 정보(w-182).
+    /// 손가락을 왼쪽으로 쓸면 다음(오른쪽) 건물. 받았으면 참.
+    /// </summary>
+    private bool TownSwipe((int X, int Y) from, int x, int y)
+    {
+        if (!TownSwipeable || _campaign is not { } c || _tables?.ShopFor(c.NextScene) is not { } shop) return false;
+        int dx = x - from.X, down = y - from.Y, dy = Math.Abs(down);
+        // 아래로 쓸어내리면 파티 정보(w-182)
+        if (down >= Math.Max(DragSlop * 4, _clientH / 10) && Math.Abs(dx) * 2 < down) { OpenParty(); return true; }
+        if (Math.Abs(dx) < Math.Max(DragSlop * 4, _clientW / 8) || dy * 2 > Math.Abs(dx)) return false;
+        int step = dx < 0 ? 1 : -1;
+        if (TownTop)
+        {
+            int n = _menu.Count - 1;   // 0 줄은 돈 줄
+            if (n <= 0) return true;
+            _menuIndex = (Math.Clamp(_menuIndex - 1, 0, n - 1) + step + n) % n + 1;
+            _townSpot = _menuIndex - 1;
+            PlaySfx(Sound.UiBank, Sound.Cursor);
+            return true;
+        }
+        var spots = new List<int> { 0, 1, 3, 4 };
+        if (shop.Secret.Length > 0) spots.Add(5);
+        int at = spots.IndexOf(_townSpot);
+        if (at < 0) return false;
+        int to = spots[(at + step + spots.Count) % spots.Count];
+        OpenTownMenu(to);        // 첫 메뉴를 거쳐(그리지 않으니 문 움직임은 없다) 그 건물 줄을 누른다
+        _townSpot = to;
+        _menu[to + 1].Do();
+        PlaySfx(Sound.UiBank, Sound.Cursor);
+        return true;
+    }
+
     private void DrawTownView()
     {
         if (!InTownView || _campaign is not { } c || _tables?.ShopFor(c.NextScene) is not { } shop) return;
