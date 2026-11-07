@@ -853,29 +853,34 @@ internal sealed partial class GameWindow
             icon = Math.Max(T, Math.Min(cw - 2 * pad, _clientH / 7));
             top = _clientH - 8 - (pad + icon + 2 + nameH + 2 + bar + pad) - title.H - 2;
             cardsTop = top + title.H + 2;
-            var shut = Text.Render("아래로 쓸면 닫기", Math.Max(10, small * 4 / 5), 0xFF8090C0, bold: false);   // 띠 위 오른쪽 — 제목 줄의 「밀어서 넘기기」와 안 겹치게
-            FillRect(0, top - 10 - shut.H, _clientW, _clientH - top + 10 + shut.H, 0xE0080810);
+            // 띠 바탕은 깔지 않는다 — 밑의 지도가 보이게(fb-98). 글자만 얇은 그림자 상자로 읽히게
+            var shut = Text.Render("아래로 쓸면 닫기", Math.Max(10, small * 4 / 5), 0xFFB8C4E8, bold: false);   // 띠 위 오른쪽 — 제목 줄의 「밀어서 넘기기」와 안 겹치게
+            FillRect(_clientW - 12 - shut.W, top - 8 - shut.H, shut.W + 8, shut.H + 4, 0x90000000);
             DrawText(shut, _clientW - 8 - shut.W, top - 6 - shut.H);
         }
         else { _readyFits = true; _readyPeek = false; }
+        bool overMap = !_readyFits;
         int ch = pad + icon + 2 + nameH + 2 + bar + pad;
         _readyStep = cw + gap;
         _readyFirst = Math.Clamp(_readyFirst, 0, Math.Max(0, ready.Count - ReadyPage));
         _readyArea = (left, top, stripW, cardsTop + ch - top);
+        if (overMap) FillRect(left - 4, top - 2, title.W + 8, title.H + 4, 0x90000000);
         DrawText(title, left, top);
         // 더 있으면 제목 옆에 「◀ 1~4 / 6 ▶」 — 끌어서 넘긴다는 표시(단추 아님)
         if (ready.Count > ReadyPage)
         {
             var more = Text.Render($"{(_readyFirst > 0 ? "◀ " : "")}{_readyFirst + 1}~{Math.Min(ready.Count, _readyFirst + ReadyPage)} / {ready.Count}{(_readyFirst + ReadyPage < ready.Count ? " ▶" : "")}  밀어서 넘기기",
-                                     Math.Max(10, small * 4 / 5), 0xFF8090C0, bold: false);
-            DrawText(more, left + title.W + gap * 2, top + (title.H - more.H) / 2);
+                                     Math.Max(10, small * 4 / 5), overMap ? 0xFFB8C4E8 : 0xFF8090C0, bold: false);
+            int mx = left + title.W + gap * 2, my = top + (title.H - more.H) / 2;
+            if (overMap) FillRect(mx - 4, my - 2, more.W + 8, more.H + 4, 0x90000000);
+            DrawText(more, mx, my);
         }
         for (int i = 0; i < ReadyPage && _readyFirst + i < ready.Count; i++)
         {
             var u = ready[_readyFirst + i];
             int x = left + i * _readyStep, y = cardsTop;
             bool here = _cursor == (u.X, u.Y);
-            FillRect(x, y, cw, ch, here ? 0xC0344480 : 0xA0101020);
+            FillRect(x, y, cw, ch, overMap ? (here ? 0x80344480u : 0x50101020u) : here ? 0xC0344480u : 0xA0101020u);   // 지도 위에 덮을 때는 더 옅게(fb-98)
             uint edge = here ? 0xFFFFE070 : 0x80FFFFFF;
             FillRect(x, y, cw, 1, edge); FillRect(x, y + ch - 1, cw, 1, edge);
             FillRect(x, y, 1, ch, edge); FillRect(x + cw - 1, y, 1, ch, edge);

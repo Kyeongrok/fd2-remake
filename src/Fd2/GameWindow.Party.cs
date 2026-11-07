@@ -273,6 +273,8 @@ internal sealed partial class GameWindow
         // 능력마다 파티에서 가장 높은 값 — 그 숫자는 초록으로(한눈에 비교, w-140). 모두 같으면 안 칠한다
         int? Top(Func<Unit, int> f) { var v = _party.Select(f).ToList(); return v.Count > 1 && v.Max() != v.Min() ? v.Max() : null; }
         int? topAtk = Top(u => u.Atk), topDef = Top(u => u.Def), topHit = Top(u => u.Hit), topEva = Top(u => u.Evade), topSpd = Top(u => u.Speed), topMov = Top(u => u.Move);
+        // 공격력이 파티 상위 5명 평균보다 낮으면 주황(w-179) — 무기를 바꾸거나 키울 사람이 한눈에. 둘 이하면 견줄 것이 없어 안 칠한다
+        double lowAtk = _party.Count > 2 ? _party.Select(u => u.Atk).OrderByDescending(a => a).Take(5).Average() : double.MinValue;
         var cards = _party.Select(u =>
         {
             bool down = u.Hp <= 0;
@@ -285,13 +287,13 @@ internal sealed partial class GameWindow
             string headShort = $"  {GameNames.Class(u.Class)}  Lv {u.Level}", exp = u.Team == 2 ? $"경험 {u.Exp}/{_battle.LevelUpExp}" : "(컴퓨터 아군)";
             // 원작 정보 창(sub_17FC0)처럼 오른 능력 숫자는 색을 바꾼다. 상태는 오른 것 노랑 · 독 · 마비 · 봉쇄 빨강
             const uint upC = 0xFFFFD040, badC = 0xFFFF9090;
-            const uint topC = 0xFF60F080;
-            Text.Image Stat(string label, int v, bool up, int? top = null) => HJoin(Line(label), Line($"{v}", up && !down ? upC : v == top ? topC : 0xFFFFFFFF));
+            const uint topC = 0xFF60F080, lowC = 0xFFFF9848;
+            Text.Image Stat(string label, int v, bool up, int? top = null, bool low = false) => HJoin(Line(label), Line($"{v}", up && !down ? upC : v == top ? topC : low ? lowC : 0xFFFFFFFF));
             var spd = HJoin(Stat("  속도 ", u.Speed, false, topSpd), Stat("  이동 ", u.Move, false, topMov));
             Text.Image? StatusImg() => status.Length == 0 ? null : down ? Line($"   {status}", badC)
                 : HJoin(Enumerable.Range(0, 6).Where(k => u.Status[k] > 0)
                     .Select(k => Line($"   {Battle.StatusNames[k]}({u.Status[k]})", k < 3 ? upC : badC)).ToArray());
-            var atk = Stat("공격 ", u.Atk, u.Status[0] > 0, topAtk); var def = Stat("  방어 ", u.Def, u.Status[1] > 0, topDef);
+            var atk = Stat("공격 ", u.Atk, u.Status[0] > 0, topAtk, u.Atk < lowAtk); var def = Stat("  방어 ", u.Def, u.Status[1] > 0, topDef);
             var hit = Stat("  명중 ", u.Hit, u.Status[2] > 0, topHit); var eva = Stat("  회피 ", u.Evade, u.Status[2] > 0, topEva);
             return (Head: HJoin(name, Line(narrow ? headShort : head)), Exp: Line(exp),
                     Stats1: HJoin(atk, def, hit), Stats2: HJoin(Stat("회피 ", u.Evade, u.Status[2] > 0, topEva), spd),
