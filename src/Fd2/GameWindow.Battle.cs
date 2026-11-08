@@ -1463,8 +1463,10 @@ internal sealed partial class GameWindow
     }
 
     /// <summary>
-    /// 물건을 쓴다(컴퓨터) — 회복(쓰임 5 닳음 · 13 안 닳음)은 범위 안 대상마다 수치의 90~99.9%(sub_211A4 도 회복 마법과 같은 굴림으로 본 짐작),
-    /// 20 · 21 · 24 는 그 마법을 MP 없이. 경험은 없다.
+    /// 물건을 쓴다(컴퓨터 · 우리 편) — 회복(쓰임 5 닳음 · 13 안 닳음)은 원작 sub_211A4 처럼 전투 화면 없이 지도에서:
+    /// 대상 칸들 위에 마법 13 칸의 그림(FDOTHER 6 의 57~63 장, 소리 12 — sub_1C4CC(…, 13, …)) → 대상 번쩍임(sub_1C2DA) →
+    /// 대상마다 수치의 90~99.9% 회복(sub_1C916) · 머리 위 숫자(sub_1E0DB(…, 105, …)). 회복술(sub_21AD9)이 앞에 두는 소리 11 · 빛 기둥(sub_21EB1)은 없다.
+    /// 그림은 편집기의 회복술 바깥 이펙트(holy-heal) 짝을 타지 않고 늘 원작 것. 20 · 21 · 24 는 그 마법을 MP 없이. 경험은 없다.
     /// </summary>
     private void UseItem(Unit u, int slot, (int X, int Y) center, Action after)
     {
@@ -1475,8 +1477,11 @@ internal sealed partial class GameWindow
         if (it.Use == 5) u.Bag.RemoveAt(slot);
         BeginStrikes(after);
         foreach (var t in targets) _strikes.Enqueue(new Hit(u, t, Heal: it.UseValue));
-        // 회복 물건 연출은 0.14.65 앞(전투 화면에서 회복)으로 되돌림(fb-104) — 원작 sub_211A4 의 지도 위 마법 13 그림은 뺐다
-        NextStrike();
+        // 원작 sub_211A4 — 지도 위 원작 그림(0.14.65 는 PlaySpellFx 가 회복술 짝 holy-heal 로 바꿔 그려 회복술 이펙트로 보였다, fb-104 는 전투 화면으로 되돌렸었다)
+        _strikeOnMap = targets.Count > 0;
+        if (_strikeOnMap)
+            PlaySpellFx(13, targets.Select(t => (t.X, t.Y)), () => PlayTargetFlash(targets, NextStrike), originalArt: true);
+        else NextStrike();
     }
 
     private static Dir FaceTo(Unit a, Unit b)

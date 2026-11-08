@@ -42,6 +42,10 @@ internal static class Rules
         Same("회복술 이펙트 시트 컷 수 · 크기 · 발 · 첫 컷 ms", heal is { } hs ? (hs.Frames.Count, hs.Frames[0].W, hs.Frames[0].H, hs.PivotX, hs.PivotY, hs.Durations[0]) : default,
              (58, 80, 104, 40, 92, 33));
         Same("회복술 이펙트 가운데 컷에 보이는 점이 있음", heal != null && heal.Frames[20].Px.Any(c => c >> 24 != 0), true);
+        // 회복 물건(sub_211A4)은 sub_1C4CC(…, 13, …) — 마법 13 칸의 원작 그림 FDOTHER 6 의 57~63 장 · 첫 장 소리 12, 장마다 보이는 점이 있어야
+        var fx6 = new EffectFrames(dir, 6, pal);
+        Same("회복 물건 지도 그림 — 마법 13 칸 시작 장 · 장 수 · 소리", t.MapSpellFx(13), (57, 7, 12));
+        Same("회복 물건 지도 그림 57~63 장에 모두 보이는 점", fx6.Count >= 64 && Enumerable.Range(57, 7).All(i => fx6[i].Px.Any(c => c != 0)), true);
         // 필살기 이펙트 돌리기(w-162) — 위로 자라는 불기둥을 왼쪽으로: 크기가 가로세로 바뀌고, 발이 오른쪽 가운데쯤, 왼쪽으로 닿는 길이 = 위로 닿던 길이
         if (SpellFxMap.Sheet(dir, "fire-flame-pillar") is { } pillar)
         {

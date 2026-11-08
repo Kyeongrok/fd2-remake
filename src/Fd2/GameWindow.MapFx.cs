@@ -164,6 +164,7 @@ internal sealed partial class GameWindow
     {
         if (DeathFxTick(dt)) return;
         if (SheetFxTick(dt)) return;
+        if (FlashTick(dt)) return;
         if (_fx == null) return;
         if ((_fxClock += dt * SpellRate) < FxFrame) return;   // 지도 위 마법 그림도 마법 속도 배율로
         _fxClock -= FxFrame;
@@ -179,6 +180,7 @@ internal sealed partial class GameWindow
     {
         DrawDeathFx();
         DrawSheetFx();
+        DrawFlash();
         if (_fx == null) return;
         var (px, w, h) = _fx[_fxStart + _fxAt];
         foreach (var (x, y) in _fxCells)
@@ -194,13 +196,16 @@ internal sealed partial class GameWindow
     private static bool MapSpell(Unit caster, int spell) =>
         caster.Team == 2 ? spell is 9 or (>= 10 and <= 23) or (>= 25 and <= 27) : spell >= 10 && spell != 24 && spell < 28;
 
-    /// <summary>지도 위 마법 그림 — 첫 장 소리는 표의 값, 몇 마법은 원작처럼 가운데 장에서 한 번 더(sub_1C4CC).</summary>
-    private void PlaySpellFx(int spell, IEnumerable<(int X, int Y)> cells, Action after)
+    /// <summary>
+    /// 지도 위 마법 그림 — 첫 장 소리는 표의 값, 몇 마법은 원작처럼 가운데 장에서 한 번 더(sub_1C4CC).
+    /// originalArt 면 편집기의 바깥 이펙트 짝(회복술 13 → holy-heal 같은)을 안 보고 늘 원작 FDOTHER 6 그림 — 회복 물건(sub_211A4)이 쓴다.
+    /// </summary>
+    private void PlaySpellFx(int spell, IEnumerable<(int X, int Y)> cells, Action after, bool originalArt = false)
     {
         if (_tables == null) { after(); return; }
         var (start, count, first) = _tables.MapSpellFx(spell);
         // 편집기 마법 모션 탭에서 이 마법에 바깥 이펙트 시트를 짝지었으면 원작 그림 대신(w-158 · w-159) — 첫 장 소리는 원작 것
-        if (SpellFxMap.For(_dir, spell) is { } sheet && cells.ToList() is { Count: > 0 } at)
+        if (!originalArt && SpellFxMap.For(_dir, spell) is { } sheet && cells.ToList() is { Count: > 0 } at)
         {
             if (first > 0) PlaySfx(80, first);
             PlaySheetFx(sheet, at, after);
@@ -221,6 +226,70 @@ internal sealed partial class GameWindow
             if (s > 0) PlaySfx(80, s);
         }
         PlayTileFx(6, start, count, cells, after, Sound);
+    }
+}
+
+/// <summary>
+/// 맞은 사람 번쩍임(sub_1C2DA) — 지도 위 마법 그림(sub_1C4CC) 다음에 효과음(FDOTHER 80 의 1)과 함께, 대상마다 사람 그림 꼴을
+/// 팔레트 200 한 빛으로 덮은 그림(sub_4E127 — 셋째 인자 456 의 아래 바이트 0xC8 이 빛)과 원래 지도를 한 틱(1/18.2초)씩 다섯 번 번갈아.
+/// 원작 차례: 원래 · 덮음 × 5 뒤 원래.
+/// </summary>
+internal sealed partial class GameWindow
+{
+    private const int FlashTicks = 10, FlashColor = 200;
+    private const double FlashTick1 = 1 / 18.2;
+
+    private List<Unit>? _hitFlash;
+    private int _hitFlashStep;
+    private double _hitFlashClock;
+    private Action? _hitFlashAfter;
+    private BattleState _hitFlashResume;
+
+    private void PlayTargetFlash(IEnumerable<Unit> targets, Action after)
+    {
+        var list = targets.Where(u => u.Alive).ToList();
+        if (list.Count == 0) { after(); return; }
+        (_hitFlash, _hitFlashStep, _hitFlashClock, _hitFlashAfter, _hitFlashResume) = (list, 0, 0, after, _bs);
+        _bs = BattleState.Fx;
+        PlaySfx(80, 1);
+    }
+
+    private bool FlashTick(double dt)
+    {
+        if (_hitFlash == null) return false;
+        if ((_hitFlashClock += dt * SpellRate) < FlashTick1) return true;
+        _hitFlashClock -= FlashTick1;
+        if (++_hitFlashStep < FlashTicks) return true;
+        _hitFlash = null;
+        _bs = _hitFlashResume;
+        var a = _hitFlashAfter;
+        _hitFlashAfter = null;
+        a?.Invoke();
+        return true;
+    }
+
+    /// <summary>홀수 틱에 대상의 지금 지도 그림(방향 · 걸음 컷, 큰 그림이면 큰 그림)을 한 빛으로 — 사람을 그리는 자리 그대로.</summary>
+    private void DrawFlash()
+    {
+        if (_hitFlash == null || (_hitFlashStep & 1) == 0) return;
+        uint c = _pal[FlashColor] | 0xFF000000;
+        int cell = T * _zoom;
+        foreach (var u in _hitFlash)
+        {
+            int sx = _offX + (int)Math.Round((u.DrawX * T - _camX) * _zoom);
+            int sy = _offY + (int)Math.Round((u.DrawY * T - _camY) * _zoom);
+            int frame = (int)u.Facing * 3 + WalkCycle[(int)(_time * IdleFps) % WalkCycle.Length];
+            var hi = HiIcon(u.Icon, frame);
+            var px = hi ?? _icons.Frame(u.Icon, frame);
+            int size = hi != null ? T * 4 : T;
+            int y0 = Math.Max(0, sy), y1 = Math.Min(_fbH, sy + cell), x0 = Math.Max(0, sx), x1 = Math.Min(_fbW, sx + cell);
+            for (int yy = y0; yy < y1; yy++)
+            {
+                int srow = (yy - sy) * size / cell * size, drow = yy * _fbW;
+                for (int xx = x0; xx < x1; xx++)
+                    if (px[srow + (xx - sx) * size / cell] != 0) _fb[drow + xx] = c;
+            }
+        }
     }
 }
 
