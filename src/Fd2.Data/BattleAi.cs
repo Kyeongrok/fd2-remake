@@ -6,7 +6,7 @@ namespace Fd2.Data;
 /// </summary>
 public sealed class AiPlan
 {
-    /// <summary>지금 칸에서 걸 마법(-1 없음) · 쓸 물건의 가방 칸(-1 없음), 그 가운데 칸.</summary>
+    /// <summary>걸 마법(-1 없음 — Path 가 있으면 다 걸은 뒤, w-185) · 지금 칸에서 쓸 물건의 가방 칸(-1 없음), 그 가운데 칸.</summary>
     public int Spell = -1, ItemSlot = -1;
     public (int X, int Y) Center;
 
@@ -64,7 +64,7 @@ public sealed class BattleAi(Battle battle)
             case 11:
             {
                 var m = SpellScore(u);
-                if (m.Score >= 6) return new AiPlan { Spell = m.Spell, Center = m.Center, ThenAttack = true };
+                if (m.Score >= 6) return new AiPlan { Spell = m.Spell, Center = m.Center, Path = m.Path, ThenAttack = m.Path.Count == 0 };   // 걸어서 걸었으면 또 걷지 않게 공격은 안 이음
                 return FollowUp(u);
             }
             default: return new AiPlan();   // 6 · 8 · 12~15 — 아무것도 안 함
@@ -93,7 +93,7 @@ public sealed class BattleAi(Battle battle)
         var i = ItemScore(u);
         if (a.Score < 6 && m.Score < 6 && i.Score < 6) return null;
         AiPlan Attack() => new() { Path = a.Path, Target = a.Target };
-        AiPlan Magic() => new() { Spell = m.Spell, Center = m.Center };
+        AiPlan Magic() => new() { Spell = m.Spell, Center = m.Center, Path = m.Path };
         AiPlan Item() => new() { ItemSlot = i.Slot, Center = i.Center };
         bool likesAttack = (u.AiByte & 0x40) != 0;
         if (a.Score > m.Score && a.Score > i.Score) return Attack();
@@ -152,28 +152,38 @@ public sealed class BattleAi(Battle battle)
 
     // ── 마법 점수(sub_1598A · sub_15B77) ────────────────────────────────────
 
+    /// <summary>움직인 뒤에도 마법을 거나(모드, w-185) — 끄면 원작처럼 선 칸에서만.</summary>
+    public bool MoveThenCast { get; set; }
+
     /// <summary>
-    /// 지금 선 칸에서만(움직인 뒤 마법은 안 쓴다), 봉쇄가 아니고 MP 가 되는 마법마다 사거리 안 칸 × 범위 안 대상의 점수를 더한다.
+    /// 원작은 지금 선 칸에서만(움직인 뒤 마법은 안 쓴다). <see cref="MoveThenCast"/> 면 설 수 있는 칸마다 보고, 같은 점수면 안 움직이는 쪽(Path 빈 것)이 남는다.
+    /// 봉쇄가 아니고 MP 가 되는 마법마다 사거리 안 칸 × 범위 안 대상의 점수를 더한다.
     /// 공격(0~12): HP ≥ 세기 8 · 아래면 24(사울이면 × 1.5, 10~12 는 나는 유닛 빼고), 회복(13~16): HP &lt; 최대/3 이면 8 · &lt; 최대/2 면 3(대상 +52 &amp; 1 이면 × 2),
     /// 올리기(17~19) 안 걸린 대상 3, 풀기(20 · 21) 걸린 대상 6, 봉쇄(22) 마법이 있는 안 걸린 대상 6, 시독 · 마비(26 · 27) 안 걸린 대상 4, 그 밖 0.
     /// 같은 점수면 세기가 큰 마법.
     /// </summary>
-    public (int Score, int Spell, (int X, int Y) Center, int Power) SpellScore(Unit u)
+    public (int Score, int Spell, (int X, int Y) Center, int Power, List<(int X, int Y)> Path) SpellScore(Unit u)
     {
-        var best = (Score: 0, Spell: -1, Center: (u.X, u.Y), Power: 0);
+        var best = (Score: 0, Spell: -1, Center: (u.X, u.Y), Power: 0, Path: new List<(int X, int Y)>());
         if (u.Sealed || Tables == null) return best;
-        foreach (int m in battle.KnownSpells(u))
-        {
-            var s = Tables.Spells[m];
-            if (u.Mp < s.Mp) continue;
-            foreach (var c in battle.SpellCenters(u, m))
+        var spells = battle.KnownSpells(u).Where(m => u.Mp >= Tables.Spells[m].Mp).ToList();
+        if (spells.Count == 0) return best;
+        // 선 칸이 먼저 — 다른 칸은 점수가 더 커야(같은 점수면 더 센 마법이어야) 바꾼다
+        var reach = MoveThenCast && !u.Paralyzed ? battle.Reach(u) : null;
+        var cells = new List<(int X, int Y)> { (u.X, u.Y) };
+        if (reach != null) cells.AddRange(Scene.Stops(reach, u).Where(c => c != (u.X, u.Y)));
+        foreach (var from in cells)
+            foreach (int m in spells)
             {
-                int sum = 0;
-                foreach (var o in battle.SpellTargets(u, m, c)) sum += SpellTargetScore(m, s, o);
-                if (sum > best.Score || sum == best.Score && sum > 0 && s.Power > best.Power)
-                    best = (sum, m, c, s.Power);
+                var s = Tables.Spells[m];
+                foreach (var c in battle.SpellCenters(u, m, from))
+                {
+                    int sum = 0;
+                    foreach (var o in battle.SpellTargets(u, m, c)) sum += SpellTargetScore(m, s, o);
+                    if (sum > best.Score || sum == best.Score && sum > 0 && s.Power > best.Power)
+                        best = (sum, m, c, s.Power, from == (u.X, u.Y) || reach == null ? new() : Scene.PathTo(reach, from));
+                }
             }
-        }
         return best;
     }
 

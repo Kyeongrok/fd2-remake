@@ -624,20 +624,25 @@ internal sealed partial class GameWindow
                 if (who == null)
                 {
                     // 빈 칸 — 원작처럼 시스템 십자 메뉴(커서 칸 둘레). PC 마우스 왼쪽 클릭도 같게(사용자 요청), 고른 것이 있으면 푼다
+                    // 폰에서 보물상자 목록이 펼쳐져 있으면 먼저 접는다(w-184)
+                    if (TouchUi && _chestListShown && _actor == null && _reach == null) { _settings.ShowChests = false; _settings.Save(); PlaySfx(Sound.UiBank, Sound.Cursor); return; }
                     if (_actor == null && _reach == null) OpenSystemMenu();
                     else ClearSelection();
                     return;
                 }
                 if (Ready(who)) { _selected = who; BeginMove(who); return; }
-                // 적이나 행동을 마친 아군 — 범위만 보여 준다. 범위를 보던 적 법사를 한 번 더 누르면 공격 마법 범위, 또 누르면 이동 범위로(w-116)
-                if (_rangeOf == who && who.Team != 2)
+                // 적이나 행동을 마친 아군 — 처음은 이동 범위, 한 번 더 누르면 법사는 공격 마법 범위(w-116), 또 누르면(법사가 아니면 두 번째에) 자세히 창(fb-101).
+                // 자세히 창을 열면 처음으로 — 다음 누르기는 다시 이동 범위
+                if (_rangeOf == who)
                 {
-                    if (_magicTiles != null) { _magicTiles = null; return; }
-                    var magic = MagicTiles(who);
-                    if (magic.Count > 0) { _magicTiles = magic; PlaySfx(Sound.UiBank, Sound.Cursor); return; }
+                    if (who.Team != 2 && _magicTiles == null)
+                    {
+                        var magic = MagicTiles(who);
+                        if (magic.Count > 0) { _magicTiles = magic; PlaySfx(Sound.UiBank, Sound.Cursor); return; }
+                    }
+                    // 우리 편이면 동료 목록째(w-121), 적이면 그 사람만
+                    if (who.Side == Side.Player ? OpenPartyDetailOf(who) : OpenUnitDetail(who)) { _rangeOf = null; return; }
                 }
-                // 범위를 보던 행동 마친 아군을 한 번 더 — 그 동료의 자세히 창(능력 · 상태 · 물건 · 마법, w-121)
-                if (_rangeOf == who && who.Side == Side.Player && OpenPartyDetailOf(who)) return;
                 Select(who);
                 _actor = null;
                 _rangeOf = who;
@@ -718,6 +723,7 @@ internal sealed partial class GameWindow
             if (townRow && vk is Win32.VK_LEFT or Win32.VK_RIGHT) vk = vk == Win32.VK_RIGHT ? Win32.VK_UP : Win32.VK_DOWN;   // 마을 건물은 줄 차례가 그림에서 반시계라 오른쪽이 앞 줄 = 시계 방향(사용자 요청)
             else if ((AskBoxOpen || _townButtons) && vk is Win32.VK_LEFT or Win32.VK_RIGHT) vk = vk == Win32.VK_LEFT ? Win32.VK_UP : Win32.VK_DOWN;   // YES · NO · 건물 네 단추는 좌우로
             else if (_sellQty is { } q && vk is Win32.VK_LEFT or Win32.VK_RIGHT) { q(vk == Win32.VK_LEFT ? -1 : +1); return true; }   // 팔 수량(w-168)
+            else if (_sellCatTo is { } sc && vk is Win32.VK_LEFT or Win32.VK_RIGHT) { sc(vk == Win32.VK_LEFT ? 0 : 1); return true; }   // 팔기 장비품 · 소모품(w-186)
             if (vk is Win32.VK_UP or Win32.VK_DOWN) _menuScrolledByDrag = false;   // 키로 고르면 고른 줄이 보이게 다시 따라간다
             if (vk is Win32.VK_UP or Win32.VK_DOWN)
             {
@@ -1185,7 +1191,12 @@ internal sealed partial class GameWindow
         _stage = MenuStage.System;
         _menu.Clear();
         _sysButtons = [12, 13, 14, 15];
-        _menu.Add(("지도 보기", () => { _settings.ShowMinimap = true; _settings.Save(); _menu.Clear(); _bs = BattleState.Select; }, default));
+        _menu.Add(("지도 보기", () =>
+        {
+            if (TouchUi) (_touchMiniOpen, _touchMiniBig) = (true, true);   // 폰 미니맵은 따로 — 「지도」 단추처럼 화면 가득(fb-100)
+            else { _settings.ShowMinimap = true; _settings.Save(); }
+            _menu.Clear(); _bs = BattleState.Select;
+        }, default));
         // 전황은 여러 칸(사용자 요청 — 창세기전3 파트2 처럼): 기록 · 부르기 모두 칸을 고른다. 부르기에는 자동저장(최근 3턴)도
         if (!_enemyPhase) _menu.Add(("전황 기록", () => OpenBattleSlots(save: true), default));
         if (!_enemyPhase && ContinueSlots().Count > 0) _menu.Add(("전황 부르기", OpenLoadFromGame, default));
@@ -1778,6 +1789,7 @@ internal sealed partial class GameWindow
             GroundCheck(me, () => { _bs = BattleState.Enemy; Arrive(me, plan); });
             return;
         }
+        _ai.MoveThenCast = _settings.AiMoveCast;
         if (NextAiUnit() is { } next)
         {
             next.Acted = true;
@@ -1816,7 +1828,7 @@ internal sealed partial class GameWindow
     /// <summary>계획대로 — 마법 · 물건은 그 자리에서, 걸을 길이 있으면 걸은 뒤 <see cref="Arrive"/>, 쉬기는 바로.</summary>
     private void Run(Unit u, AiPlan plan)
     {
-        if (plan.Spell >= 0)
+        if (plan.Spell >= 0 && plan.Path.Count == 0)
         {
             CastSpell(u, plan.Spell, plan.Center, () =>
             {
@@ -1841,6 +1853,12 @@ internal sealed partial class GameWindow
     /// <summary>다 걸었다 — 칠 상대가 사거리 안이면 치고, 도둑은 상자 칸이면 훔치고, 달아나는 사람은 목표 칸이면 사라진다.</summary>
     private void Arrive(Unit u, AiPlan plan)
     {
+        if (plan.Spell >= 0)   // 걸은 뒤 마법(모드, w-185) — 걷다 땅 칸 사건으로 쓰러지거나 봉쇄됐으면 그만
+        {
+            if (u.Hp > 0 && _battle.CanCast(u, plan.Spell)) CastSpell(u, plan.Spell, plan.Center, AiDone);
+            else AiDone();
+            return;
+        }
         if (plan.Target is { Hp: > 0 } t && _battle.CanStrike(u, (u.X, u.Y), t)) { Attack(u, t, AiDone); return; }
         var notes = new List<Notice>();
         if (plan.StealChest >= 0 && (u.X, u.Y) == plan.Goal) notes.Add(_ai.Steal(u, plan.StealChest));
@@ -2593,6 +2611,22 @@ internal sealed partial class GameWindow
                     _shopTabRects.Add(tab);
                     bool on = k == _shopTab;
                     var word = Text.Render(ShopTabs[k], (int)(15 * ui), on ? 0xFFE8C870 : 0xFFC4CAE6, bold: on);
+                    DrawText(word, tab.X + (tab.W - word.W) / 2, tab.Y + (tab.H - word.H) / 2);
+                    if (on) FillRect(tab.X, tab.Y + tab.H - 3, tab.W, 3, 0xFFE8C870);
+                }
+                top += tabH;
+            }
+            _sellCatRects.Clear();
+            if (_sellCatTo != null)
+            {
+                // 팔기 — 장비품 · 소모품 탭(w-186)
+                FillRect(0, top, _clientW, tabH, 0xFF18213F);
+                for (int k = 0; k < 2; k++)
+                {
+                    var tab = (X: _clientW * k / 2, Y: top, W: _clientW / 2, H: tabH);
+                    _sellCatRects.Add(tab);
+                    bool on = k == _sellCat;
+                    var word = Text.Render($"{(k == 0 ? "장비품" : "소모품")} {_sellCatCount[k]}", (int)(15 * ui), on ? 0xFFE8C870 : 0xFFC4CAE6, bold: on);
                     DrawText(word, tab.X + (tab.W - word.W) / 2, tab.Y + (tab.H - word.H) / 2);
                     if (on) FillRect(tab.X, tab.Y + tab.H - 3, tab.W, 3, 0xFFE8C870);
                 }

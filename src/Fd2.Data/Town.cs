@@ -141,6 +141,43 @@ public sealed class Town(Campaign campaign, Battle battle)
         return TownResult.Ok;
     }
 
+    /// <summary>마을에서 쓸 수 있는 소모품인가 — 늘 남는 능력 올리기(역량 · 내력 · 속도 약수, 생명열매 · 마력수정 · 바람날개, w-187). 회복 · 풀기는 장이 끝나면 다 차므로 뺀다.</summary>
+    public bool UsableHere(int item) => item >= 0 && item < T.Items.Count && T.Items[item].Use is 8 or 9 or 10 or 17 or 18 or 19;
+
+    /// <summary>
+    /// 물건 효과를 member 에게(전투의 쓰기와 같은 값, w-187) — 물건을 어디서 뺄지는 부르는 쪽이. 효과 글(「 역량 +9」)을, 못 쓰면 null.
+    /// </summary>
+    public string? UseOn(int member, int item)
+    {
+        if (!UsableHere(item)) return null;
+        var u = ToUnit(campaign.Party[member]);
+        int v = T.Items[item].UseValue;
+        string text;
+        switch (T.Items[item].Use)
+        {
+            case 8: u.BaseAtk += v; text = $" 역량 +{v}"; break;
+            case 9: u.BaseDef += v; text = $" 내력 +{v}"; break;
+            case 10: u.Speed += v; text = $" 속도 +{v}"; break;
+            case 17: u.MaxHp += v; if (u.Hp > 0) u.Hp += v; text = $" 최대 HP +{v}"; break;
+            case 18: u.MaxMp += v; u.Mp += v; text = $" 최대 MP +{v}"; break;
+            default: u.Move += v; text = $" 이동력 +{v}"; break;
+        }
+        Store(member, u);
+        return text;
+    }
+
+    /// <summary>member 가방 slot 의 소모품을 target 에게 쓰고 가방에서 뺀다(w-187). 효과 글, 못 쓰면 null.</summary>
+    public string? UseFromBag(int member, int slot, int target)
+    {
+        var bag = Bag(campaign.Party[member]);
+        if (slot < 0 || slot >= bag.Count || !UsableHere(bag[slot].Item)) return null;
+        int item = bag[slot].Item;
+        var u = ToUnit(campaign.Party[member]);
+        u.Bag.RemoveAt(slot);
+        Store(member, u);
+        return UseOn(target, item);
+    }
+
     // ── 교회 ───────────────────────────────────────────────────────────────
 
     /// <summary>부활(sub_2A43E) — 부활 값을 내고 +5 를 0, HP 를 최대로(MP 는 장이 끝날 때 이미 가득).</summary>

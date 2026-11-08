@@ -128,7 +128,7 @@ internal sealed partial class GameWindow
         for (int k = 0; k < SaveFile.Slots; k++)
         {
             int slot = k;
-            _menu.Add(($"기록 {k + 1}: {SlotLabel(save, k)}", () => WriteSlot(slot), default));
+            _menu.Add((SlotLabel(save, k), () => WriteSlot(slot), default));
         }
         _menu.Add(("돌아가기", OpenOverMenu, default));
         _menuIndex = 0;

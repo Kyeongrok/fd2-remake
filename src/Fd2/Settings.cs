@@ -74,6 +74,9 @@ internal sealed class Settings
     /// <summary>적 차례의 치기는 전투 장면 없이 지도에서 바로 결과만(모드, 기본 끔, 사용자 요청 — 빠른 진행).</summary>
     public bool SkipEnemyFights { get; set; }
 
+    /// <summary>컴퓨터(적 · 컴퓨터 아군) 법사가 움직인 뒤에도 마법을 건다(모드, 기본 켬, w-185) — 끄면 원작처럼 선 칸에서만.</summary>
+    public bool AiMoveCast { get; set; } = true;
+
     /// <summary>필살기 모션 「몸짓 · 이펙트 따로」(모드, 기본 켬 — 끄면 원작 그대로, w-160 · 사용자 요청) — 몸짓이 끝나면 그 자세로 세워 두고 이펙트 컷을 겹친다.</summary>
     public bool SplitSkillMotion { get; set; } = true;
 

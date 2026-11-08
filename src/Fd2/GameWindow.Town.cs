@@ -41,6 +41,7 @@ internal sealed partial class GameWindow
         _townButtons = false;
         _menuAsk = false;
         _sellQty = null;
+        _sellCatTo = null;
         _menuIcons.Clear();
         _shopTab = -1;
         _shopTabRects.Clear();
@@ -157,7 +158,10 @@ internal sealed partial class GameWindow
     /// <summary>상점 탭을 눌렀다 — 네 단추와 같은 곳으로 간다.</summary>
     private bool ShopTabTap(int x, int y)
     {
-        if (_shopTab < 0 || _tabShop is not { } shop || _clientW >= _clientH) return false;
+        if (_clientW >= _clientH) return false;
+        int c = _sellCatTo == null ? -1 : _sellCatRects.FindIndex(r => x >= r.X && y >= r.Y && x < r.X + r.W && y < r.Y + r.H);
+        if (c >= 0) { _sellCatTo!(c); return true; }   // 팔기 장비품 · 소모품 탭(w-186)
+        if (_shopTab < 0 || _tabShop is not { } shop) return false;
         int k = _shopTabRects.FindIndex(r => x >= r.X && y >= r.Y && x < r.X + r.W && y < r.Y + r.H);
         if (k < 0) return false;
         if (k == _shopTab) return true;
@@ -265,20 +269,51 @@ internal sealed partial class GameWindow
         TownBanner($" 공통 가방에 넣었습니다 — 돈 {c.Gold}원", back);
     }
 
-    /// <summary>공통 가방 물건을 판다 — 물건마다 한 줄(개수).</summary>
-    private void OpenSellPool(ShopInfo shop, int page)
+    /// <summary>팔기 목록의 장비품(0) · 소모품(1) 쪽(w-186), 쪽마다 물건 수, 쪽 바꾸기(팔기 목록이 아니면 null). 폰 세로는 탭 줄, 그 밖은 목록 첫 줄.</summary>
+    private int _sellCat;
+    private readonly int[] _sellCatCount = new int[2];
+    private Action<int>? _sellCatTo;
+    private readonly List<(int X, int Y, int W, int H)> _sellCatRects = new();
+
+    private bool IsGear(int item) => _tables!.Items[item].Kind < 32;
+
+    /// <summary>
+    /// 팔기 목록 머리 — 물건을 장비품 · 소모품으로 나누고 이번 쪽을 정한다(cat −1 이면 장비품, 없으면 소모품). 쪽 바꾸기를 걸고,
+    /// 폰 세로가 아니면 「◀ [장비품 n]  소모품 n ▶」 줄을 넣는다. 이번 쪽 물건만 돌려준다.
+    /// </summary>
+    private List<T> SellCategory<T>(List<T> all, Func<T, int> itemOf, int cat, Action<int> reopen)
+    {
+        _sellCatCount[0] = all.Count(a => IsGear(itemOf(a)));
+        _sellCatCount[1] = all.Count - _sellCatCount[0];
+        _sellCat = cat is 0 or 1 ? cat : _sellCatCount[0] > 0 ? 0 : 1;
+        int now = _sellCat;
+        _sellCatTo = k => { if (k != now) { PlaySfx(Sound.UiBank, Sound.Cursor); reopen(k); } };
+        if (!(TouchUi && _clientW < _clientH))
+        {
+            string Tab(int k) => k == now ? $"[{(k == 0 ? "장비품" : "소모품")} {_sellCatCount[k]}]" : $" {(k == 0 ? "장비품" : "소모품")} {_sellCatCount[k]} ";
+            _menu.Add(($"◀ {Tab(0)}   {Tab(1)} ▶", () => reopen(1 - now), default));
+        }
+        var list = all.Where(a => IsGear(itemOf(a)) == (now == 0)).ToList();
+        if (list.Count == 0) _menu.Add(($"팔 {(now == 0 ? "장비품" : "소모품")}이 없습니다", () => { }, default));
+        return list;
+    }
+
+    /// <summary>공통 가방 물건을 판다 — 물건마다 한 줄(개수), 장비품 · 소모품 쪽으로 나눠(w-186).</summary>
+    private void OpenSellPool(ShopInfo shop, int page, int cat = -1)
     {
         if (_town is not { } t) return;
         void Back() => OpenSellWho(shop, page);
         if (Pool.Count == 0) { PlaySfx(Sound.UiBank, 7); TownBanner(" 공통 가방이 비었습니다", Back); return; }
         BeginTownMenu(Back);
         _menu.Add((GoldLine("공통 가방 — 팔 물건"), () => { }, default));
-        foreach (int item in Pool.Distinct().ToList())
+        var items = SellCategory(Pool.Distinct().ToList(), i => i, cat, k => OpenSellPool(shop, page, k));
+        cat = _sellCat;
+        foreach (int item in items)
         {
             int id = item;
             _menuIcons[_menu.Count] = ItemIcon(id);
             _menuGlyphs[_menu.Count] = 181 + id;
-            _menu.Add(($"{t.SellPrice(id)}원	× {Pool.Count(x => x == id)}  {ItemEffect(id)}", () => AskSell(id, t.SellPrice(id), () => OpenSellPool(shop, page), n =>
+            _menu.Add(($"{t.SellPrice(id)}원	× {Pool.Count(x => x == id)}  {ItemEffect(id)}", () => AskSell(id, t.SellPrice(id), () => OpenSellPool(shop, page, cat), n =>
             {
                 if (_campaign is not { } c) return;
                 int sold = 0;
@@ -288,12 +323,15 @@ internal sealed partial class GameWindow
                 _battle.Gold = c.Gold;
                 PlaySfx(Sound.UiBank, 5);
                 StartDeal();
-                TownBanner($" {sold}개 팔았습니다 +{t.SellPrice(id) * sold}원 — 남은 것 {Pool.Count(x => x == id)}개 · 돈 {c.Gold}원", () => OpenSellPool(shop, page));
+                TownBanner($" {sold}개 팔았습니다 +{t.SellPrice(id) * sold}원 — 남은 것 {Pool.Count(x => x == id)}개 · 돈 {c.Gold}원", () => { if (Pool.Count > 0) OpenSellPool(shop, page, cat); else Back(); });
             }, Pool.Count(x => x == id)), default));
         }
         _menu.Add(("돌아가기", Back, default));
-        EndTownMenu(1);
+        EndTownMenu(SellFirstRow);
     }
+
+    /// <summary>팔기 목록에서 처음 고를 줄 — 머리 줄 · (PC) 쪽 줄 다음.</summary>
+    private int SellFirstRow => TouchUi && _clientW < _clientH ? 1 : 2;
 
     /// <summary>공통 가방 물건 보기 — 무기 · 옷은 골라서 입을 사람에게(w-114).</summary>
     private void OpenPoolItems(int page)
@@ -308,8 +346,12 @@ internal sealed partial class GameWindow
             int id = item;
             _menuIcons[_menu.Count] = ItemIcon(id);
             _menuGlyphs[_menu.Count] = 181 + id;
-            bool gear = _tables.Items[id].Kind < 32;
-            _menu.Add(($"× {Pool.Count(x => x == id)}	{ItemEffect(id)}", () => { if (gear) OpenPoolWear(page, id, 0); }, default));
+            bool gear = _tables.Items[id].Kind < 32, usable = _town?.UsableHere(id) == true;
+            _menu.Add(($"× {Pool.Count(x => x == id)}	{ItemEffect(id)}", () =>
+            {
+                if (gear) OpenPoolWear(page, id, 0);
+                else if (usable) OpenUseOn(id, () => OpenPoolItems(page), (to, _) => Pool.Contains(id) && _town!.UseOn(to, id) is { } text && Pool.Remove(id) ? text : null, 0);   // 공통 가방 소모품도 쓴다(w-187)
+            }, default));
         }
         _menu.Add(("돌아가기", Back, default));
         EndTownMenu(1);
@@ -439,7 +481,7 @@ internal sealed partial class GameWindow
         EndTownMenu(1);
     }
 
-    private void OpenSellItem(ShopInfo shop, int page, int member)
+    private void OpenSellItem(ShopInfo shop, int page, int member, int cat = -1)
     {
         if (_town is not { } t || _campaign is not { } c) return;
         void Back() => OpenSellWho(shop, page);
@@ -450,23 +492,25 @@ internal sealed partial class GameWindow
         _menuFace = FaceOfRecord(r);
         _menuGlyphs[0] = HeroRecord.Id(r) + 1;
         _menu.Add((GoldLine("팔 물건 — "), () => { }, default));
-        for (int k = 0; k < bag.Count; k++)
+        var slots = SellCategory(Enumerable.Range(0, bag.Count).ToList(), k => bag[k].Item, cat, k => OpenSellItem(shop, page, member, k));
+        cat = _sellCat;
+        foreach (int k in slots)
         {
             int slot = k, item = bag[k].Item;
             _menuIcons[_menu.Count] = ItemIcon(item);
             _menuGlyphs[_menu.Count] = 181 + item;
-            _menu.Add(($"{t.SellPrice(item)}원	{(bag[k].Equipped ? "(장비) " : "")}{ItemEffect(item)}", () => AskSell(item, t.SellPrice(item), () => OpenSellItem(shop, page, member), _ =>
+            _menu.Add(($"{t.SellPrice(item)}원	{(bag[k].Equipped ? "(장비) " : "")}{ItemEffect(item)}", () => AskSell(item, t.SellPrice(item), () => OpenSellItem(shop, page, member, cat), _ =>
             {
                 int gain = t.SellPrice(item);
                 t.Sell(member, slot);
                 _battle.Gold = c.Gold;
                 PlaySfx(Sound.UiBank, 5);
                 StartDeal();
-                TownBanner($"1개 팔았습니다 +{gain}원 — 돈 {c.Gold}원", () => OpenSellItem(shop, page, member));
+                TownBanner($"1개 팔았습니다 +{gain}원 — 돈 {c.Gold}원", () => OpenSellItem(shop, page, member, cat));
             }), default));
         }
         _menu.Add(("돌아가기", Back, default));
-        EndTownMenu(1);
+        EndTownMenu(SellFirstRow);
     }
 
     // ── 주점 ───────────────────────────────────────────────────────────────
@@ -526,7 +570,13 @@ internal sealed partial class GameWindow
             _menuIcons[_menu.Count] = ItemIcon(bag[k].Item);
             _menuGlyphs[_menu.Count] = 181 + bag[k].Item;
             bool gear = _tables!.Items[bag[k].Item].Kind < 32;
-            _menu.Add(($" 	{(bag[k].Equipped ? "(장비) " : "")}{ItemEffect(bag[k].Item)}", () => { if (gear) OpenGearChoice(page, member, slot); else OpenGiveTo(page, member, slot, 0); }, default));
+            bool usable = _town?.UsableHere(bag[k].Item) == true;
+            _menu.Add(($" 	{(bag[k].Equipped ? "(장비) " : "")}{ItemEffect(bag[k].Item)}", () =>
+            {
+                if (gear) OpenGearChoice(page, member, slot);
+                else if (usable) OpenUseChoice(page, member, slot);   // 역량약수 같은 것 — 쓰기 · 건네주기(w-187)
+                else OpenGiveTo(page, member, slot, 0);
+            }, default));
         }
         _menu.Add(("돌아가기", () => OpenGiveFrom(page), default));
         EndTownMenu(1);
@@ -553,6 +603,60 @@ internal sealed partial class GameWindow
         _menu.Add(("건네준다", () => OpenGiveTo(page, member, slot, 0), default));
         _menu.Add(("돌아가기", Back, default));
         EndTownMenu(1);
+    }
+
+    /// <summary>쓸 수 있는 소모품을 골랐다 — 쓴다(누구에게) · 건네준다(w-187).</summary>
+    private void OpenUseChoice(int page, int member, int slot)
+    {
+        if (_campaign is not { } c) return;
+        int item = Town.Bag(c.Party[member])[slot].Item;
+        void Back() => OpenGiveItem(page, member);
+        BeginTownMenu(Back);
+        _menuFace = FaceOfRecord(c.Party[member]);
+        _menuGlyphs[0] = 181 + item;
+        _menuIcons[0] = ItemIcon(item);
+        _menu.Add(($"{(ItemEffect(item) is { Length: > 0 } fx ? fx + " — " : "")}어떻게 할까요 — ", () => { }, default));
+        _menu.Add(("사용한다", () => OpenUseOn(item, Back, (to, after) => _town!.UseFromBag(member, slot, to) is { } text ? text : null, 0), default));
+        _menu.Add(("건네준다", () => OpenGiveTo(page, member, slot, 0), default));
+        _menu.Add(("돌아가기", Back, default));
+        EndTownMenu(1);
+    }
+
+    /// <summary>소모품을 누구에게 쓰나 — 고르면 use(대상) 로 쓰고 효과를 알린 뒤 back(w-187).</summary>
+    private void OpenUseOn(int item, Action back, Func<int, Action, string?> use, int page)
+    {
+        if (_campaign is not { } c) return;
+        BeginTownMenu(back);
+        _menuGlyphs[0] = 181 + item;
+        _menuIcons[0] = ItemIcon(item);
+        _menu.Add(("누구에게 쓰나 — ", () => { }, default));
+        foreach (int i in Enumerable.Range(0, c.Party.Count).Skip(page * TownPage).Take(TownPage))
+        {
+            var r = c.Party[i];
+            int to = i;
+            _menuGlyphs[_menu.Count] = HeroRecord.Id(r) + 1;
+            _menu.Add(($"Lv{Town.Level(r),-3} {UseStatLine(r, item)}", () =>
+            {
+                string? text = use(to, back);
+                PlaySfx(Sound.UiBank, text != null ? 5 : 7);
+                TownBanner(text ?? " 쓸 수 없습니다", back, HeroRecord.Id(c.Party[to]) + 1);
+            }, default));
+        }
+        AddPager(c.Party.Count, page, p => OpenUseOn(item, back, use, p));
+        _menu.Add(("돌아가기", back, default));
+        EndTownMenu(1);
+    }
+
+    /// <summary>쓰기 대상 줄에 보일 지금 값 — 역량약수면 공격, 생명열매면 최대 HP …</summary>
+    private string UseStatLine(byte[] r, int item)
+    {
+        var u = PartyMembers().FirstOrDefault(m => m.NameId == HeroRecord.Id(r));
+        if (u == null || _tables == null) return "";
+        return _tables.Items[item].Use switch
+        {
+            8 => $"공격 {u.Atk}", 9 => $"방어 {u.Def}", 10 => $"속도 {u.Speed}",
+            17 => $"HP {u.MaxHp}", 18 => $"MP {u.MaxMp}", 19 => $"이동 {u.Move}", _ => "",
+        };
     }
 
     private void OpenGiveTo(int fromPage, int member, int slot, int page)
@@ -595,7 +699,7 @@ internal sealed partial class GameWindow
         for (int k = 0; k < SaveFile.Slots; k++)
         {
             int slot = k;
-            _menu.Add(($"기록 {k + 1}: {SlotLabel(save, k)}", () => WriteSlot(slot, OpenTavern), default));
+            _menu.Add((SlotLabel(save, k), () => WriteSlot(slot, OpenTavern), default));
         }
         _menu.Add(("돌아가기", OpenTavern, default));
         EndTownMenu(1);
@@ -610,7 +714,7 @@ internal sealed partial class GameWindow
         for (int k = 0; k < SaveFile.Slots; k++)
         {
             int slot = k;
-            _menu.Add(($"기록 {k + 1}: {SlotLabel(save, k)}", () =>
+            _menu.Add((SlotLabel(save, k), () =>
             {
                 if (save.ReadSlot(slot) is not { } loaded || loaded.NextScene >= _sceneCount) { PlaySfx(Sound.UiBank, 7); return; }
                 if (_tables?.HasTown(loaded.NextScene) != true) { PlaySfx(Sound.UiBank, 7); TownBanner("마을 안에서는 불러올 수 없는 기록입니다", OpenTavernLoad); return; }

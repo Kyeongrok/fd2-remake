@@ -579,6 +579,12 @@ internal sealed partial class GameWindow
                     _settings.Save();
                     OpenTouchMenu(_menuIndex, 2);
                 }, default));
+                _menu.Add(($"적 법사 이동 후 마법  [{(_settings.AiMoveCast ? "켬" : "끔")}]", () =>
+                {
+                    _settings.AiMoveCast = !_settings.AiMoveCast;
+                    _settings.Save();
+                    OpenTouchMenu(_menuIndex, 2);
+                }, default));
                 _menu.Add(($"ESC 단추 자리  [{EscSpotName(_settings.EscSpot)}]", () =>
                 {
                     _settings.EscSpot = (_settings.EscSpot + 1) % 4;   // 누를 때마다 다음 자리

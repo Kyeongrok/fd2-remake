@@ -58,6 +58,17 @@ internal sealed partial class GameWindow
         return true;
     }
 
+    /// <summary>적(또는 동료 목록에 없는 사람)의 자세히 창 — 그 사람 하나만 보인다(fb-101).</summary>
+    private bool OpenUnitDetail(Unit u)
+    {
+        if (u.MaxHp <= 0) return false;
+        _party = [u];
+        (_partyOpen, _partyTop, _partyDrag, _partyScroll, _partyVel) = (true, 0, null, 0, 0);
+        PartyDetail(0);
+        _partyDetailOnly = true;
+        return true;
+    }
+
     /// <summary>자세히 창을 닫는다 — 지도에서 바로 열었으면 파티 창째로.</summary>
     private void ClosePartyDetail() { if (_partyDetailOnly) CloseParty(); else _partyDetail = false; }
 
