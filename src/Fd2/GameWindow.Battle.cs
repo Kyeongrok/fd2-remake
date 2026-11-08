@@ -911,8 +911,9 @@ internal sealed partial class GameWindow
     {
         var targets = StrikeTargets(u);
         if (targets.Count > 0) _menu.Add(("공격", () => BeginTarget(u, targets.Select(t => (t.X, t.Y)).ToList(), -1, stage), default));
-        // 걸은 뒤에도 마법을 연다 — 원작 메뉴(sub_18D8C)가 움직인 뒤 마법을 막는지는 아직 안 봤다(짐작)
-        if (!u.Sealed && CastableSpells(u).Count > 0)
+        // 걸은 뒤 마법 — 모드 「아군 법사 이동 후 마법」(기본 켬, w-185 · fb-103), 끄면 걸었으면 마법 없음
+        bool walked = stage == MenuStage.AfterMove && (u.X, u.Y) != _origin;
+        if (!u.Sealed && (_settings.MoveThenCast || !walked) && CastableSpells(u).Count > 0)
             _menu.Add(("마법", () => OpenSpellMenu(u, stage), default));
         if (u.Bag.Count > 0 || SharedItems(u).Count > 0 || SharedItems(u, ItemMode.Equip).Count > 0) _menu.Add(("물건", () => { _itemFrom = stage; OpenItemCross(u); }, default));
         _menu.Add(("대기", () =>
@@ -1474,10 +1475,8 @@ internal sealed partial class GameWindow
         if (it.Use == 5) u.Bag.RemoveAt(slot);
         BeginStrikes(after);
         foreach (var t in targets) _strikes.Enqueue(new Hit(u, t, Heal: it.UseValue));
-        // 원작 sub_211A4 — 전투 화면 없이 지도에서 마법 13 그림(sub_1C4CC)을 보이고 대상마다 회복 · 알림
-        _strikeOnMap = targets.Count > 0;
-        if (_strikeOnMap) PlaySpellFx(13, targets.Select(t => (t.X, t.Y)), NextStrike);
-        else NextStrike();
+        // 회복 물건 연출은 0.14.65 앞(전투 화면에서 회복)으로 되돌림(fb-104) — 원작 sub_211A4 의 지도 위 마법 13 그림은 뺐다
+        NextStrike();
     }
 
     private static Dir FaceTo(Unit a, Unit b)
@@ -1789,7 +1788,6 @@ internal sealed partial class GameWindow
             GroundCheck(me, () => { _bs = BattleState.Enemy; Arrive(me, plan); });
             return;
         }
-        _ai.MoveThenCast = _settings.AiMoveCast;
         if (NextAiUnit() is { } next)
         {
             next.Acted = true;
@@ -1828,7 +1826,7 @@ internal sealed partial class GameWindow
     /// <summary>계획대로 — 마법 · 물건은 그 자리에서, 걸을 길이 있으면 걸은 뒤 <see cref="Arrive"/>, 쉬기는 바로.</summary>
     private void Run(Unit u, AiPlan plan)
     {
-        if (plan.Spell >= 0 && plan.Path.Count == 0)
+        if (plan.Spell >= 0)
         {
             CastSpell(u, plan.Spell, plan.Center, () =>
             {
@@ -1853,12 +1851,6 @@ internal sealed partial class GameWindow
     /// <summary>다 걸었다 — 칠 상대가 사거리 안이면 치고, 도둑은 상자 칸이면 훔치고, 달아나는 사람은 목표 칸이면 사라진다.</summary>
     private void Arrive(Unit u, AiPlan plan)
     {
-        if (plan.Spell >= 0)   // 걸은 뒤 마법(모드, w-185) — 걷다 땅 칸 사건으로 쓰러지거나 봉쇄됐으면 그만
-        {
-            if (u.Hp > 0 && _battle.CanCast(u, plan.Spell)) CastSpell(u, plan.Spell, plan.Center, AiDone);
-            else AiDone();
-            return;
-        }
         if (plan.Target is { Hp: > 0 } t && _battle.CanStrike(u, (u.X, u.Y), t)) { Attack(u, t, AiDone); return; }
         var notes = new List<Notice>();
         if (plan.StealChest >= 0 && (u.X, u.Y) == plan.Goal) notes.Add(_ai.Steal(u, plan.StealChest));

@@ -38,7 +38,7 @@ internal sealed partial class GameWindow
             new("공통 가방", () => _settings.SharedBag, ToggleSharedBag, Note: "장비 안 한 물건 · 소모품을 한 곳에"),
             new("미니맵 보물상자", () => _settings.MiniChests, () => _settings.MiniChests = !_settings.MiniChests),
             new("적 공격 장면 건너뛰기", () => _settings.SkipEnemyFights, () => _settings.SkipEnemyFights = !_settings.SkipEnemyFights),
-            new("적 법사 이동 후 마법", () => _settings.AiMoveCast, () => _settings.AiMoveCast = !_settings.AiMoveCast, Note: "끄면 원작 그대로"),
+            new("아군 법사 이동 후 마법", () => _settings.MoveThenCast, () => _settings.MoveThenCast = !_settings.MoveThenCast, Note: "끄면 제자리에서만 마법"),
             new("마법 피해 · 회복 %", () => _settings.SpellDamagePct, () => _settings.SpellDamagePct = !_settings.SpellDamagePct),
             new("필살기 몸짓 · 이펙트 따로", () => _settings.SplitSkillMotion, () => _settings.SplitSkillMotion = !_settings.SplitSkillMotion, Note: "끄면 원작 그대로"),
             new("컴퓨터 아군 직접 조종", () => _settings.ControlAllies, () => _settings.ControlAllies = !_settings.ControlAllies),

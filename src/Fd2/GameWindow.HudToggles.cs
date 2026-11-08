@@ -579,9 +579,9 @@ internal sealed partial class GameWindow
                     _settings.Save();
                     OpenTouchMenu(_menuIndex, 2);
                 }, default));
-                _menu.Add(($"적 법사 이동 후 마법  [{(_settings.AiMoveCast ? "켬" : "끔")}]", () =>
+                _menu.Add(($"아군 법사 이동 후 마법  [{(_settings.MoveThenCast ? "켬" : "끔")}]", () =>
                 {
-                    _settings.AiMoveCast = !_settings.AiMoveCast;
+                    _settings.MoveThenCast = !_settings.MoveThenCast;
                     _settings.Save();
                     OpenTouchMenu(_menuIndex, 2);
                 }, default));
