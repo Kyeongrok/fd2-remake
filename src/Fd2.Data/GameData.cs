@@ -408,6 +408,9 @@ public sealed class Scene
     /// <summary>지금까지 쓴 배열 번호 수(원작 유닛 수 `n6_0`) — 못 세운 줄도 번호를 쓴다.</summary>
     public int SlotCount => _nextSlot;
 
+    /// <summary>캐릭터 그림 수(FDICON) — 이보다 큰 그림 번호는 그리지 못한다.</summary>
+    public int IconCount => _iconCount;
+
     /// <summary>판에 따라 왕 · 왕비 그림을 옮겼나(<see cref="IconBank.RoyalsMoved"/>).</summary>
     public bool RoyalsMoved => _royalsMoved;
 

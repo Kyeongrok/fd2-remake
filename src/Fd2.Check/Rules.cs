@@ -64,6 +64,7 @@ internal static class Rules
              (7, 12345, 1, "192,193"));
         Same("25장 화룡(유닛 표 1) 자리",s25.Units.Find(u => u.Form == 104) is { } dragon ? (dragon.X, dragon.Y) : (-1, -1), (10, 0));
         Scene30(dir, pal, icons);
+        Scene9(dir, t, pal, icons);
 
         // 등장 차례 1 의 도적(몬스터 96, Lv 2) — 유닛 표 0 번은 배열 4 번
         var e0 = scene.Roster[0];
@@ -209,6 +210,33 @@ internal static class Rules
         Seq("우두머리 전송 번호(f = 1 ~ 4)", moved.Select(m => int.Parse(m.Split(':')[0])), [23, 22, 21, 20]);
         Console.WriteLine("  우두머리 번호:캐릭터@칸 " + string.Join(" · ", moved));
         Same("공마신(유닛 20) 은 몬스터 126", s.Units.Find(u => u.Slot == 20)?.Form, 126);
+    }
+
+    /// <summary>
+    /// 9장 사건 30(버그 리포트 #8) — 래터(유닛 표 0 = 배열 11, 몬스터 50 꼴)의 떨굼이 사건 30 이고, 사건은 쓰러진 래터의 칸을 고쳐
+    /// 꼴 · 캐릭터 6(래터-기사), 편 1(컴퓨터 아군), 떨굼 없음, AI 128, HP 1 로 되세운다. 산 사람만 찾던 때는 다 넘어가 래터가 그냥 사라졌다.
+    /// </summary>
+    private static void Scene9(string dir, GameTables t, uint[] pal, IconBank icons)
+    {
+        Console.WriteLine("\n[9장 사건 30 — 쓰러진 래터가 임시 동료로]");
+        var s = new Scene(dir, 8, pal, icons);
+        var b = new Battle(s, t, seed: 1);
+        foreach (var u in s.Units) b.Setup(u);
+        var letter = s.Units.Find(u => u.Slot == 11);
+        Same("배열 11 = 몬스터 50 꼴 · 떨굼 사건 30", letter is { } l0 ? (l0.FormId, l0.DropKind, l0.DropValue) : default, (118, 2, 30));
+        if (letter == null) return;
+        letter.Hp = 0;   // 쓰러뜨림
+        var ops = SceneEvents.Load()?.Event(30) ?? [];
+        foreach (var op in ops)
+        {
+            string name = op[0].GetString() ?? "";
+            int A(int k) => op.GetArrayLength() > k && op[k].ValueKind == System.Text.Json.JsonValueKind.Number ? op[k].GetInt32() : 0;
+            if (name == "ally" && ScriptUnit.Slot(s, A(1)) is { } au) ScriptUnit.Ally(au);
+            if (name == "setunit" && A(2) != 5 && ScriptUnit.Slot(s, A(1)) is { } su) ScriptUnit.Set(s, su, A(2), A(3));
+        }
+        Same("사건 30 뒤 래터 — 섰나 · HP · 편 · 꼴 · 캐릭터 · 떨굼 · AI", (letter.Alive, letter.Hp, letter.Team, letter.FormId, letter.NameId, letter.DropKind, letter.AiByte),
+             (true, 1, 1, 6, 6, 255, 128));
+        Same("이름", CharacterNames.Of(letter.NameId), "래터-기사");
     }
 
     /// <summary>두 사람을 평지에 나란히 — 1장 지도에서 지형 0 이 둘 이어진 첫 자리.</summary>

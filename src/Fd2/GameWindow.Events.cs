@@ -171,7 +171,8 @@ internal sealed partial class GameWindow
                     if (BySlot(A(1)) is { } gone) { _scene.Units.Remove(gone); _scene.Hidden.Add(gone); }
                     break;
                 case "ally":
-                    if (BySlot(A(1)) is { } ally) { ally.Side = Side.Player; ally.Ai = true; }
+                    // 쓰러진 사람에게도 쓴다 — 9장 사건 30(래터의 떨굼)은 쓰러진 래터를 컴퓨터 아군으로 돌린 뒤 HP 를 1 로 둔다(버그 리포트 #8)
+                    if (ScriptUnit.Slot(_scene, A(1)) is { } ally) ScriptUnit.Ally(ally);
                     break;
                 case "setunit" when A(2) == 5:
                     // +5 상태 비트 — 0 이면 숨긴 사람을 되세우고, 비트 0 이 켜지면 숨긴다
@@ -179,7 +180,8 @@ internal sealed partial class GameWindow
                     else if ((A(3) & 1) != 0 && BySlot(A(1)) is { } hide) { _scene.Units.Remove(hide); _scene.Hidden.Add(hide); }
                     break;
                 case "setunit":
-                    if (AnySlot(A(1)) is { } su) SetUnitField(su, A(2), A(3));
+                    // 쓰러진 사람의 칸에도 쓴다(9장 사건 30 — 래터 HP 1 · 꼴 6, 버그 리포트 #8)
+                    if (ScriptUnit.Slot(_scene, A(1)) is { } su) ScriptUnit.Set(_scene, su, A(2), A(3));
                     break;
                 case "arm":
                     if (A(1) < _scene.EventLines.Count) _scene.EventLines[A(1)].Turn = Turn + (op.GetArrayLength() > 2 ? A(2) : 1);
@@ -266,25 +268,6 @@ internal sealed partial class GameWindow
             }
         }
         after();
-    }
-
-    /// <summary>
-    /// 사람 칸 쓰기(setunit) — +0 · +1 자리, +3 보는 쪽, +6 편, +33 레벨, +52 ~ +54 AI, +61 상자 번호. +5(상태 비트)는 넘긴다.
-    /// </summary>
-    private void SetUnitField(Unit u, int off, int v)
-    {
-        switch (off)
-        {
-            case 0: if (_scene.Inside(v, u.Y)) (u.X, u.FromX) = (v, v); break;
-            case 1: if (_scene.Inside(u.X, v)) (u.Y, u.FromY) = (v, v); break;
-            case 3: u.Facing = (Dir)(v & 3); break;
-            case 6: u.Side = v == 0 ? Side.Other : Side.Player; u.Ai = v == 1; break;
-            case 33: u.Level = Math.Max(1, v); break;
-            case 52: u.AiByte = v; break;
-            case 53: u.AiX = v; break;
-            case 54: u.AiY = v; break;
-            case 61: u.Chest = v; break;
-        }
     }
 
     /// <summary>깃발 값(dword_53AD5[k], 0~255) — 상자 열림과 같은 자리다. 0 이 아니면 <see cref="Battle.OpenedChests"/> 에도 든다.</summary>
