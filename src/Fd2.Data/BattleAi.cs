@@ -221,10 +221,10 @@ public sealed class BattleAi(Battle battle)
                 24 => it.UseValue,
                 _ => 0,
             };
-            foreach (var c in ItemCenters(u, it))
+            foreach (var c in ItemCenters(u, it, ai: true))
             {
                 int sum = 0;
-                foreach (var o in ItemTargets(u, it, c))
+                foreach (var o in ItemTargets(u, it, c, ai: true))
                     sum += it.Use is 5 or 13 ? HealScore(o) * ((o.AiByte & 0x80) != 0 ? 3 : 1) : o.Hp <= power ? 18 : 8;
                 if (sum > best.Score) best = (sum, slot, c);
             }
@@ -232,10 +232,19 @@ public sealed class BattleAi(Battle battle)
         return best;
     }
 
-    /// <summary>물건을 쓸 가운데 칸 — 쓰는 거리(16 이상은 십자 한 줄, 거리 − 16).</summary>
-    public List<(int X, int Y)> ItemCenters(Unit u, ItemInfo it)
+    /// <summary>
+    /// 물건을 쓸 가운데 칸 — 쓰는 거리(16 이상은 십자 한 줄, 거리 − 16). 우리 편이 쓰는 길(sub_1BBDC)은 sub_14818 그대로.
+    /// ai 면 컴퓨터가 쓰는 길(sub_1567E): 쓰는 거리가 16 이상이면 곁 네 칸(sub_14818 에 최대 · 최소 1) — 고른 쪽으로 <see cref="ItemTargets"/> 가 한 줄을 뻗는다.
+    /// </summary>
+    public List<(int X, int Y)> ItemCenters(Unit u, ItemInfo it, bool ai = false)
     {
         var list = new List<(int X, int Y)>();
+        if (ai && it.UseRange >= 16)
+        {
+            foreach (var (dx, dy) in new[] { (0, -1), (1, 0), (0, 1), (-1, 0) })
+                if (Scene.Inside(u.X + dx, u.Y + dy)) list.Add((u.X + dx, u.Y + dy));
+            return list;
+        }
         int r = it.UseRange < 16 ? it.UseRange : it.UseRange - 16;
         for (int dy = -r; dy <= r; dy++)
             for (int dx = -r; dx <= r; dx++)
@@ -246,10 +255,31 @@ public sealed class BattleAi(Battle battle)
         return list;
     }
 
-    /// <summary>물건이 드는 사람 — 범위(마름모 · 16 이상 십자) 안, 쓰는 편(1 쓰는 사람 편 · 0 상대).</summary>
-    public List<Unit> ItemTargets(Unit u, ItemInfo it, (int X, int Y) c) =>
-        Scene.Units.Where(o => o.Hp > 0 && o.MaxHp > 0 && (it.UseSide == 1 ? o.Team == 0 == (u.Team == 0) : o.Team == 0 != (u.Team == 0))
-                               && Battle.InArea(o.X - c.X, o.Y - c.Y, it.UseArea, 0)).ToList();
+    /// <summary>
+    /// 물건이 드는 사람 — 범위(마름모 · 16 이상 십자) 안, 쓰는 편(1 쓰는 사람 편 · 0 상대).
+    /// ai 이고 쓰는 거리가 16 이상이면(27장 광속포좌의 광속포) 원작 sub_15055 · sub_149F8 처럼 범위(+18)는 안 보고
+    /// 쓰는 사람에게서 가운데 칸 쪽으로 (거리 − 16) 칸 한 줄 위의 상대 모두.
+    /// </summary>
+    public List<Unit> ItemTargets(Unit u, ItemInfo it, (int X, int Y) c, bool ai = false)
+    {
+        if (ai && it.UseRange >= 16)
+        {
+            var line = ItemLine(u, it, c);
+            return Scene.Units.Where(o => o.Hp > 0 && o.MaxHp > 0 && o.Team == 0 != (u.Team == 0) && line.Contains((o.X, o.Y))).ToList();
+        }
+        return Scene.Units.Where(o => o.Hp > 0 && o.MaxHp > 0 && (it.UseSide == 1 ? o.Team == 0 == (u.Team == 0) : o.Team == 0 != (u.Team == 0))
+                                      && Battle.InArea(o.X - c.X, o.Y - c.Y, it.UseArea, 0)).ToList();
+    }
+
+    /// <summary>컴퓨터가 쓰는 한 줄 물건(쓰는 거리 16 이상)의 칸 — 쓰는 사람 다음 칸부터 가운데 칸 쪽으로 (거리 − 16) 칸, 지도 안만(sub_149F8).</summary>
+    public HashSet<(int X, int Y)> ItemLine(Unit u, ItemInfo it, (int X, int Y) c)
+    {
+        var line = new HashSet<(int X, int Y)>();
+        int sx = c.X == u.X ? 0 : Math.Sign(c.X - u.X), sy = c.X == u.X ? (c.Y >= u.Y ? 1 : -1) : 0;
+        for (int k = 1; k <= it.UseRange - 16; k++)
+            if (Scene.Inside(u.X + sx * k, u.Y + sy * k)) line.Add((u.X + sx * k, u.Y + sy * k));
+        return line;
+    }
 
     // ── 걷기(sub_14121 · sub_13E9C · sub_14B78) ─────────────────────────────
 

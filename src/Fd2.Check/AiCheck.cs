@@ -127,6 +127,51 @@ internal static class AiCheck
         return n;
     }
 
+    /// <summary>
+    /// 27장(장면 26) 광속포좌의 광속포(물건 79, 쓰임 24 · 쓰는 거리 31 = 한 줄 15 · 범위 4) — 컴퓨터가 쓰면 원작 sub_1567E · sub_15055 처럼
+    /// 곁 네 칸 가운데 하나를 골라 그쪽으로 15칸 한 줄 위의 우리 편 모두(범위 4 마름모는 안 봄).
+    /// </summary>
+    public static void Cannon(string dir, GameTables t)
+    {
+        Console.WriteLine("\n[27장 광속포좌 — 광속포 한 줄 15칸]");
+        var it = t.Items[79];
+        Same("광속포 쓰임 · 마법 · 쓰는 거리 · 편 · 범위", (it.Use, it.UseValue, it.UseRange, it.UseSide, it.UseArea), (24, 3, 31, 0, 4));
+        var pal = GameFolder.Palette(dir);
+        var icons = new IconBank(Path.Combine(dir, "FDICON.B24"), pal);
+        var scene = new Scene(dir, 26, pal, icons);
+        var b = new Battle(scene, t, seed: 77);
+        foreach (var u in scene.Units) b.Setup(u);
+        var ai = new BattleAi(b);
+        var cannon = scene.Units.FirstOrDefault(u => u.Team == 0 && u.Bag.Any(x => x.Item == 79));
+        if (cannon == null)
+        {
+            var e = scene.Roster.FirstOrDefault(r => r.Icon == 113);
+            cannon = e == null ? null : scene.Spawn(e);
+            if (cannon != null) b.Setup(cannon);
+        }
+        Same("27장에 광속포를 든 적이 있음", cannon != null && cannon.Bag.Any(x => x.Item == 79), true);
+        if (cannon == null) return;
+        foreach (var u in scene.Units.Where(u => u.Team != 0)) u.Hp = 0;
+        Same("컴퓨터가 고르는 가운데 칸은 곁 네 칸", ai.ItemCenters(cannon, it, ai: true).All(c => Math.Abs(c.X - cannon.X) + Math.Abs(c.Y - cannon.Y) == 1), true);
+        Unit Put(int dx, int dy)
+        {
+            var o = new Unit { Icon = 0, Form = 0, Side = Side.Player };
+            scene.Units.Add(o);
+            b.Setup(o);
+            (o.X, o.Y) = (cannon.X + dx, cannon.Y + dy);
+            return o;
+        }
+        int dir1 = cannon.X + 15 < scene.Width ? 1 : -1;
+        var far = Put(15 * dir1, 0);
+        var off = Put(10 * dir1, 1);      // 원래(범위 4 마름모)라면 10칸 앞 가운데 칸 둘레로 맞던 자리
+        var beyond = Put(16 * dir1, 0);
+        var near = Put(3 * dir1, 0);
+        var hit = ai.ItemTargets(cannon, it, (cannon.X + dir1, cannon.Y), ai: true);
+        Same("한 줄 3 · 15칸은 맞고 16칸 · 줄 밖은 안 맞음", (hit.Contains(near), hit.Contains(far), hit.Contains(beyond), hit.Contains(off)), (true, true, false, false));
+        var plan = ai.ItemScore(cannon);
+        Same("점수 — 한 줄에 둘(HP > 세기 3 이라 8 + 8), 그쪽 곁 칸", (plan.Score, plan.Center), (16, (cannon.X + dir1, cannon.Y)));
+    }
+
     private static (int, int) FreeNear(Scene s, Unit u, int d)
     {
         for (int dy = -d; dy <= d; dy++)

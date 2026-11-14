@@ -458,7 +458,7 @@ internal sealed partial class GameWindow
         var spells = _battle.KnownSpells(u).Where(m => _battle.CanCast(u, m) && _battle.SpellOf(m) is { Side: 0, Power: > 0 })
                             .OrderByDescending(m => _battle.SpellOf(m)!.Power).ThenByDescending(m => _battle.SpellOf(m)!.Range * 16 + _battle.SpellOf(m)!.Area % 16)
                             .Take(1).ToList();
-        if (spells.Count == 0) return set;
+        if (spells.Count == 0) return LineItemTiles(u);
         var stops = _scene.Stops(_battle.Reach(u), u).ToList();
         foreach (int m in spells)
         {
@@ -470,6 +470,24 @@ internal sealed partial class GameWindow
                 for (int dy = -ar; dy <= ar; dy++)
                     for (int dx = -ar; dx <= ar; dx++)
                         if (Battle.InArea(dx, dy, sp.Area, 0) && _scene.Inside(cx + dx, cy + dy)) set.Add((cx + dx, cy + dy));
+        }
+        return set;
+    }
+
+    /// <summary>
+    /// 공격 마법이 없는 적이 한 줄 물건(쓰는 거리 16 이상 — 27장 광속포좌의 광속포)을 들었으면 그 물건이 닿는 칸 — 선 칸에서 네 쪽으로 (거리 − 16) 칸(원작 sub_1567E · sub_149F8).
+    /// 없으면 빈 칸.
+    /// </summary>
+    private HashSet<(int X, int Y)> LineItemTiles(Unit u)
+    {
+        var set = new HashSet<(int X, int Y)>();
+        if (_tables == null) return set;
+        var ai = new BattleAi(_battle);
+        foreach (var (id, _) in u.Bag)
+        {
+            var it = _tables.Items[id];
+            if (it.Use is not (20 or 21 or 24) || it.UseRange < 16) continue;
+            foreach (var c in ai.ItemCenters(u, it, ai: true)) set.UnionWith(ai.ItemLine(u, it, c));
         }
         return set;
     }
@@ -1448,13 +1466,14 @@ internal sealed partial class GameWindow
     /// <summary>
     /// 마법을 건다 — MP 를 빼고(물건으로 쓰면 안 뺀다), 가운데 칸 둘레 범위 안 대상마다 컷인 한 번씩. 다 끝나면 마법 경험(우리 편만) 뒤 after.
     /// </summary>
-    private void CastSpell(Unit caster, int spell, (int X, int Y) center, Action after, bool fromItem = false)
+    /// <param name="targets">물건으로 거는 마법이면 물건의 범위로 고른 대상(원작 sub_20C6F 는 물건 쪽 대상 목록에 그 마법을 건다). null 이면 마법 범위.</param>
+    private void CastSpell(Unit caster, int spell, (int X, int Y) center, Action after, bool fromItem = false, List<Unit>? targets = null)
     {
         if (center != (caster.X, caster.Y)) caster.Facing = DirOf(center.X - caster.X, center.Y - caster.Y);
         if (!fromItem) _battle.PayMp(caster, spell);
         BeginStrikes(after);
         if (!fromItem) (_castSpell, _castCaster) = (spell, caster);   // 물건으로 쓴 마법은 경험이 없다
-        var targets = _battle.SpellTargets(caster, spell, center);
+        targets ??= _battle.SpellTargets(caster, spell, center);
         foreach (var t in targets) _strikes.Enqueue(new Hit(caster, t, spell));
         // 원작이 지도에서 보이는 마법이면 대상 칸들 위에 그림을 먼저(FDOTHER 6)
         _strikeOnMap = MapSpell(caster, spell);
@@ -1466,14 +1485,15 @@ internal sealed partial class GameWindow
     /// 물건을 쓴다(컴퓨터 · 우리 편) — 회복(쓰임 5 닳음 · 13 안 닳음)은 원작 sub_211A4 처럼 전투 화면 없이 지도에서:
     /// 대상 칸들 위에 마법 13 칸의 그림(FDOTHER 6 의 57~63 장, 소리 12 — sub_1C4CC(…, 13, …)) → 대상 번쩍임(sub_1C2DA) →
     /// 대상마다 수치의 90~99.9% 회복(sub_1C916) · 머리 위 숫자(sub_1E0DB(…, 105, …)). 회복술(sub_21AD9)이 앞에 두는 소리 11 · 빛 기둥(sub_21EB1)은 없다.
-    /// 그림은 편집기의 회복술 바깥 이펙트(holy-heal) 짝을 타지 않고 늘 원작 것. 20 · 21 · 24 는 그 마법을 MP 없이. 경험은 없다.
+    /// 그림은 편집기의 회복술 바깥 이펙트(holy-heal) 짝을 타지 않고 늘 원작 것. 20 · 21 · 24 는 그 마법을 MP 없이, 대상은 마법 범위가 아니라 물건의 범위(+18)로. 경험은 없다.
+    /// ai 면 컴퓨터가 쓰는 길(sub_15055) — 쓰는 거리 16 이상(광속포)은 쓰는 사람에게서 뻗는 한 줄.
     /// </summary>
-    private void UseItem(Unit u, int slot, (int X, int Y) center, Action after)
+    private void UseItem(Unit u, int slot, (int X, int Y) center, Action after, bool ai = false)
     {
         if (_tables == null || slot < 0 || slot >= u.Bag.Count) { after(); return; }
         var it = _tables.Items[u.Bag[slot].Item];
-        if (it.Use is 20 or 21 or 24) { CastSpell(u, it.UseValue, center, after, fromItem: true); return; }
-        var targets = _ai.ItemTargets(u, it, center).ToList();
+        var targets = _ai.ItemTargets(u, it, center, ai).ToList();
+        if (it.Use is 20 or 21 or 24) { CastSpell(u, it.UseValue, center, after, fromItem: true, targets: targets); return; }
         if (it.Use == 5) u.Bag.RemoveAt(slot);
         BeginStrikes(after);
         foreach (var t in targets) _strikes.Enqueue(new Hit(u, t, Heal: it.UseValue));
@@ -1840,7 +1860,7 @@ internal sealed partial class GameWindow
             });
             return;
         }
-        if (plan.ItemSlot >= 0) { UseItem(u, plan.ItemSlot, plan.Center, AiDone); return; }
+        if (plan.ItemSlot >= 0) { UseItem(u, plan.ItemSlot, plan.Center, AiDone, ai: true); return; }
         if (plan.Rest) { _battle.Rest(u); u.Facing = Dir.Down; AiDone(); return; }
         if (plan.Path.Count > 0)
         {
