@@ -477,7 +477,7 @@ internal sealed partial class GameWindow
         _stands.Clear();
         _scene = new Scene(_dir, index, _pal, _icons, party);
         _backdrop = Backdrop.For(_dir, index, _pal);
-        _battle = new Battle(_scene, _tables);
+        _battle = new Battle(_scene, _tables) { EnemyStatPct = Math.Clamp(_settings.EnemyStat, 100, 300) };
         foreach (var u in _scene.Units)
         {
             _battle.Setup(u);

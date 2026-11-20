@@ -45,6 +45,12 @@ public sealed partial class Battle
     /// <summary>돈(`dword_53BF3`) — 이 리메이크는 아직 저장이 없어 전투마다 0 부터.</summary>
     public int Gold;
 
+    /// <summary>
+    /// 난이도 — 적(편 0)의 최대 HP · MP · 역량 · 내력을 이 % 로 키운다(모드, 100 이 원작, 사용자 요청). 속도는 명중 · 회피를 바로 움직여
+    /// 빗나감만 잦아지므로 그대로 둔다. 컴퓨터 아군 · 우리 편은 안 건드린다. 저장에서 되살린 사람은 저장된 값을 덮으므로 두 번 커지지 않는다.
+    /// </summary>
+    public int EnemyStatPct { get; set; } = 100;
+
     /// <summary>연 상자 번호(`dword_53AD5`) — 29장 승리 조건 · 도둑 AI 가 본다.</summary>
     public readonly HashSet<int> OpenedChests = new();
 
@@ -104,6 +110,11 @@ public sealed partial class Battle
             (u.DropKind, u.DropValue) = (e.DropKind, e.DropValue);
         }
         u.Bag.RemoveAll(b => b.Item >= t.Items.Count);
+        if (u.Team == 0 && EnemyStatPct != 100)
+        {
+            int Up(int v) => (int)Math.Min(30000, (long)v * EnemyStatPct / 100);
+            (u.MaxHp, u.MaxMp, u.BaseAtk, u.BaseDef) = (Up(u.MaxHp), Up(u.MaxMp), Up(u.BaseAtk), Up(u.BaseDef));
+        }
         u.Exp = u.Team == 2 ? 0 : 255;
         u.Hp = u.MaxHp;
         u.Mp = u.MaxMp;

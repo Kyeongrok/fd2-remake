@@ -92,6 +92,9 @@ internal sealed class Settings
     /// <summary>전투 모션(무기 치기) 속도 % — 100 이 원작(한 틱 0.055초), 사용자 요청.</summary>
     public int StrikeSpeed { get; set; } = 100;
 
+    /// <summary>난이도 — 적 능력치(최대 HP · MP · 공격 · 방어) % — 100 이 원작(제보 — 1.5배 · 2배로 올리고 싶다). 다음 전투부터 든다.</summary>
+    public int EnemyStat { get; set; } = 100;
+
     /// <summary>적 · 컴퓨터 아군 차례의 이동 속도 % — 100 이 원작(제보 — 뒤쪽 장은 적이 많아 기다림이 길다).</summary>
     public int EnemySpeed { get; set; } = 100;
 

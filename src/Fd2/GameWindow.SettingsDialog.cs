@@ -173,6 +173,8 @@ internal sealed partial class GameWindow
             f.Controls.Add(Toggle("우리 편 법사가 움직인 뒤에도 마법(끄면 걸은 뒤에는 마법 없음)", _settings.MoveThenCast, MenuMoveThenCast));
             f.Controls.Add(Toggle("필살기 모션 몸짓 · 이펙트 따로(끄면 원작 그대로)", _settings.SplitSkillMotion, MenuSplitSkill));
             f.Controls.Add(Toggle("지도 아래 빈 곳에 안 움직인 아군", _settings.ReadyBelowMap, MenuReadyBelow));
+            f.Controls.Add(Choice("난이도(적 HP · MP · 공격 · 방어, 다음 전투부터)", EnemyStats.Select(EnemyStatName).ToArray(), Math.Max(0, Array.IndexOf(EnemyStats, _settings.EnemyStat)),
+                i => { _settings.EnemyStat = EnemyStats[i]; _settings.Save(); }));
             f.Controls.Add(Choice("전투 모션 속도", SpellSpeeds.Select(SpellSpeedName).ToArray(), Array.IndexOf(SpellSpeeds, _settings.StrikeSpeed),
                 i => { _settings.StrikeSpeed = SpellSpeeds[i]; _settings.Save(); }));
             f.Controls.Add(Choice("마법 속도", SpellSpeeds.Select(SpellSpeedName).ToArray(), Array.IndexOf(SpellSpeeds, _settings.SpellSpeed),

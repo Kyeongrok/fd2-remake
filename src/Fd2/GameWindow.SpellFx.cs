@@ -73,6 +73,10 @@ internal sealed partial class GameWindow
     /// <summary>적 이동 속도에서 고르는 배율(%).</summary>
     private static readonly int[] EnemySpeeds = [100, 150, 200, 300, 400];
 
+    /// <summary>난이도(적 능력치 배율 %) 고르기.</summary>
+    private static readonly int[] EnemyStats = [100, 150, 200, 300];
+    private static string EnemyStatName(int pct) => pct == 100 ? "보통(원작)" : $"적 능력치 {pct / 100.0:0.##}배";
+
     private static string SpellSpeedName(int pct) => pct == 100 ? "1배(원작)" : $"{pct / 100.0:0.##}배{(pct < 100 ? " — 느리게" : " — 빠르게")}";
 
     private readonly Dictionary<int, Motion?> _fxMotions = new();

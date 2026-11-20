@@ -591,6 +591,13 @@ internal sealed partial class GameWindow
                     _settings.Save();
                     OpenTouchMenu(_menuIndex, 2);
                 }, default));
+                _menu.Add(($"난이도  [{EnemyStatName(_settings.EnemyStat)}]", () =>
+                {
+                    int at = Array.IndexOf(EnemyStats, _settings.EnemyStat);
+                    _settings.EnemyStat = EnemyStats[(at + 1) % EnemyStats.Length];   // 다음 전투부터
+                    _settings.Save();
+                    OpenTouchMenu(_menuIndex, 2);
+                }, default));
                 _menu.Add(($"전투 모션 속도  [{SpellSpeedName(_settings.StrikeSpeed)}]", () =>
                 {
                     int at = Array.IndexOf(SpellSpeeds, _settings.StrikeSpeed);
