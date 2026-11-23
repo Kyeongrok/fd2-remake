@@ -371,7 +371,7 @@ public sealed class Scene
     /// 유닛 표의 한 줄을 지도에 세운다 — 편 2 는 합류하는 우리 편, 편 1 은 컴퓨터가 움직이는 우리 편, 편 0 은 적.
     /// (1장 대사로 맞춰 본 뜻.) 놓을 자리가 없으면 null.
     /// </summary>
-    public Unit? Spawn(RosterEntry e)
+    public Unit? Spawn(RosterEntry e, bool stack = false)
     {
         int slot = _nextSlot++;   // 원본은 늘 배열 뒤에 붙인다 — 못 세워도 번호는 넘긴다
         int sprite = CharacterNames.SpriteOf(e.Icon, _royalsMoved);
@@ -381,7 +381,14 @@ public sealed class Scene
             Icon = sprite, Form = e.Icon, Side = e.Type is 1 or 2 ? Side.Player : Side.Other, Ai = e.Type == 1, Level = e.Level,
             Slot = slot, Entry = e,
         };
-        Place(u, e.X, e.Y);
+        if (stack && Inside(e.X, e.Y))
+        {
+            // 사건의 「stack」(원작 byte_53AFA = 1) — 빈 칸을 찾지 않고 적힌 칸에 그대로 겹쳐 세운다. 뒤따르는 등장 대본이 그 칸에서 부채꼴로 편다.
+            // 빈 칸으로 벌려 세우면 대본이 벌린 자리에서 같은 길을 걸어 지도 밖으로 나간다(우리 편이 등장 칸을 막고 있을 때, 버그 리포트 #9)
+            (u.X, u.Y, u.FromX, u.FromY) = (e.X, e.Y, e.X, e.Y);
+            Units.Add(u);
+        }
+        else Place(u, e.X, e.Y);
         return Units.Contains(u) ? u : null;
     }
 

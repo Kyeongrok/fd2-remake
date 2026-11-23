@@ -137,6 +137,9 @@ internal sealed partial class GameWindow
             void Go() => RunOps(ops, next, after);
             switch (name)
             {
+                case "stack":
+                    _stackSpawn = true;   // 원작 byte_53AFA = 1 — 다음 등장은 적힌 칸에 겹쳐 세운다(SpawnPhase 가 끈다)
+                    break;
                 case "spawn":
                     SpawnPhase(A(1));
                     break;
@@ -414,12 +417,17 @@ internal sealed partial class GameWindow
 
     private Unit? BySlot(int slot) => _scene.Units.Find(u => u.Slot == slot && u.Alive);
 
+    /// <summary>사건의 「stack」이 켰나 — 다음 <see cref="SpawnPhase"/> 한 번만 빈 칸을 찾지 않는다(원작 byte_53AFA, sub_10B4E 앞뒤로 1 · 0).</summary>
+    private bool _stackSpawn;
+
     /// <summary>등장 차례 k 의 유닛 표 줄들을 세운다(sub_10B4E).</summary>
     private List<Unit> SpawnPhase(int k)
     {
+        bool stack = _stackSpawn;
+        _stackSpawn = false;
         var born = new List<Unit>();
         foreach (var e in _scene.Roster.Where(e => e.Phase == k))
-            if (_scene.Spawn(e) is { } u) { _battle.Setup(u); born.Add(u); }
+            if (_scene.Spawn(e, stack) is { } u) { _battle.Setup(u); born.Add(u); }
         return born;
     }
 
@@ -582,10 +590,11 @@ internal sealed partial class GameWindow
         {
             if (BySlot(slot) is not { } u) continue;
             var (dx, dy) = Delta(dir);
+            u.Facing = dir;
+            if (!_scene.Inside(u.X + dx, u.Y + dy)) continue;   // 지도 밖으로는 걷지 않는다(버그 리포트 #9)
             (u.FromX, u.FromY) = (u.X, u.Y);
             u.X += dx;
             u.Y += dy;
-            u.Facing = dir;
             u.Step = 0;
         }
         if (walkers.Count > 0) { _cursor = (walkers[0].X, walkers[0].Y); _centerCursor = true; }
