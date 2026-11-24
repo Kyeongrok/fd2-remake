@@ -290,7 +290,22 @@ internal sealed partial class GameWindow
         int rows = u.Bag.Count + (_itemMode is ItemMode.Use or ItemMode.Equip ? _sharedRows.Count : 0);
         bool card = TouchUi && _clientW < _clientH;   // 폰 세로 — 사람 칸을 카드로(사용자 요청)
         int topH = card ? (int)(184 * _clientW / 390.0) : Math.Max(faceH + 16, lineH * 5 + 16), listH = lineH * Math.Max(4, rows) + 24 + (rows >= 4 ? lineH * 2 / 3 : 0);   // 줄이 차면 아래 「사용」 글 자리를 더
-        if (topH + listH + 16 > _clientH) listH = Math.Max(lineH * 4 + 24, _clientH - topH - 16);   // 공통 가방 줄이 많으면 넘치는 줄은 잘린다
+        if (topH + listH + 16 > _clientH) listH = Math.Max(lineH * 4 + 24, _clientH - topH - 16);   // 공통 가방 줄이 많으면 넘친다 — 아래에서 넘겨 본다
+        // 보이는 줄 수 — 다 안 들어가면 휠 · 방향키 · 끌기로 넘긴다(예전에는 넘치는 줄이 잘려 공통 가방 뒤쪽을 볼 수 없었다, 제보)
+        int fit = rows <= Math.Max(1, (listH - 24) / lineH) ? Math.Max(1, rows) : Math.Max(1, (listH - 24 - lineH * 2 / 3) / lineH);
+        (_menuRowH, _menuFit) = (lineH, fit);
+        var sig = (_stage, _menu.Count, _menu.Count > 0 ? _menu[0].Label : "");
+        if (sig != _menuSig) (_menuSig, _menuScroll, _menuScrolledByDrag) = (sig, 0, false);   // 새 목록 — 처음부터
+        if (_menu.Count <= fit) _menuScroll = 0;
+        else
+        {
+            if (!_menuScrolledByDrag && _menuIndex >= 0 && _menuIndex < _menu.Count)
+            {
+                if (_menuIndex < _menuScroll) _menuScroll = _menuIndex;
+                else if (_menuIndex >= _menuScroll + fit) _menuScroll = _menuIndex - fit + 1;
+            }
+            _menuScroll = Math.Clamp(_menuScroll, 0, _menu.Count - fit);
+        }
         int y0 = Math.Max(8, (_clientH - topH - listH - 8) / 2);
 
         void Panel(int x, int y, int w, int h)
@@ -344,6 +359,9 @@ internal sealed partial class GameWindow
         // 아래 — 가방 목록
         int ly = y0 + topH + 8;
         Panel(x0, ly, W, listH);
+        _menuBox = (x0, ly, W, listH);
+        bool Hidden(int i) => i - _menuScroll < 0 || i - _menuScroll >= fit;   // 넘겨서 가려진 줄은 누를 수 없다
+        bool Hover((int X, int Y, int W, int H) r) => _mouseMoved && !_menuDragging && _menuPress == null && _mouseX >= r.X && _mouseY >= r.Y && _mouseX < r.X + r.W && _mouseY < r.Y + r.H;
         if (!_buttonsTried)
         {
             _buttonsTried = true;
@@ -354,10 +372,11 @@ internal sealed partial class GameWindow
         {
             var (id, equipped) = u.Bag[i];
             var it = _tables.Items[id];
-            int ry = ly + 12 + i * lineH;
+            if (Hidden(i)) { _menu[i] = (_menu[i].Label, _menu[i].Do, default); continue; }
+            int ry = ly + 12 + (i - _menuScroll) * lineH;
             var rect = (X: x0 + 8, Y: ry - 2, W: W - 16, H: lineH);
             bool on = ItemRowEnabled(u, i, _itemMode);
-            if (_mouseMoved && _mouseX >= rect.X && _mouseY >= rect.Y && _mouseX < rect.X + rect.W && _mouseY < rect.Y + rect.H) _menuIndex = i;
+            if (Hover(rect)) _menuIndex = i;
             if (i == _menuIndex) FillRect(rect.X, rect.Y, rect.W, rect.H, 0x804870C0);
             // 그림 — 무기는 칼, 옷은 갑옷, 그 밖은 주머니 단추(장비 중이면 빨강, 원작처럼)
             int icon = id < 128 && it.Kind < 32 && it.Atk > 0 ? 0 : it.Kind < 32 && id >= 128 ? 10 : 2;
@@ -381,14 +400,14 @@ internal sealed partial class GameWindow
         {
             int i = u.Bag.Count + j;
             var (owner, slot) = _sharedRows[j];
+            if (Hidden(i)) { _menu[i] = (_menu[i].Label, _menu[i].Do, default); continue; }
             if (slot >= owner.Bag.Count) continue;
             int id = owner.Bag[slot].Item;
             var it = _tables.Items[id];
-            int ry = ly + 12 + i * lineH;
-            if (ry + lineH > ly + listH) break;
+            int ry = ly + 12 + (i - _menuScroll) * lineH;
             var rect = (X: x0 + 8, Y: ry - 2, W: W - 16, H: lineH);
             bool on = SharedRowEnabled(u, _sharedRows[j]);
-            if (_mouseMoved && _mouseX >= rect.X && _mouseY >= rect.Y && _mouseX < rect.X + rect.W && _mouseY < rect.Y + rect.H) _menuIndex = i;
+            if (Hover(rect)) _menuIndex = i;
             if (i == _menuIndex) FillRect(rect.X, rect.Y, rect.W, rect.H, 0x804870C0);
             var tag = T("공통", on ? 0xFFFFE070 : 0xFF807040);
             DrawText(tag, x0 + 16, ry + (lineH - 4 - tag.H) / 2);
@@ -410,6 +429,13 @@ internal sealed partial class GameWindow
                       : NameImage(Battle.NameLine(owner), Math.Max(1, g * 3 / 4), 0xFF9098B8) ?? T(CharacterNames.Of(owner.Icon).Split('-')[0], 0xFF9098B8);
             DrawText(who, x0 + W - who.W - 24, ry + (lineH - 4 - who.H) / 2);
             _menu[i] = (_menu[i].Label, _menu[i].Do, rect);
+        }
+        if (_menu.Count > fit)
+        {
+            // 스크롤 막대 — 목록 오른쪽 가장자리에 지금 보이는 몫
+            int barY = ly + 10, barH = lineH * fit, thumb = Math.Max(fs, barH * fit / _menu.Count), at = (barH - thumb) * _menuScroll / Math.Max(1, _menu.Count - fit);
+            FillRect(x0 + W - 12, barY, 6, barH, 0x80000000);
+            FillRect(x0 + W - 12, barY + at, 6, thumb, 0xE0FFE070);
         }
         var mode = T(_itemMode switch { ItemMode.Use => "사용", ItemMode.Give => "건네주기", ItemMode.Equip => "장비", _ => "버리기" }, 0xFFFFE070);
         DrawText(mode, x0 + W - mode.W - 16, ly + listH - mode.H - 8);

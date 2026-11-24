@@ -126,10 +126,19 @@ internal sealed partial class GameWindow
         if (_touchFromTown && _campaign is { } c) c.Gold = _battle.Gold;
     }
 
-    /// <summary>에디트 — 그 사람 가방에 물건 하나(w-147). 가방이 차면 공통 가방(켜져 있고 담을 수 있는 것)으로.</summary>
+    /// <summary>
+    /// 에디트 — 그 사람 가방에 물건 하나(w-147). 공통 가방이 켜져 있고 담을 수 있는 것(소모품 · 무기 · 옷)은 바로 공통 가방으로 —
+    /// 사람 가방에 넣어도 고르는 중으로 돌아가면 공통 가방으로 쓸려 가므로, 알림도 그대로 알린다(「가방 n/8」만 보고 가방에서 찾으면 없었다, 제보).
+    /// </summary>
     private void EditAddItem(Unit u, int item)
     {
-        if (u.Bag.Count < 8)
+        if (_settings.SharedBag && PoolItem(item))
+        {
+            Pool.Add(item);
+            PlaySfx(Sound.UiBank, 5);
+            Toast($"공통 가방에 넣었습니다 — {GameNames.Item(item)} (물건 「사용」 · 「장비」 목록의 「공통」 줄)");
+        }
+        else if (u.Bag.Count < 8)
         {
             u.Bag.Add((item, false));
             EditCommit(u);
