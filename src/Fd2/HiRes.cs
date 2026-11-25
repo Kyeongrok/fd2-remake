@@ -29,12 +29,37 @@ internal sealed class HiRes
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fd2", "hires");
     private static string ModelPath => Path.Combine(Folder, "model", ModelFile);
     // 판마다 지도 · 캐릭터 그림이 다를 수 있다(모션패치는 FDFIELD · FDICON 이 다르다) — 캐시 이름에 원본 파일 크기를 붙여 판끼리 섞이지 않게.
-    private static string _mapKey = "", _iconKey = "";
-    private static string MapPath(int scene) => Path.Combine(Folder, "map", $"{_mapKey}{scene:D2}.bin.gz");
+    private static string[] _mapKeys = [];
+    private static string _iconKey = "";
+    private static string MapPath(int scene) => Path.Combine(Folder, "map", $"{(scene < _mapKeys.Length ? _mapKeys[scene] : "x-")}{scene:D2}.bin.gz");
     private static string IconPath(int icon) => Path.Combine(Folder, "icon", $"{_iconKey}{icon:D3}.bin.gz");
 
     private static string SizeKey(string dir, params string[] files) =>
         string.Concat(files.Select(f => $"{new FileInfo(Path.Combine(dir, f)).Length:x}-"));
+
+    /// <summary>
+    /// 장면마다 지도 그림을 정하는 자료의 해시 — FDFIELD 3n(칸) · 3n+1 첫 바이트(타일 묶음 t) · FDSHAP 2t(타일 그림).
+    /// 전에는 FDFIELD · FDSHAP 의 파일 크기만 이름에 넣어, 크기가 같은 다른 판(곡우 2024 슈퍼 에디션은 원본 · 모션 패치와 FDFIELD 크기가 같고 지도가 다르다)이
+    /// 먼저 만든 고해상도 지도를 그대로 썼다 — 미니맵 · 맵보기(원본 칸)와 판 그림이 달랐다(버그 리포트 fd2 #12).
+    /// </summary>
+    private static string[] MapKeys(string dir, int scenes)
+    {
+        string field = Path.Combine(dir, "FDFIELD.DAT"), shap = Path.Combine(dir, "FDSHAP.DAT");
+        var keys = new string[scenes];
+        for (int s = 0; s < scenes; s++)
+        {
+            try
+            {
+                var cells = Dat.Load(field, 3 * s);
+                int t = Dat.Load(field, 3 * s + 1)[0];
+                keys[s] = "m" + ContentKey([.. cells, (byte)t, .. Dat.Load(shap, 2 * t)]) + "-";
+            }
+            catch (Exception ex) when (ex is IOException or ArgumentException or IndexOutOfRangeException or OverflowException) { keys[s] = "x-"; }
+        }
+        return keys;
+    }
+
+    private static string ContentKey(byte[] data) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(data), 0, 6).ToLowerInvariant();
 
     private readonly string _dir;
     private readonly uint[] _pal;
@@ -60,8 +85,8 @@ internal sealed class HiRes
     {
         _dir = dir;
         _pal = pal;
-        _mapKey = SizeKey(dir, "FDFIELD.DAT", "FDSHAP.DAT");
-        _iconKey = SizeKey(dir, "FDICON.B24");
+        _mapKeys = MapKeys(dir, scenes);
+        _iconKey = SizeKey(dir, "FDICON.B24") + ContentKey(File.ReadAllBytes(Path.Combine(dir, "FDICON.B24")));
         _scenes = scenes;
         _icons = icons;
         Enabled = enabled;
