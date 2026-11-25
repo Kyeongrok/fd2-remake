@@ -116,6 +116,14 @@ internal static class AiCheck
         yuni.Hp = yuni.MaxHp;
         victim.Hp = 0;
         Same("유니가 도적 Lv2 를 쓰러뜨림 = 2 × 21 / 1", b.SpellExp(yuni, 0, [new SpellResult(victim, true, 28, false)]), 42);
+        // 파괴신(34)은 원본이 올리기 셋을 따로 불러 걸린 것마다 2 × 대상 Lv′ 를 더한다(sub_2D80D, 버그 리포트 #10) — 한 번만 세면 셋 중 하나 몫이다.
+        int one = b.SpellExp(yuni, 17, [new SpellResult(saul, true, 1, true)]);
+        for (int k = 0; k < 3; k++) saul.Status[k] = 0;
+        var destroy = b.CastOn(yuni, 34, saul);
+        Same("파괴신 — 처음 걸면 셋 다 걸림", destroy.Times, 3);
+        Same("파괴신 경험 = 공격술 경험 × 3 (나누기 전 합)", b.SpellExp(yuni, 34, [destroy]) >= 3 * one && b.SpellExp(yuni, 34, [destroy]) <= 3 * one + 2, true);
+        Same("파괴신 — 이미 셋 다 걸렸으면 빗나감 · 경험 0", b.SpellExp(yuni, 34, [b.CastOn(yuni, 34, saul)]), 0);
+        for (int k = 0; k < 3; k++) saul.Status[k] = 0;
     }
 
     private static int Cells(int area)

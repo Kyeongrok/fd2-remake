@@ -1,7 +1,8 @@
 namespace Fd2.Data;
 
 /// <summary>마법 한 대상에 든 결과 — 맞았나, 피해(Heal 이면 채운 양), 상태를 걸었나 · 풀었나의 글.</summary>
-public sealed record SpellResult(Unit Target, bool Hit, int Amount, bool Heal, string? Note = null);
+/// <param name="Times">한 대상에 걸린 효과 수 — 파괴신(34) · 사악귀(35)는 올리기 · 걸기 셋을 따로 굴려, 경험도 걸린 것마다 따로 쌓는다(sub_2D80D).</param>
+public sealed record SpellResult(Unit Target, bool Hit, int Amount, bool Heal, string? Note = null, int Times = 1);
 
 /// <summary>
 /// 마법(분석-마법) — 표 0x619FD(세기 · 명중 · 사거리 · 범위 · MP · 대상 편), 아는 마법 비트, 공격 · 회복 · 올리기 · 걸기 · 풀기 · 기술.
@@ -133,7 +134,7 @@ public sealed partial class Battle
             case 34:
             {
                 var r = new[] { Raise(target, 0), Raise(target, 1), Raise(target, 2) };
-                return new SpellResult(target, r.Any(x => x.Hit), 0, false, r.Any(x => x.Hit) ? " 공격 · 방어 · 속도 증가" : null);
+                return new SpellResult(target, r.Any(x => x.Hit), 0, false, r.Any(x => x.Hit) ? " 공격 · 방어 · 속도 증가" : null, r.Count(x => x.Hit));
             }
             case 20 or 21:
             {
@@ -151,7 +152,7 @@ public sealed partial class Battle
             {
                 var r = new[] { Inflict(target, 3), Inflict(target, 5), Inflict(target, 4) };
                 return new SpellResult(target, r.Any(x => x.Hit), r.Sum(x => x.Amount), false,
-                                       string.Concat(r.Where(x => x.Note != null).Select(x => x.Note)));
+                                       string.Concat(r.Where(x => x.Note != null).Select(x => x.Note)), r.Count(x => x.Hit));
             }
             case 24 or >= 28 and <= 31:
             {
@@ -234,8 +235,9 @@ public sealed partial class Battle
                     => t.Hp > 0 ? r.Amount * (t.Level * Tables.Monsters[t.FormId - GameTables.MonsterBase].Exp) / Math.Max(1, t.MaxHp)
                                 : t.Level * Tables.Monsters[t.FormId - GameTables.MonsterBase].Exp,
                 >= 13 and <= 16 or 33 when t.FormId < 75 => r.Amount * x.HealMul * Lv(x.HealPromoted) / Math.Max(1, t.MaxHp),
-                >= 17 and <= 19 or 34 => x.RaiseMul * Lv(x.SpellTargetPromoted),
-                22 or 26 or 27 or 35 => x.HexMul * t.Level,
+                // 파괴신 · 사악귀는 원본이 올리기(sub_22721 · 22866 · 22997) · 걸기(sub_22D1B) 셋을 차례로 불러 걸린 것마다 더한다(sub_2D80D, 버그 리포트 #10)
+                >= 17 and <= 19 or 34 => x.RaiseMul * Lv(x.SpellTargetPromoted) * r.Times,
+                22 or 26 or 27 or 35 => x.HexMul * t.Level * r.Times,
                 20 or 21 => x.CureMul * Lv(x.CurePromoted),
                 25 => x.ActMul * Lv(x.ActPromoted),
                 23 => x.TeleportMul * Lv(x.TeleportPromoted),   // 전송술 — 대상 레벨' × 10(sub_2218A)
