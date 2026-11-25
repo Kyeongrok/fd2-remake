@@ -234,7 +234,7 @@ internal sealed partial class GameWindow
         if (_notesOpen) NotesScroll(-notches * _notesStep * 3);
         else if (_partyOpen) PartySelect(_partyIndex - notches);
         else if (_volumeOpen) VolumeStep(notches * 5);
-        else if (_setupOpen) SetupStep(_setupRow, notches * 5);
+        else if (_setupOpen) SetupWheel(notches);
         else if (MenuWheel(notches)) { }
         else if (LoadWheel(notches)) { }
         else if (zoom) { if (TouchUi && InBattle && _bs is BattleState.Select or BattleState.Target) PinchZoom(notches); }   // 모바일 화면(PC): Ctrl+휠은 두 손가락 벌리기 · 오므리기

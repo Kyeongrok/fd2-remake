@@ -17,6 +17,25 @@ internal sealed partial class GameWindow
     private readonly Dictionary<int, (int X, int Y, int W, int H)> _setupTracks = new();
     private readonly (int X, int Y, int W, int H)[] _setupTabs = new (int, int, int, int)[2];
 
+    // 줄이 화면에 다 안 들어가면(모바일 화면 · 큰 글자의 모드 탭) 넘겨 본다 — 휠 · 끌기 · ↑↓ 로 고른 줄을 따라간다(버그 리포트 fd2 #12:
+    // 전에는 창이 화면 밖으로 넘쳐 아래 모드를 볼 수 없었고, 휠은 마우스 아래 줄을 켜고 껐다).
+    private int _setupScroll, _setupFit = int.MaxValue, _setupRowH = 1;
+    private bool _setupScrolledByDrag, _setupDragging;
+    private (int Y, int Scroll, int Row)? _setupPress;
+
+    private bool SetupScrollable => SetupItems().Count > _setupFit;
+
+    /// <summary>휠 — 줄이 넘치면 넘기고, 아니면 고른 막대 줄만 5% 씩(켜고 끄기 줄은 휠로 안 뒤집는다).</summary>
+    private void SetupWheel(int notches)
+    {
+        if (SetupScrollable)
+        {
+            _setupScrolledByDrag = true;
+            _setupScroll = Math.Clamp(_setupScroll - notches, 0, SetupItems().Count - _setupFit);
+        }
+        else if (ItemAt(_setupRow) is { Volume: >= 0 }) SetupStep(_setupRow, notches * 5);
+    }
+
     private static readonly string[] SetupTabNames = ["기본", "모드"];
 
     /// <summary>탭의 한 줄 — 켜고 끄기(On · Flip) 또는 막대(Volume: 0 배경음악 · 1 효과음).</summary>
@@ -50,7 +69,7 @@ internal sealed partial class GameWindow
     private void OpenSetup()
     {
         PlaySfx(Sound.UiBank, Sound.Menu);
-        (_setupOpen, _setupRow, _setupDrag) = (true, 1, -1);
+        (_setupOpen, _setupRow, _setupDrag, _setupScroll, _setupScrolledByDrag, _setupPress) = (true, 1, -1, 0, false, null);
     }
 
     private void CloseSetup()
@@ -64,6 +83,7 @@ internal sealed partial class GameWindow
         if (tab == _setupTab) return;
         _setupTab = tab;
         _setupTracks.Clear();
+        (_setupScroll, _setupScrolledByDrag) = (0, false);
         PlaySfx(77, 2);
     }
 
@@ -100,6 +120,7 @@ internal sealed partial class GameWindow
             KeyAction.MoveLeft => Win32.VK_LEFT, KeyAction.MoveRight => Win32.VK_RIGHT, _ => vk,
         };
         int rows = SetupCloseRow + 1;
+        if (vk is Win32.VK_UP or Win32.VK_DOWN) _setupScrolledByDrag = false;   // 키로 고르면 고른 줄이 보이게 다시 따라간다
         switch (vk)
         {
             case Win32.VK_UP: _setupRow = (_setupRow + rows - 1) % rows; PlaySfx(77, 2); break;
@@ -133,6 +154,12 @@ internal sealed partial class GameWindow
         {
             if (!InRect(_setupRows[row], x, y)) continue;
             _setupRow = row;
+            // 넘길 수 있는 목록의 켜고 끄기 줄은 뗄 때 뒤집는다 — 끌면 넘기기만(폰에서 손가락으로 넘기다 켜지지 않게)
+            if (SetupScrollable && row != SetupCloseRow && ItemAt(row) is { Flip: not null })
+            {
+                (_setupPress, _setupDragging) = ((y, _setupScroll, row), false);
+                break;
+            }
             if (row == SetupCloseRow) CloseSetup();
             else if (ItemAt(row) is { } it)
             {
@@ -151,6 +178,13 @@ internal sealed partial class GameWindow
     private bool SetupMove(int x, int y)
     {
         if (!_setupOpen) return false;
+        if (_setupPress is { } p)
+        {
+            if (!_setupDragging && Math.Abs(y - p.Y) < DragSlop) return true;
+            _setupDragging = _setupScrolledByDrag = true;
+            _setupScroll = Math.Clamp(p.Scroll - (y - p.Y) / Math.Max(1, _setupRowH), 0, Math.Max(0, SetupItems().Count - _setupFit));
+            return true;
+        }
         if (_setupDrag >= 1 && ItemAt(_setupDrag) is { Volume: >= 0 } it) SetVolume(it.Volume, SetupAt(_setupDrag, x));
         else if (_mouseMoved) for (int row = 1; row < _setupRows.Count; row++) if (InRect(_setupRows[row], x, y)) _setupRow = row;
         return true;
@@ -159,6 +193,14 @@ internal sealed partial class GameWindow
     private bool SetupRelease()
     {
         if (!_setupOpen) return false;
+        if (_setupPress is { } p)
+        {
+            bool dragged = _setupDragging;
+            (_setupPress, _setupDragging) = (null, false);
+            if (dragged) _mouseMoved = false;
+            else if (ItemAt(p.Row) is { Flip: not null } flip) SetupToggle(flip);
+            return true;
+        }
         if (_setupDrag >= 1 && ItemAt(_setupDrag) is { Volume: >= 0 } it)
         {
             if (it.Volume == 1) PlaySfx(Sound.UiBank, Sound.Cursor);
@@ -183,7 +225,21 @@ internal sealed partial class GameWindow
         int rowH = Math.Max(U(56), body * 2 + U(16));
         int room = _clientH - 16 - headH - tabH - footH;
         if (items.Count * rowH > room) rowH = Math.Max(body + U(20), room / Math.Max(1, items.Count));
-        int h = headH + tabH + items.Count * rowH + footH;
+        // 가장 작은 줄로도 안 들어가면 들어가는 만큼만 보이고 넘긴다
+        int fit = items.Count * rowH > room ? Math.Max(1, room / rowH) : items.Count;
+        (_setupFit, _setupRowH) = (items.Count > fit ? fit : int.MaxValue, rowH);
+        if (items.Count <= fit) _setupScroll = 0;
+        else
+        {
+            int sel = _setupRow - 1;
+            if (!_setupScrolledByDrag && sel >= 0 && sel < items.Count)
+            {
+                if (sel < _setupScroll) _setupScroll = sel;
+                else if (sel >= _setupScroll + fit) _setupScroll = sel - fit + 1;
+            }
+            _setupScroll = Math.Clamp(_setupScroll, 0, items.Count - fit);
+        }
+        int h = headH + tabH + fit * rowH + footH;
         int x = (_clientW - w) / 2, y = Math.Max(8, (_clientH - h) / 2);
         _setupBox = (x, y, w, h);
         _setupRows.Clear();
@@ -213,8 +269,9 @@ internal sealed partial class GameWindow
 
         for (int i = 0; i < items.Count; i++)
         {
-            int row = i + 1, ry = ty0 + tabH + i * rowH;
+            int row = i + 1, ry = ty0 + tabH + (i - _setupScroll) * rowH;
             var it = items[i];
+            if (i < _setupScroll || i >= _setupScroll + fit) { _setupRows.Add(default); _setupTracks.Remove(row); continue; }   // 넘겨서 가려진 줄은 누를 수 없다
             _setupRows.Add((x, ry, w, rowH));
             if (row == _setupRow) FillRect(x, ry, w, rowH - 1, 0xFF34447E);
             FillRect(x, ry + rowH - 1, w, 1, 0xFF2C3768);
@@ -246,6 +303,15 @@ internal sealed partial class GameWindow
             int knob = U(18);
             FillRect(tx0 + tw0 * v / 100 - knob / 2, my - knob / 2, knob, knob, 0xFFEEF0FF);
             DrawText(pct, x + w - m - pct.W, ry + (rowH - pct.H) / 2);
+        }
+
+        // 넘기는 막대 — 오른쪽 가장자리에 지금 보이는 몫
+        if (items.Count > fit)
+        {
+            int barW = Math.Max(3, U(4)), barH = fit * rowH, thumb = Math.Max(U(24), barH * fit / items.Count);
+            int at = (barH - thumb) * _setupScroll / Math.Max(1, items.Count - fit);
+            FillRect(x + w - barW - U(2), ty0 + tabH, barW, barH, 0xFF2C3768);
+            FillRect(x + w - barW - U(2), ty0 + tabH + at, barW, thumb, 0xFFC8A040);
         }
 
         // 아래 — 금색 「닫기」(폰 메뉴와 같은 꼴)
