@@ -158,8 +158,8 @@ public sealed class Town(Campaign campaign, Battle battle)
             case 8: u.BaseAtk += v; text = $" 역량 +{v}"; break;
             case 9: u.BaseDef += v; text = $" 내력 +{v}"; break;
             case 10: u.Speed += v; text = $" 속도 +{v}"; break;
-            case 17: u.MaxHp += v; if (u.Hp > 0) u.Hp += v; text = $" 최대 HP +{v}"; break;
-            case 18: u.MaxMp += v; u.Mp += v; text = $" 최대 MP +{v}"; break;
+            case 17: Battle.RaiseMaxHp(u, v, alsoNow: u.Hp > 0); text = $" 최대 HP +{v}"; break;
+            case 18: Battle.RaiseMaxMp(u, v); text = $" 최대 MP +{v}"; break;
             default: u.Move += v; text = $" 이동력 +{v}"; break;
         }
         Store(member, u);
@@ -189,7 +189,7 @@ public sealed class Town(Campaign campaign, Battle battle)
         if (campaign.Gold < cost) return TownResult.NoMoney;
         campaign.Gold -= cost;
         r[5] = 0;
-        r.AsSpan(66, 2).CopyTo(r.AsSpan(64));
+        HeroRecord.SetHp(r, HeroRecord.MaxHp(r));
         return TownResult.Ok;
     }
 
@@ -252,7 +252,7 @@ public sealed class Town(Campaign campaign, Battle battle)
         var old = campaign.Party[member];
         var r = HeroRecord.From(u);
         foreach (int k in (int[])[0, 1, 2, 3, 4, 5, 6, 49, 50, 51, 52, 53, 54, 61]) r[k] = old[k];
-        BinaryPrimitives.WriteUInt16LittleEndian(r.AsSpan(64), (ushort)Math.Max(0, u.Hp));
+        HeroRecord.SetHp(r, u.Hp);
         campaign.Party[member] = r;
     }
 }

@@ -349,7 +349,7 @@ internal sealed partial class GameWindow
             int barX = bx + l.W + 6, barW = Math.Max(10, bw - l.W - 6), bh = Math.Max(6, g * 5);
             FillRect(barX, y + (l.H - bh) / 2, barW, bh, 0xFF203060);
             if (max > 0) FillRect(barX, y + (l.H - bh) / 2, barW * Math.Clamp(now, 0, max) / max, bh, color);
-            var n = T($"{N(now, 3)}/{N(max, 3)}");
+            var n = T($"{Math.Max(0, now):000}/{Math.Max(0, max):000}");   // HP · MP 는 99999 까지 — N 은 999 로 잘랐다(버그 리포트 #13)
             DrawText(n, sx + sw - n.W - 16, y + lineH);
         }
         Bar("HP·", u.Hp, u.MaxHp, 0xFFF0D040, cy);
@@ -549,8 +549,8 @@ internal sealed partial class GameWindow
                 12 => Raise(() => t.Status[2] = 2 + _battle.Rng.Next(4), " 속도 증가"),
                 15 => Raise(() => t.Status[1] = 2 + _battle.Rng.Next(4), " 방어력 증가"),
                 16 => Raise(() => t.Status[0] = 2 + _battle.Rng.Next(4), " 공격력 증가"),
-                17 => Raise(() => { t.MaxHp += v; t.Hp += v; }, $" 최대 HP +{v}"),
-                18 => Raise(() => { t.MaxMp += v; t.Mp += v; }, $" 최대 MP +{v}"),
+                17 => Raise(() => Battle.RaiseMaxHp(t, v), $" 최대 HP +{v}"),
+                18 => Raise(() => Battle.RaiseMaxMp(t, v), $" 최대 MP +{v}"),
                 19 => Raise(() => t.Move += v, $" 이동력 +{v}"),
                 _ => null,
             };

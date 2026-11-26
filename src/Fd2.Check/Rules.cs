@@ -23,6 +23,29 @@ internal static class Rules
         Same("유니 MP · 화염술 비트", (party[1].MaxMp, (int)(party[1].Spells & 1)), (8, 1));
         Same("아래스 자창 사거리 1~2 · 이동 7", (party[2].RangeMin, party[2].RangeMax, party[2].Move), (1, 2, 7));
 
+        // HP · MP 상한 99999(버그 리포트 #13) — 65536 이상도 세이브 칸을 오가고, 표식 없는 원작 칸의 +42~+45 찌꺼기는 안 읽는다
+        Console.WriteLine("\n[HP · MP 상한 99999 — 세이브 칸 +42~+46]");
+        {
+            var big = saul;
+            var keep = (big.Hp, big.MaxHp, big.Mp, big.MaxMp);
+            (big.Hp, big.MaxHp, big.Mp, big.MaxMp) = (88888, 99999, 70000, 65536);
+            var rec = HeroRecord.From(big);
+            (big.Hp, big.MaxHp, big.Mp, big.MaxMp) = (0, 0, 0, 0);
+            HeroRecord.Apply(rec, big);
+            Same("99999 까지 오감(HP · 최대 HP · MP · 최대 MP)", (big.Hp, big.MaxHp, big.Mp, big.MaxMp), (88888, 99999, 70000, 65536));
+            HeroRecord.Rest(rec, down: false);
+            Same("장 끝 쉬기 — HP · MP 가득", (HeroRecord.Hp(rec), HeroRecord.Mp(rec)), (99999, 65536));
+            (big.Hp, big.MaxHp, big.Mp, big.MaxMp) = (500, 999, 20, 30);
+            var small = HeroRecord.From(big);
+            Same("65535 이하면 표식 없음(원작 칸 그대로)", (small[42], small[43], small[44], small[45], small[46]), ((byte)0, (byte)0, (byte)0, (byte)0, (byte)0));
+            small[42] = 7; small[43] = 7;
+            Same("표식 없으면 +42 · +43 찌꺼기를 안 읽음", (HeroRecord.Hp(small), HeroRecord.MaxHp(small)), (500, 999));
+            (big.Hp, big.MaxHp) = (99990, 99990);
+            Battle.RaiseMaxHp(big, 50);
+            Same("최대 HP 올리기는 99999 에서 멈춤", (big.Hp, big.MaxHp), (99999, 99999));
+            (big.Hp, big.MaxHp, big.Mp, big.MaxMp) = keep;
+        }
+
         // 원작 sub_10C50 은 땅을 보지 않고 빈 칸이면 그대로 세운다 — 25장 꼭대기 화룡(편 1, 못 가는 칸)은 (10,0) 에 남는다(w-150)
         var s25 = new Scene(dir, 24, pal, icons);
         // 26장 꼭대기 다섯 상자(버그 리포트 #6) — 상자 0~4 가 모두 사건 58 이고, 사건이 연 칸의 상자 번호로 표 0x5274E 의 물건을 준다.

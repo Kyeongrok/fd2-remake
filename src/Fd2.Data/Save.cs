@@ -338,7 +338,33 @@ public static class HeroRecord
 
     public static int Id(byte[] r) => r[8];
     public static int Form(byte[] r) => r[7];
-    public static int Hp(byte[] r) => BinaryPrimitives.ReadUInt16LittleEndian(r.AsSpan(64));
+    public static int Hp(byte[] r) => Word(r, 64, 42);
+
+    /// <summary>
+    /// HP · 최대 HP · MP · 최대 MP(+64 · +66 · +68 · +70, 16비트) — 리메이크 상한 99999(<see cref="Battle.StatCap"/>, 버그 리포트 #13)라 65536 이상은
+    /// 원작이 안 쓰는 +42 · +43 · +44 · +45 에 셋째 바이트를 두고 +46 에 표식 0x48 을 둔다(표식이 없으면 윗자리를 안 본다 — 원작 세이브의 찌꺼기를 읽지 않게).
+    /// </summary>
+    private static int Word(byte[] r, int at, int high) =>
+        BinaryPrimitives.ReadUInt16LittleEndian(r.AsSpan(at)) | (r[46] == StatMark ? r[high] << 16 : 0);
+
+    private static void SetWord(byte[] r, int at, int high, int v)
+    {
+        v = Math.Clamp(v, 0, 0xFFFFFF);
+        BinaryPrimitives.WriteUInt16LittleEndian(r.AsSpan(at), (ushort)v);
+        r[high] = (byte)(v >> 16);
+        bool any = r[42] != 0 || r[43] != 0 || r[44] != 0 || r[45] != 0;
+        r[46] = any ? StatMark : (byte)0;
+    }
+
+    private const byte StatMark = 0x48;
+
+    public static int MaxHp(byte[] r) => Word(r, 66, 43);
+    public static void SetHp(byte[] r, int v) => SetWord(r, 64, 42, v);
+    public static void SetMaxHp(byte[] r, int v) => SetWord(r, 66, 43, v);
+    public static int Mp(byte[] r) => Word(r, 68, 44);
+    public static int MaxMp(byte[] r) => Word(r, 70, 45);
+    public static void SetMp(byte[] r, int v) => SetWord(r, 68, 44, v);
+    public static void SetMaxMp(byte[] r, int v) => SetWord(r, 70, 45, v);
 
     /// <summary>쓰러져 없는 칸(+5 비트 0, HP 0) — 싸움 중 기록에서 못 세운 배열 번호를 채운다.</summary>
     public static byte[] Absent()
@@ -399,10 +425,10 @@ public static class HeroRecord
         r[59] = (byte)u.Move;
         r[60] = (byte)u.Exp;
         BinaryPrimitives.WriteInt16LittleEndian(r.AsSpan(62), (short)u.Speed);
-        BinaryPrimitives.WriteUInt16LittleEndian(r.AsSpan(64), (ushort)Math.Max(0, u.Hp));
-        BinaryPrimitives.WriteUInt16LittleEndian(r.AsSpan(66), (ushort)u.MaxHp);
-        BinaryPrimitives.WriteUInt16LittleEndian(r.AsSpan(68), (ushort)Math.Max(0, u.Mp));
-        BinaryPrimitives.WriteUInt16LittleEndian(r.AsSpan(70), (ushort)u.MaxMp);
+        SetHp(r, u.Hp);
+        SetMaxHp(r, u.MaxHp);
+        SetMp(r, u.Mp);
+        SetMaxMp(r, u.MaxMp);
         BinaryPrimitives.WriteUInt16LittleEndian(r.AsSpan(72), (ushort)u.Atk);
         BinaryPrimitives.WriteUInt16LittleEndian(r.AsSpan(74), (ushort)u.Def);
         BinaryPrimitives.WriteUInt16LittleEndian(r.AsSpan(76), (ushort)u.Hit);
@@ -430,18 +456,18 @@ public static class HeroRecord
         u.Move = r[59];
         u.Exp = r[60];
         u.Speed = BinaryPrimitives.ReadInt16LittleEndian(r.AsSpan(62));
-        u.Hp = BinaryPrimitives.ReadUInt16LittleEndian(r.AsSpan(64));
-        u.MaxHp = BinaryPrimitives.ReadUInt16LittleEndian(r.AsSpan(66));
-        u.Mp = BinaryPrimitives.ReadUInt16LittleEndian(r.AsSpan(68));
-        u.MaxMp = BinaryPrimitives.ReadUInt16LittleEndian(r.AsSpan(70));
+        u.Hp = Hp(r);
+        u.MaxHp = MaxHp(r);
+        u.Mp = Mp(r);
+        u.MaxMp = MaxMp(r);
     }
 
     /// <summary>장이 끝난 뒤 — 산 사람은 HP 가득, 모두 MP 가득, 상태 이상은 지운다. 쓰러진 사람은 HP 0 으로 남는다.</summary>
     public static void Rest(byte[] r, bool down)
     {
         r[5] = (byte)(down ? 1 : 0);
-        if (!down) r.AsSpan(66, 2).CopyTo(r.AsSpan(64));
-        r.AsSpan(70, 2).CopyTo(r.AsSpan(68));
+        if (!down) SetHp(r, MaxHp(r));
+        SetMp(r, MaxMp(r));
         Array.Clear(r, 34, 6);
     }
 }

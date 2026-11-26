@@ -145,6 +145,7 @@ public sealed partial class Battle
     private SpellResult? HealByCode(Unit target, int p)
     {
         if (!Rules.HealFromCode || Rules.Exe is not { } exe) return null;
+        if (target.MaxHp > 0xFFFF) return null;   // 원작 코드는 16비트 칸만 안다 — 65536 이상(리메이크 상한 99999)은 C# 회복으로
         var cpu = NewCpu(exe);
         byte[] r = HeroRecord.From(target), stack = new byte[0x200];
         cpu.Map(AttBase, r); cpu.Map(StackBase, stack);

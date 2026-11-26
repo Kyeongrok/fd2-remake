@@ -319,6 +319,28 @@ public sealed partial class Battle
     public static int MaxLevel(Unit u) => LevelCap;
 
     /// <summary>
+    /// 최대 HP · MP 상한 — 리메이크는 99999(사용자 요청, 버그 리포트 #13. 원작 칸은 +64~+71 의 16비트라 65535 가 끝이다).
+    /// 65536 이상은 세이브 칸의 원작이 안 쓰는 +42~+45 에 윗자리를 두고 +46 에 표식(<see cref="HeroRecord"/>).
+    /// </summary>
+    public const int StatCap = 99999;
+
+    /// <summary>최대 HP 를 올리고 HP 도 그만큼(<paramref name="alsoNow"/> false 면 HP 는 그대로 — 쓰러진 사람) — 상한 <see cref="StatCap"/>.</summary>
+    public static void RaiseMaxHp(Unit u, int v, bool alsoNow = true)
+    {
+        int before = u.MaxHp;
+        u.MaxHp = Math.Clamp(u.MaxHp + v, 0, Math.Max(StatCap, before));
+        if (alsoNow) u.Hp = Math.Min(u.MaxHp, u.Hp + (u.MaxHp - before));
+    }
+
+    /// <summary>최대 MP 를 올리고 MP 도 그만큼 — 상한 <see cref="StatCap"/>.</summary>
+    public static void RaiseMaxMp(Unit u, int v)
+    {
+        int before = u.MaxMp;
+        u.MaxMp = Math.Clamp(u.MaxMp + v, 0, Math.Max(StatCap, before));
+        u.Mp = Math.Min(u.MaxMp, u.Mp + (u.MaxMp - before));
+    }
+
+    /// <summary>
     /// 경험 e 를 받는다(sub_1E292) — 합이 <see cref="LevelUpExp"/>(원본 100) 넘는 동안 레벨 +1 · 성장 · 그만큼 빼기(최대 레벨에 닿으면 합 0).
     /// 쓰러졌거나 이미 최대 레벨이거나 e 가 0 이면 받지 않는다. 오른 것을 알림으로.
     /// </summary>
@@ -382,8 +404,8 @@ public sealed partial class Battle
         u.BaseAtk += a;
         u.BaseDef += d;
         u.Speed += s;
-        u.MaxHp += hp;
-        u.MaxMp += mp;
+        u.MaxHp = Math.Min(u.MaxHp + hp, Math.Max(StatCap, u.MaxHp));
+        u.MaxMp = Math.Min(u.MaxMp + mp, Math.Max(StatCap, u.MaxMp));
         return (a, d, s, hp, mp);
     }
 

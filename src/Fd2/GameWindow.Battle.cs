@@ -2464,7 +2464,7 @@ internal sealed partial class GameWindow
         if (_scene.UnitAt(_cursor.X, _cursor.Y) is { } u)
         {
             BlitScaled(_icons.Frame(u.Icon, (int)Dir.Down * 3), T, T, ix, iy, g, 0, 0, _fbW, _fbH);
-            var hp = Text.Render($"{Math.Clamp(u.Hp, 0, 999):000}", fs, 0xFFFFFFFF);
+            var hp = Text.Render($"{Math.Max(0, u.Hp):000}", fs, 0xFFFFFFFF);
             FillRect(ix + (img - hp.W) / 2 - 2, iy + img - hp.H, hp.W + 4, hp.H, 0x80000000);
             DrawText(hp, ix + (img - hp.W) / 2, iy + img - hp.H);
         }
